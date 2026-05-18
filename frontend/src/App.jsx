@@ -11,7 +11,9 @@ import AuditLogs from './pages/AuditLogs';
 import Settings from './pages/Settings';
 import SessionHistory from './pages/SessionHistory';
 import Analytics from './pages/Analytics';
+import Reports from './pages/Reports';
 import HelpCenter from './pages/HelpCenter';
+import EvaluationCenter from './pages/EvaluationCenter';
 import AdminSecurity from './pages/AdminSecurity';
 import ComplianceRisk from './pages/ComplianceRisk';
 import LipiCoreProcessNavigator from './pages/LipiCoreProcessNavigator';
@@ -44,6 +46,7 @@ function App() {
           <Route path="tasks"          element={<Tasks />} />
           <Route path="sessions"       element={<SessionHistory />} />
           <Route path="analytics"      element={<Analytics />} />
+          <Route path="evaluations"    element={<EvaluationCenter />} />
           <Route path="users"          element={<Users />} />
           <Route path="audit-logs"     element={<AuditLogs />} />
           <Route path="settings"       element={<Settings />} />
@@ -53,7 +56,7 @@ function App() {
           <Route path="admin/settings"    element={<Settings />} />
           <Route path="compliance"        element={<ComplianceRisk />} />
           <Route path="regulatory"        element={<ComplianceRisk />} />
-          <Route path="reports"           element={<Analytics />} />
+          <Route path="reports"           element={<Reports />} />
           <Route path="audit"             element={<AuditLogs />} />
           <Route path="process-navigator" element={<LipiCoreProcessNavigator />} />
         </Route>

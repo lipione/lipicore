@@ -216,11 +216,11 @@ yield {
 |-----------|----------|-------|
 | Document Upload | 2-5s | File transmission + parsing |
 | Text Extraction | 1-3s | Depends on file type |
-| Embedding Generation | 5-20s | Ollama inference time |
+| Embedding Generation | 5-20s | Local embedding model runtime |
 | Qdrant Indexing | 1-5s | Vector storage |
 | Total Processing | 10-30s | Until "Ready for questions" |
 | RAG Search | <500ms | Qdrant vector similarity |
-| LLM Response | 2-10s | Ollama streaming generation |
+| LLM Response | 2-10s | vLLM streaming generation |
 | Full Round-trip | 15-50s | Upload to response |
 
 ## Test Coverage Map

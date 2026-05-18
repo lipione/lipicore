@@ -1,6 +1,15 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
+
+ALLOWED_CHAT_MODES = {
+    "ask_knowledge",
+    "analyze_file",
+    "summarize",
+    "draft",
+    "translate",
+    "compare",
+}
 
 class ChatMessageBase(BaseModel):
     role: str
@@ -39,3 +48,11 @@ class ChatRequest(BaseModel):
     language: Optional[str] = "en"
     active_document_ids: Optional[List[int]] = None
     model_override: Optional[str] = None
+    mode: str = "ask_knowledge"
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, value: str) -> str:
+        if value not in ALLOWED_CHAT_MODES:
+            raise ValueError(f"Unsupported chat mode: {value}")
+        return value

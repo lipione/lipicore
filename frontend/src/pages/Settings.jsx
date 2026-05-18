@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { useBranding } from '../contexts/BrandingContext';
 
 function Toggle({ on, onChange }) {
   return (
@@ -19,9 +20,19 @@ const NOTIFICATIONS = [
   { key: 'weekly_summary',    label: 'Weekly Summary',        desc: 'Aggregated report of all analysis performed.',                   defaultApp: false, defaultEmail: true },
 ];
 
+const MODE_OPTIONS = [
+  { value: 'ask_knowledge', label: 'Ask Bank Knowledge' },
+  { value: 'analyze_file', label: 'Analyze Uploaded File' },
+  { value: 'summarize', label: 'Summarize' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'translate', label: 'Translate' },
+  { value: 'compare', label: 'Compare Documents' },
+];
+
 export default function Settings() {
   const navigate  = useNavigate();
   const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const branding = useBranding();
 
   const [form, setForm] = useState({
     name:       storedUser.name  || '',
@@ -36,12 +47,39 @@ export default function Settings() {
   });
   const [saving,        setSaving]       = useState(false);
   const [saveMsg,       setSaveMsg]      = useState('');
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingMsg, setBrandingMsg] = useState('');
+  const [brandingForm, setBrandingForm] = useState({
+    product_name: 'BankAi',
+    bank_name: 'Your Bank',
+    logo_url: '',
+    primary_color: '#17324d',
+    accent_color: '#c7902c',
+    welcome_message: '',
+    support_contact: '',
+    disclaimer: '',
+    allowed_modes: MODE_OPTIONS.map(mode => mode.value),
+  });
   const [showPwdModal,  setShowPwdModal] = useState(false);
   const [pwdForm,       setPwdForm]      = useState({ current: '', next: '', confirm: '' });
   const [apiKeys,       setApiKeys]      = useState([
     { id: 1, name: 'Production Analytics Key', key: 'bk_live_8392_xxxx_xxxx_7721', status: 'active',  lastUsed: '14 mins ago',   created: 'Jan 12, 2024' },
     { id: 2, name: 'Development Sandbox',       key: 'bk_test_0019_xxxx_xxxx_1109', status: 'expired', lastUsed: 'Dec 30, 2023',  created: 'Oct 01, 2023' },
   ]);
+
+  useEffect(() => {
+    setBrandingForm({
+      product_name: branding.product_name || 'BankAi',
+      bank_name: branding.bank_name || 'Your Bank',
+      logo_url: branding.logo_url || '',
+      primary_color: branding.primary_color || '#17324d',
+      accent_color: branding.accent_color || '#c7902c',
+      welcome_message: branding.welcome_message || '',
+      support_contact: branding.support_contact || '',
+      disclaimer: branding.disclaimer || '',
+      allowed_modes: branding.allowed_modes || MODE_OPTIONS.map(mode => mode.value),
+    });
+  }, [branding.product_name, branding.bank_name, branding.logo_url, branding.primary_color, branding.accent_color, branding.welcome_message, branding.support_contact, branding.disclaimer, branding.allowed_modes]);
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
@@ -65,6 +103,36 @@ export default function Settings() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/login');
+  };
+
+  const handleSaveBranding = async (e) => {
+    e.preventDefault();
+    if (!storedUser.bank_id) {
+      setBrandingMsg('No bank is attached to this user.');
+      return;
+    }
+    setBrandingSaving(true);
+    setBrandingMsg('');
+    try {
+      const response = await api.patch(`/config/branding/${storedUser.bank_id}`, brandingForm);
+      branding.setBranding?.(response.data);
+      setBrandingMsg('Branding saved.');
+      setTimeout(() => setBrandingMsg(''), 3000);
+    } catch (err) {
+      setBrandingMsg(err.response?.data?.detail || 'Failed to save branding.');
+      setTimeout(() => setBrandingMsg(''), 3000);
+    } finally {
+      setBrandingSaving(false);
+    }
+  };
+
+  const toggleMode = (mode) => {
+    setBrandingForm(current => {
+      const selected = current.allowed_modes.includes(mode)
+        ? current.allowed_modes.filter(item => item !== mode)
+        : [...current.allowed_modes, mode];
+      return { ...current, allowed_modes: selected.length ? selected : current.allowed_modes };
+    });
   };
 
   const copyKey = (key) => {
@@ -97,6 +165,104 @@ export default function Settings() {
       </header>
 
       <div className="grid grid-cols-12 gap-gutter">
+        {/* White-label branding */}
+        <section className="col-span-12 bg-white border border-slate-200 rounded-lg p-lg relative overflow-hidden">
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-secondary" />
+          <form onSubmit={handleSaveBranding}>
+            <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between mb-lg">
+              <div>
+                <h2 className="font-h2 text-h2 text-on-surface mb-xs">White-Label Branding</h2>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  Configure the bank-facing identity used across login, navigation, and chat.
+                </p>
+              </div>
+              <div className="flex items-center gap-md">
+                {brandingMsg && (
+                  <span className={`text-body-sm font-medium ${brandingMsg.includes('Failed') || brandingMsg.includes('No bank') ? 'text-error' : 'text-on-tertiary-container'}`}>
+                    {brandingMsg}
+                  </span>
+                )}
+                <button type="submit" disabled={brandingSaving}
+                  className="bg-primary text-white font-label-caps text-label-caps px-md py-sm rounded hover:opacity-90 transition-all disabled:opacity-50">
+                  {brandingSaving ? 'Saving...' : 'Save Branding'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
+              <div className="space-y-xs">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Product Name</label>
+                <input className="w-full bg-slate-50 border border-slate-200 rounded-lg text-body-md px-md py-sm focus:outline-none focus:border-secondary"
+                  value={brandingForm.product_name}
+                  onChange={e => setBrandingForm(f => ({ ...f, product_name: e.target.value }))}
+                  required />
+              </div>
+              <div className="space-y-xs">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Bank Name</label>
+                <input className="w-full bg-slate-50 border border-slate-200 rounded-lg text-body-md px-md py-sm focus:outline-none focus:border-secondary"
+                  value={brandingForm.bank_name}
+                  onChange={e => setBrandingForm(f => ({ ...f, bank_name: e.target.value }))}
+                  required />
+              </div>
+              <div className="space-y-xs">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Primary Color</label>
+                <input type="color" className="w-full h-11 bg-slate-50 border border-slate-200 rounded-lg px-sm py-xs"
+                  value={brandingForm.primary_color}
+                  onChange={e => setBrandingForm(f => ({ ...f, primary_color: e.target.value }))} />
+              </div>
+              <div className="space-y-xs">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Accent Color</label>
+                <input type="color" className="w-full h-11 bg-slate-50 border border-slate-200 rounded-lg px-sm py-xs"
+                  value={brandingForm.accent_color}
+                  onChange={e => setBrandingForm(f => ({ ...f, accent_color: e.target.value }))} />
+              </div>
+              <div className="space-y-xs md:col-span-2">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Logo URL</label>
+                <input className="w-full bg-slate-50 border border-slate-200 rounded-lg text-body-md px-md py-sm focus:outline-none focus:border-secondary"
+                  value={brandingForm.logo_url}
+                  onChange={e => setBrandingForm(f => ({ ...f, logo_url: e.target.value }))}
+                  placeholder="/assets/bank-logo.png" />
+              </div>
+              <div className="space-y-xs md:col-span-2">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Support Contact</label>
+                <input className="w-full bg-slate-50 border border-slate-200 rounded-lg text-body-md px-md py-sm focus:outline-none focus:border-secondary"
+                  value={brandingForm.support_contact}
+                  onChange={e => setBrandingForm(f => ({ ...f, support_contact: e.target.value }))}
+                  placeholder="it-helpdesk@bank.local" />
+              </div>
+              <div className="space-y-xs md:col-span-2">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Welcome Message</label>
+                <textarea className="w-full min-h-24 bg-slate-50 border border-slate-200 rounded-lg text-body-md px-md py-sm focus:outline-none focus:border-secondary resize-y"
+                  value={brandingForm.welcome_message}
+                  onChange={e => setBrandingForm(f => ({ ...f, welcome_message: e.target.value }))}
+                  required />
+              </div>
+              <div className="space-y-xs md:col-span-2">
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block">Disclaimer</label>
+                <textarea className="w-full min-h-24 bg-slate-50 border border-slate-200 rounded-lg text-body-md px-md py-sm focus:outline-none focus:border-secondary resize-y"
+                  value={brandingForm.disclaimer}
+                  onChange={e => setBrandingForm(f => ({ ...f, disclaimer: e.target.value }))}
+                  required />
+              </div>
+            </div>
+
+            <div className="mt-lg">
+              <p className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-sm">Enabled Assistant Modes</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-sm">
+                {MODE_OPTIONS.map(mode => (
+                  <label key={mode.value} className="flex items-center gap-sm p-sm border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+                    <input type="checkbox"
+                      checked={brandingForm.allowed_modes.includes(mode.value)}
+                      onChange={() => toggleMode(mode.value)}
+                      className="rounded-sm border-slate-300 text-secondary focus:ring-0 w-4 h-4" />
+                    <span className="text-body-sm font-medium text-on-surface">{mode.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </form>
+        </section>
+
         {/* Profile card */}
         <section className="col-span-12 lg:col-span-8 bg-white border border-slate-200 rounded-lg p-lg relative overflow-hidden">
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-secondary" />
@@ -315,9 +481,15 @@ export default function Settings() {
       <footer className="mt-xl pt-lg border-t border-slate-200 flex flex-col md:flex-row justify-between items-center gap-md text-on-surface-variant font-body-sm">
         <p>© 2024 BankAi Enterprise Solutions. All rights reserved.</p>
         <div className="flex gap-lg">
-          <a href="#" className="hover:text-primary transition-colors">Security Policy</a>
-          <a href="#" className="hover:text-primary transition-colors">API Documentation</a>
-          <a href="#" className="hover:text-primary transition-colors">Audit Log Export</a>
+          <button type="button" onClick={() => navigate('/admin/security')} className="hover:text-primary transition-colors">
+            Security Policy
+          </button>
+          <button type="button" onClick={() => navigate('/help')} className="hover:text-primary transition-colors">
+            API Documentation
+          </button>
+          <button type="button" onClick={() => navigate('/audit')} className="hover:text-primary transition-colors">
+            Audit Log Export
+          </button>
         </div>
       </footer>
 

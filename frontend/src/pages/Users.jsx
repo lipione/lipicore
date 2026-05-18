@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 
 const DEFINED_ROLES = [
-  { id: 'compliance_officer', name: 'Compliance Officer', desc: 'Oversees regulatory adherence and policy implementation.', count: 6, active: true },
-  { id: 'data_auditor',       name: 'Data Auditor',       desc: 'Analyzes historical transaction logs for anomaly detection.', count: 13, active: false },
-  { id: 'staff_user',         name: 'General Staff',      desc: 'Standard access to operational banking modules.', count: 86, active: false },
-  { id: 'bank_admin',         name: 'Super Admin',        desc: 'Unrestricted root access to all system modules.', count: 2, active: false },
+  { id: 'super_admin',        name: 'Super Admin',        desc: 'Platform-level administration across banks.' },
+  { id: 'bank_admin',         name: 'Bank Admin',         desc: 'Bank-level administration for users, settings, documents, and audit review.' },
+  { id: 'compliance_officer', name: 'Compliance Officer', desc: 'Oversees regulatory adherence and policy implementation.' },
+  { id: 'data_auditor',       name: 'Data Auditor',       desc: 'Analyzes historical transaction logs and audit evidence.' },
+  { id: 'staff_user',         name: 'General Staff',      desc: 'Standard access to operational banking modules.' },
 ];
 
 const PERMISSIONS = {
@@ -23,6 +24,13 @@ const PERMISSIONS = {
   ],
 };
 
+function generateTemporaryPassword() {
+  const prefix = 'BankAi';
+  const random = Math.random().toString(36).slice(2, 8);
+  const digits = String(Math.floor(1000 + Math.random() * 9000));
+  return `${prefix}@${random}${digits}`;
+}
+
 function Toggle({ on, onChange }) {
   return (
     <button
@@ -35,6 +43,7 @@ function Toggle({ on, onChange }) {
 }
 
 export default function Users() {
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const [users,       setUsers]       = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [selectedRole, setSelectedRole] = useState(DEFINED_ROLES[0]);
@@ -44,8 +53,15 @@ export default function Users() {
     return init;
   });
   const [showInvite, setShowInvite] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'staff_user' });
+  const [inviteForm, setInviteForm] = useState({
+    name: '',
+    email: '',
+    role: 'staff_user',
+    department: '',
+    temporaryPassword: generateTemporaryPassword(),
+  });
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -55,11 +71,8 @@ export default function Users() {
       const res = await api.get('/users');
       setUsers(Array.isArray(res.data) ? res.data : []);
     } catch {
-      setUsers([
-        { id: 1, name: 'Sarah Jenkins', email: 's.jenkins@lipicore.com', role: 'compliance_officer', created_at: new Date().toISOString() },
-        { id: 2, name: 'Marcus Thorne', email: 'm.thorne@lipicore.com',  role: 'compliance_officer', created_at: new Date(Date.now() - 86400000).toISOString() },
-        { id: 3, name: 'Elena Lu',      email: 'e.lu@lipicore.com',      role: 'data_auditor',       created_at: new Date(Date.now() - 259200000).toISOString() },
-      ]);
+      setUsers([]);
+      setNotice('Could not load users. Check your admin session and backend access.');
     } finally {
       setLoading(false);
     }
@@ -67,27 +80,71 @@ export default function Users() {
 
   const handleInvite = async (e) => {
     e.preventDefault();
+    setNotice('');
+    const bankId = currentUser.bank_id;
+    if (!bankId) {
+      setNotice('Cannot create a user because the current session has no bank_id. Log in again as a bank admin or super admin.');
+      return;
+    }
     setSaving(true);
     try {
-      await api.post('/users', { ...inviteForm, password: 'BankAi@2024!', bank_id: 1 });
+      await api.post('/users', {
+        name: inviteForm.name.trim(),
+        email: inviteForm.email.trim(),
+        role: inviteForm.role,
+        department: inviteForm.department.trim() || null,
+        password: inviteForm.temporaryPassword,
+        bank_id: bankId,
+        is_active: true,
+      });
       await fetchUsers();
       setShowInvite(false);
-      setInviteForm({ name: '', email: '', role: 'staff_user' });
+      setInviteForm({
+        name: '',
+        email: '',
+        role: 'staff_user',
+        department: '',
+        temporaryPassword: generateTemporaryPassword(),
+      });
+      setNotice('User created. Share the temporary password through an approved internal channel.');
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to create user');
+      setNotice(err?.response?.data?.detail || 'Failed to create user');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteUser = async (id) => {
-    if (!confirm('Remove this user? This action cannot be undone.')) return;
+  const handleDisableUser = async (id) => {
+    if (!confirm('Disable this user account?')) return;
     try {
-      await api.delete(`/users/${id}`);
-      setUsers(u => u.filter(x => x.id !== id));
+      await api.patch(`/users/${id}/disable`);
+      setUsers(u => u.map(user => user.id === id ? { ...user, is_active: false } : user));
+      setNotice('User disabled.');
     } catch {
-      alert('Failed to remove user');
+      setNotice('Failed to disable user');
     }
+  };
+
+  const exportUsers = () => {
+    const rows = [
+      ['Name', 'Email', 'Role', 'Department', 'Status', 'Created'],
+      ...users.map(user => [
+        user.name,
+        user.email,
+        ROLE_LABELS[user.role] || user.role,
+        user.department || '',
+        user.is_active === false ? 'Disabled' : 'Active',
+        user.created_at ? new Date(user.created_at).toLocaleString() : '',
+      ]),
+    ];
+    const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'bankai-users.csv';
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const ROLE_LABELS = {
@@ -95,6 +152,10 @@ export default function Users() {
     compliance_officer: 'Compliance Officer', data_auditor: 'Data Auditor',
     staff_user: 'Staff User',
   };
+  const roleCounts = users.reduce((acc, user) => {
+    acc[user.role] = (acc[user.role] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div className="p-xl max-w-container-max mx-auto">
@@ -107,8 +168,9 @@ export default function Users() {
           </p>
         </div>
         <div className="flex gap-md">
-          <button className="px-md py-sm border border-slate-300 rounded-lg font-label-caps text-label-caps text-on-surface hover:bg-white transition-colors">
-            Export Logs
+          <button onClick={exportUsers}
+            className="px-md py-sm border border-slate-300 rounded-lg font-label-caps text-label-caps text-on-surface hover:bg-white transition-colors">
+            Export Users
           </button>
           <button onClick={() => setShowInvite(true)}
             className="px-md py-sm bg-primary text-white rounded-lg font-label-caps text-label-caps flex items-center gap-xs hover:bg-slate-800 transition-colors">
@@ -118,11 +180,19 @@ export default function Users() {
         </div>
       </div>
 
+      {notice && (
+        <div className="mb-md p-md bg-slate-50 border border-slate-200 rounded-lg text-body-sm text-slate-700">
+          {notice}
+        </div>
+      )}
+
       <div className="grid grid-cols-12 gap-gutter">
         {/* Roles list */}
         <section className="col-span-4 space-y-md">
           <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest mb-md">Defined Roles</h3>
-          {DEFINED_ROLES.map(role => (
+          {DEFINED_ROLES.map(role => {
+            const count = roleCounts[role.id] || 0;
+            return (
             <div key={role.id}
               onClick={() => setSelectedRole(role)}
               className={`p-md border border-slate-200 cursor-pointer transition-all ${
@@ -132,27 +202,27 @@ export default function Users() {
               }`}>
               <div className="flex justify-between items-start mb-xs">
                 <h4 className="text-body-md font-bold text-on-surface">{role.name}</h4>
-                {role.active && (
+                {count > 0 && (
                   <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                    Active
+                    {count} user{count === 1 ? '' : 's'}
                   </span>
                 )}
               </div>
               <p className="text-body-sm text-on-surface-variant">{role.desc}</p>
               <div className="mt-md flex items-center gap-2">
-                {[...Array(Math.min(3, role.count))].map((_, i) => (
+                {[...Array(Math.min(3, count))].map((_, i) => (
                   <div key={i} className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
                     {String.fromCharCode(65 + i)}
                   </div>
                 ))}
-                {role.count > 3 && (
+                {count > 3 && (
                   <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">
-                    +{role.count - 3}
+                    +{count - 3}
                   </div>
                 )}
               </div>
             </div>
-          ))}
+          )})}
         </section>
 
         {/* Permissions + Users */}
@@ -233,6 +303,10 @@ export default function Users() {
                     <tr>
                       <td colSpan={5} className="px-md py-8 text-center text-slate-400">Loading users...</td>
                     </tr>
+                  ) : users.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-md py-8 text-center text-slate-400">No users found.</td>
+                    </tr>
                   ) : users.map(user => (
                     <tr key={user.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-md py-md">
@@ -248,6 +322,11 @@ export default function Users() {
                         <span className="bg-surface-container-high px-2 py-1 rounded text-xs font-medium text-on-surface">
                           {ROLE_LABELS[user.role] || user.role}
                         </span>
+                        {user.is_active === false && (
+                          <span className="ml-2 bg-red-50 text-error px-2 py-1 rounded text-xs font-bold">
+                            Disabled
+                          </span>
+                        )}
                       </td>
                       <td className="px-md py-md text-slate-500 text-body-sm">
                         {user.last_login
@@ -256,9 +335,11 @@ export default function Users() {
                       </td>
                       <td className="px-md py-md text-right">
                         <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="material-symbols-outlined text-slate-400 hover:text-error transition-colors cursor-pointer text-[18px]">
-                          delete_outline
+                          onClick={() => handleDisableUser(user.id)}
+                          disabled={user.is_active === false}
+                          title="Disable user"
+                          className="material-symbols-outlined text-slate-400 hover:text-error transition-colors cursor-pointer text-[18px] disabled:opacity-30">
+                          block
                         </button>
                       </td>
                     </tr>
@@ -316,6 +397,33 @@ export default function Users() {
                   <option value="compliance_officer">Compliance Officer</option>
                   <option value="bank_admin">Bank Admin</option>
                 </select>
+              </div>
+              <div>
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block mb-xs">Department</label>
+                <input
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-md py-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-secondary"
+                  value={inviteForm.department}
+                  onChange={e => setInviteForm(f => ({ ...f, department: e.target.value }))}
+                  placeholder="Customer Care, Compliance, Credit..."
+                />
+              </div>
+              <div>
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase block mb-xs">Temporary Password</label>
+                <div className="flex gap-sm">
+                  <input required
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-md py-sm text-body-sm font-mono focus:outline-none focus:ring-2 focus:ring-secondary"
+                    value={inviteForm.temporaryPassword}
+                    onChange={e => setInviteForm(f => ({ ...f, temporaryPassword: e.target.value }))}
+                  />
+                  <button type="button"
+                    onClick={() => setInviteForm(f => ({ ...f, temporaryPassword: generateTemporaryPassword() }))}
+                    className="px-md border border-slate-300 rounded-lg font-label-caps text-label-caps hover:bg-slate-50">
+                    Generate
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-xs">
+                  Share this through an approved internal channel and require the user to change it after first login.
+                </p>
               </div>
               <div className="flex gap-md pt-md">
                 <button type="button" onClick={() => setShowInvite(false)}

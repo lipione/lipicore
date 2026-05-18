@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { PERMISSIONS, getCurrentUserRole, hasPermission } from '../../config/rolePermissions';
 import RoleBadge from '../lipicore/RoleBadge';
 import { getCurrentUser } from '../../config/rolePermissions';
+import { useBranding } from '../../contexts/BrandingContext';
 
 const NAV_SECTIONS = [
   {
@@ -22,6 +23,7 @@ const NAV_SECTIONS = [
     label: 'INSIGHTS',
     items: [
       { icon: 'bar_chart',      label: 'Analytics',           to: '/analytics',          permission: PERMISSIONS.VIEW_ANALYTICS },
+      { icon: 'science',        label: 'Evaluations',         to: '/evaluations',        permission: PERMISSIONS.VIEW_EVALUATIONS },
       { icon: 'summarize',      label: 'Reports',             to: '/reports',            permission: PERMISSIONS.VIEW_REPORTS },
       { icon: 'auto_awesome',   label: 'AI Tasks',            to: '/tasks',              permission: PERMISSIONS.VIEW_TASKS },
     ],
@@ -61,6 +63,7 @@ function NavItem({ icon, label, to }) {
 export default function Sidebar({ onUpload, open = false, onClose }) {
   const userRole = getCurrentUserRole();
   const user = getCurrentUser();
+  const branding = useBranding();
 
   return (
     <aside
@@ -76,8 +79,8 @@ export default function Sidebar({ onUpload, open = false, onClose }) {
           </span>
         </div>
         <div>
-          <h2 className="text-base font-black text-slate-900 font-public-sans leading-none">LipiCore</h2>
-          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-0.5">Enterprise Server</p>
+          <h2 className="text-base font-black text-slate-900 font-public-sans leading-none">{branding.product_name}</h2>
+          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-0.5">{branding.bank_name}</p>
         </div>
         <button
           type="button"

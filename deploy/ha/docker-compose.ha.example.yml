@@ -1,0 +1,33 @@
+services:
+  backend:
+    container_name: !reset null
+    environment:
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-4}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - QDRANT_HOST=${QDRANT_HOST}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+
+  ingestion-worker:
+    container_name: !reset null
+    environment:
+      - INGESTION_WORKER_CONCURRENCY=${INGESTION_WORKER_CONCURRENCY:-2}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - QDRANT_HOST=${QDRANT_HOST}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+
+  nginx:
+    container_name: !reset null
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any

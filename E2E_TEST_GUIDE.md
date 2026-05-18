@@ -221,7 +221,7 @@ The E2E tests verify these critical backend components:
 - **Document Upload**: 2-5 seconds
 - **Document Processing**: 5-30 seconds (depends on file size and embedding model)
 - **RAG Search**: < 500ms
-- **LLM Inference**: 2-10 seconds (Ollama local, depends on model)
+- **LLM Inference**: 2-10 seconds on local vLLM, depending on model tier and GPU load
 - **Complete Round-trip**: 20-50 seconds
 
 ## CI/CD Integration
@@ -259,7 +259,7 @@ To run these tests in CI:
 ## Known Limitations
 
 1. **File Upload State**: Test relies on UI text matching which may vary with design changes
-2. **Ollama Latency**: LLM responses are slow with local Ollama; consider using API backend
+2. **Local LLM Latency**: LLM responses depend on vLLM model tier, GPU load, and queue depth.
 3. **Vector DB Indexing**: Qdrant indexing adds processing time before documents are searchable
 4. **Session Cleanup**: Tests don't clean up sessions between runs; consider adding cleanup step
 

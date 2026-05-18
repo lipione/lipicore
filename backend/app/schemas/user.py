@@ -36,8 +36,13 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: int
+    name: str
+    email: str
+    role: str
+    department: Optional[str] = None
+    is_active: bool
     bank_id: Optional[int] = None
     created_at: datetime
 

@@ -5,7 +5,7 @@ import uuid
 import logging
 import asyncio
 import re
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 import json
@@ -26,12 +26,28 @@ from ..db.session import get_session
 from ..models.user import User
 from ..models.chat import ChatSession, ChatMessage
 from ..schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatRequest, ChatMessageResponse
-from .deps import get_current_user
-from ..services.rag_service import generate_rag_response, async_generate_rag_response, get_system_identity, RAG_PROMPT_TEMPLATE, GENERAL_PROMPT_TEMPLATE
+from .deps import get_current_analytics_user, get_current_user
+from ..services.rag_service import (
+    GLOBAL_RETRIEVAL_STATUSES,
+    GLOBAL_RETRIEVAL_VERSION_STATES,
+    MAX_CANDIDATE_RESULTS,
+    MIN_SOURCE_RELEVANCE_SCORE,
+    NOT_FOUND_RESPONSE,
+    SESSION_RETRIEVAL_STATUSES,
+    _document_visible_to_user,
+    _rerank_results,
+    generate_rag_response,
+    async_generate_rag_response,
+    get_system_identity,
+    RAG_PROMPT_TEMPLATE,
+    GENERAL_PROMPT_TEMPLATE,
+)
 from ..services.audit_service import log_audit_event
 from ..services.guardrail_service import detect_prompt_injection, detect_and_mask_pii
 from ..services.query_rewrite_service import rewrite_query_for_retrieval
 from ..services.llm_gateway import model_status, reserve_model, resolve_model_profile
+from ..services.ingestion_queue import enqueue_document_ingestion
+from ..services.citation_verifier import attach_source_verification, verify_answer_against_sources
 from ..core.config import settings
 
 
@@ -62,6 +78,80 @@ router = APIRouter()
 
 CHAT_UPLOAD_DIR = settings.CHAT_UPLOAD_DIR
 
+SOURCE_REQUIRED_MODES = {"ask_knowledge", "analyze_file", "compare"}
+
+MODE_INSTRUCTIONS = {
+    "ask_knowledge": (
+        "Mode: Ask Bank Knowledge. Answer only from approved bank knowledge when available. "
+        "If approved sources do not support the answer, say that the answer was not found in approved sources."
+    ),
+    "analyze_file": (
+        "Mode: Analyze Uploaded File. Focus on the user's selected session files. "
+        "Cite uploaded file evidence when making claims."
+    ),
+    "summarize": (
+        "Mode: Summarize. Produce a concise staff-ready summary. "
+        "Use cited document evidence when sources are available."
+    ),
+    "draft": (
+        "Mode: Draft. Produce a draft for staff review. Clearly treat the output as a draft "
+        "and not official bank policy unless source-backed evidence is cited."
+    ),
+    "translate": (
+        "Mode: Translate. Translate faithfully between English and Nepali while preserving banking terms. "
+        "Do not add unsupported policy advice."
+    ),
+    "compare": (
+        "Mode: Compare Documents. Compare selected documents or policies and cite evidence for differences. "
+        "If enough source evidence is not available, say what is missing."
+    ),
+}
+
+
+def mode_instruction(mode: str) -> str:
+    return MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["ask_knowledge"])
+
+
+def should_show_document_search_status(
+    *,
+    active_document_ids: list[int] | None,
+    mode: str,
+    has_image: bool,
+) -> bool:
+    if has_image:
+        return False
+    return bool(active_document_ids) or mode in SOURCE_REQUIRED_MODES
+
+
+def derive_answer_metadata(
+    *,
+    mode: str,
+    sources: list[dict] | None,
+    active_document_ids: list[int] | None,
+    answer: str | None,
+    citation_verification: dict | None = None,
+) -> dict:
+    source_count = len(sources or [])
+    requires_sources = mode in SOURCE_REQUIRED_MODES
+
+    if source_count > 0:
+        answer_type = "uploaded_file_answer" if mode == "analyze_file" or active_document_ids else "official_source_backed"
+    elif requires_sources:
+        answer_type = "not_found"
+    else:
+        answer_type = "general_answer"
+
+    if answer and any(term in answer.lower() for term in ("escalate", "supervisor", "compliance team")):
+        answer_type = "escalate" if source_count == 0 and mode == "ask_knowledge" else answer_type
+
+    return {
+        "mode": mode,
+        "answer_type": answer_type,
+        "source_count": source_count,
+        "requires_sources": requires_sources,
+        "citation_verification": citation_verification or {},
+    }
+
 
 def ensure_chat_upload_dir() -> None:
     import os
@@ -69,7 +159,7 @@ def ensure_chat_upload_dir() -> None:
 
 
 @router.get("/models/status")
-async def read_model_status(current_user: User = Depends(get_current_user)) -> dict:
+async def read_model_status(current_user: User = Depends(get_current_analytics_user)) -> dict:
     return await model_status()
 
 
@@ -277,7 +367,8 @@ async def create_chat_message(
     retrieval_query = rewrite_query_for_retrieval(safe_message, history[:-1])
 
     # 3. Build prompt and call LLM async
-    sys_identity = get_system_identity(chat_request.language)
+    mode = chat_request.mode
+    sys_identity = f"{get_system_identity(chat_request.language)}\n\n{mode_instruction(mode)}"
     if chat_request.image:
         from ..services.llm_service import async_call_vision_llm
         answer = await async_call_vision_llm(f"{sys_identity}\n\n{chat_request.message}", chat_request.image)
@@ -293,7 +384,11 @@ async def create_chat_message(
             active_document_ids=active_doc_ids,
             session_id=session_id,
             user_id=current_user.id,
+            user_department=current_user.department,
         )
+
+    citation_verification = verify_answer_against_sources(answer=answer, sources=sources)
+    sources = attach_source_verification(sources, citation_verification)
     
     # 4. Save AI message
     ai_msg = ChatMessage(
@@ -308,6 +403,13 @@ async def create_chat_message(
     db.commit()
     db.refresh(ai_msg)
     _update_session_summary(session, safe_message, answer, db)
+    answer_metadata = derive_answer_metadata(
+        mode=mode,
+        sources=sources,
+        active_document_ids=active_doc_ids if not chat_request.image else [],
+        answer=answer,
+        citation_verification=citation_verification,
+    )
     
     log_audit_event(
         db=db,
@@ -322,6 +424,9 @@ async def create_chat_message(
             "masking_mode": "redact",
             "llm_received_masked_input": True,
             "sources_count": len(sources),
+            "answer_type": answer_metadata["answer_type"],
+            "mode": mode,
+            "citation_verification": citation_verification,
             "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
         }
     )
@@ -371,6 +476,7 @@ async def stream_chat_message(
     retrieval_query = rewrite_query_for_retrieval(safe_message, history[:-1])
 
     active_doc_ids = _session_active_document_ids(session, chat_request.active_document_ids)
+    mode = chat_request.mode
     has_image = bool(chat_request.image)
 
     async def event_stream():
@@ -381,10 +487,12 @@ async def stream_chat_message(
         if has_image and selected_model and not _model_supports_vision(selected_model):
             yield f"data: {json.dumps({'type': 'status', 'message': '⚠️ Warning: The selected model does not support image analysis. Using text-based analysis instead.'})}\n\n"
 
-        yield f"data: {json.dumps({'type': 'status', 'message': 'Searching documents...'})}\n\n"
+        if should_show_document_search_status(active_document_ids=active_doc_ids, mode=mode, has_image=has_image):
+            status_message = "Searching selected documents..." if active_doc_ids else "Searching approved knowledge..."
+            yield f"data: {json.dumps({'type': 'status', 'message': status_message})}\n\n"
 
         sources_list = []
-        sys_identity = get_system_identity(chat_request.language)
+        sys_identity = f"{get_system_identity(chat_request.language)}\n\n{mode_instruction(mode)}"
         logger.info("[STREAM] Got system identity")
 
         if not has_image:
@@ -404,14 +512,15 @@ async def stream_chat_message(
                     session_results = search_points(
                         query_vector,
                         current_user.bank_id,
-                        limit=5,
+                        limit=MAX_CANDIDATE_RESULTS,
                         document_ids=active_doc_ids,
                         session_id=session_id,
                         document_scope="session_upload",
+                        document_statuses=SESSION_RETRIEVAL_STATUSES,
                     )
 
                 allow_global_mix = not active_doc_ids or not session_results or _should_mix_global_knowledge(safe_message)
-                global_limit = max(0, 5 - len(session_results)) if allow_global_mix else 0
+                global_limit = MAX_CANDIDATE_RESULTS if allow_global_mix else 0
                 global_results = []
                 if global_limit > 0:
                     global_results = search_points(
@@ -419,6 +528,8 @@ async def stream_chat_message(
                         current_user.bank_id,
                         limit=global_limit,
                         document_scope="global_knowledge",
+                        document_statuses=GLOBAL_RETRIEVAL_STATUSES,
+                        version_states=GLOBAL_RETRIEVAL_VERSION_STATES,
                     )
                     seen = {r.payload.get("document_id") for r in session_results if r.payload}
                     global_results = [r for r in global_results if r.payload and r.payload.get("document_id") not in seen]
@@ -430,14 +541,20 @@ async def stream_chat_message(
                     allowed_docs = set()
                     for doc_id in doc_ids:
                         doc = db.get(Document, doc_id)
-                        if doc and doc.status in ("approved", "indexed", "ready"):
-                            if doc.document_scope == "session_upload" and doc.session_id != session_id:
-                                continue
-                            if current_user.role == "staff_user" and doc.access_level and doc.access_level > 0:
-                                continue
+                        if doc and _document_visible_to_user(
+                            doc,
+                            session_id,
+                            current_user.role,
+                            current_user.department,
+                        ):
                             allowed_docs.add(doc_id)
 
-                    filtered = [r for r in results if r.payload and r.payload.get("document_id") in allowed_docs]
+                    filtered = _rerank_results(retrieval_query, [
+                        r for r in results
+                        if r.payload
+                        and r.payload.get("document_id") in allowed_docs
+                        and r.score >= MIN_SOURCE_RELEVANCE_SCORE
+                    ])
 
                     if filtered:
                         context_blocks = []
@@ -450,35 +567,88 @@ async def stream_chat_message(
                             f"Use the following context from approved documents to answer the user's question.\n\n"
                             f"{context}\n--- END DOCUMENT CONTEXT ---"
                         )
-                        if active_doc_ids:
-                            seen_src: set[int] = set()
-                            for r in filtered:
-                                doc_id = r.payload.get("document_id")
-                                if doc_id and doc_id not in seen_src:
-                                    doc = db.get(Document, doc_id)
-                                    section_label = (
-                                        r.payload.get("section_label")
-                                        or r.payload.get("section_number")
-                                        or _extract_section_label(r.payload.get("text"))
-                                    )
-                                    sources_list.append({
-                                        "document_id":    doc_id,
-                                        "document_title": (doc.title or doc.file_name) if doc else "Database Source",
-                                        "title":          (doc.title or doc.file_name) if doc else "Database Source",
-                                        "document_type":  doc.document_type if doc else None,
-                                        "department":     doc.department if doc else None,
-                                        "snippet":        r.payload.get("text", "")[:120] + "...",
-                                        "page_number":    r.payload.get("page_number"),
-                                        "section_label":  section_label,
-                                        "section_number": section_label,
-                                        "chunk_index":    r.payload.get("chunk_index"),
-                                    })
-                                    seen_src.add(doc_id)
+                        seen_src: set[tuple] = set()
+                        for r in filtered:
+                            doc_id = r.payload.get("document_id")
+                            section_label = (
+                                r.payload.get("section_label")
+                                or r.payload.get("section_number")
+                                or _extract_section_label(r.payload.get("text"))
+                            )
+                            source_key = (doc_id, r.payload.get("page_number"), section_label, r.payload.get("chunk_index"))
+                            if doc_id and source_key not in seen_src:
+                                doc = db.get(Document, doc_id)
+                                passage = r.payload.get("text", "")
+                                sources_list.append({
+                                    "document_id":    doc_id,
+                                    "document_title": (doc.title or doc.file_name) if doc else "Database Source",
+                                    "title":          (doc.title or doc.file_name) if doc else "Database Source",
+                                    "document_type":  doc.document_type if doc else None,
+                                    "department":     doc.department if doc else None,
+                                    "snippet":        passage[:180],
+                                    "passage":        passage,
+                                    "page_number":    r.payload.get("page_number"),
+                                    "section_label":  section_label,
+                                    "section_number": section_label,
+                                    "chunk_index":    r.payload.get("chunk_index"),
+                                    "relevance_score": r.score,
+                                })
+                                seen_src.add(source_key)
             except Exception as e:
                 logger.error(f"RAG failed in stream: {e}")
 
         logger.info("[STREAM] About to yield prepare status")
         yield f"data: {json.dumps({'type': 'status', 'message': 'Generating response...'})}\n\n"
+
+        if not has_image and mode in SOURCE_REQUIRED_MODES and not sources_list:
+            full_response = NOT_FOUND_RESPONSE
+            yield f"data: {json.dumps({'token': full_response})}\n\n"
+            suggestions = []
+            citation_verification = verify_answer_against_sources(answer=full_response, sources=sources_list)
+            answer_metadata = derive_answer_metadata(
+                mode=mode,
+                sources=sources_list,
+                active_document_ids=active_doc_ids,
+                answer=full_response,
+                citation_verification=citation_verification,
+            )
+            try:
+                ai_msg = ChatMessage(
+                    bank_id=current_user.bank_id,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    role="assistant",
+                    content=full_response,
+                    sources_json=json.dumps(sources_list),
+                    suggestions_json=json.dumps(suggestions),
+                )
+                db.add(ai_msg)
+                db.commit()
+                _update_session_summary(session, safe_message, full_response, db)
+                log_audit_event(
+                    db=db,
+                    action="chat_query",
+                    resource_type="chat",
+                    resource_id=str(session_id),
+                    bank_id=current_user.bank_id,
+                    user_id=current_user.id,
+                    metadata={
+                        "query": safe_message,
+                        "pii_detected": safe_message != chat_request.message,
+                        "masking_mode": "redact",
+                        "llm_received_masked_input": False,
+                        "sources_count": 0,
+                        "answer_type": answer_metadata["answer_type"],
+                        "mode": mode,
+                        "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
+                        "streamed": True,
+                        "not_found_reason": "no_source_above_threshold",
+                    },
+                )
+            except Exception as e:
+                logger.error(f"[STREAM] Error saving not-found message: {e}")
+            yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
+            return
 
         vllm_messages = [{"role": "system", "content": sys_identity}]
         for msg in history[-10:]:
@@ -575,6 +745,15 @@ async def stream_chat_message(
             db.add(ai_msg)
             db.commit()
             _update_session_summary(session, safe_message, full_response, db)
+            citation_verification = verify_answer_against_sources(answer=full_response, sources=sources_list)
+            sources_list = attach_source_verification(sources_list, citation_verification)
+            answer_metadata = derive_answer_metadata(
+                mode=mode,
+                sources=sources_list,
+                active_document_ids=active_doc_ids,
+                answer=full_response,
+                citation_verification=citation_verification,
+            )
             log_audit_event(
                 db=db,
                 action="chat_query",
@@ -588,6 +767,9 @@ async def stream_chat_message(
                     "masking_mode": "redact",
                     "llm_received_masked_input": True,
                     "sources_count": len(sources_list),
+                    "answer_type": answer_metadata["answer_type"],
+                    "mode": mode,
+                    "citation_verification": citation_verification,
                     "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
                     "streamed": True,
                 },
@@ -595,7 +777,14 @@ async def stream_chat_message(
         except Exception as e:
             logger.error(f"[STREAM] Error saving message: {e}")
 
-        yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions})}\n\n"
+        answer_metadata = derive_answer_metadata(
+            mode=mode,
+            sources=sources_list,
+            active_document_ids=active_doc_ids,
+            answer=full_response,
+            citation_verification=verify_answer_against_sources(answer=full_response, sources=sources_list),
+        )
+        yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
 
     logger.info("[STREAM] About to return StreamingResponse with event_stream generator")
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -606,14 +795,12 @@ async def upload_session_file(
     db: Session = Depends(get_session),
     session_id: int,
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
     """
     Upload a file to a specific chat session for background processing.
     """
     from ..models.document import Document
-    import shutil
 
     session = db.get(ChatSession, session_id)
     if not session or session.user_id != current_user.id:
@@ -658,8 +845,11 @@ async def upload_session_file(
 
     _track_session_document(session, doc.id, db)
 
-    from ..services.ingestion_service import process_document
-    background_tasks.add_task(process_document, doc.id)
+    try:
+        enqueue_document_ingestion(doc.id, db)
+        db.refresh(doc)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     
     return {
         "id": doc.id,
@@ -667,7 +857,7 @@ async def upload_session_file(
         "session_id": session_id,
         "file_name": file.filename,
         "name": file.filename,
-        "status": "uploaded"
+        "status": doc.status,
     }
 
 @router.post("/sessions/{session_id}/stream-file")
@@ -678,7 +868,6 @@ async def stream_chat_with_file(
     message: str = Form(...),
     language: str = Form("en"),
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -772,8 +961,11 @@ async def stream_chat_with_file(
             "content": f"I have uploaded \"{file.filename}\".\n\n--- FILE CONTENT ---\n{extracted}\n--- END FILE CONTENT ---\n\nMy request: {message}"
         })
 
-    from ..services.ingestion_service import process_document
-    background_tasks.add_task(process_document, doc.id)
+    try:
+        enqueue_document_ingestion(doc.id, db)
+        db.refresh(doc)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     async def event_stream():
         full_response = ""

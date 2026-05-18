@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --brand-primary: #17324d;
+    --brand-accent: #c7902c;
+  }
+
   html {
     @apply text-on-surface;
   }

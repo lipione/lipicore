@@ -98,7 +98,7 @@ function ActionDetail({ log, onClose }) {
           <span className="font-label-caps text-label-caps text-slate-500 uppercase tracking-widest">Metadata</span>
           <div className="grid grid-cols-2 gap-md">
             {[
-              { label: 'Model Version', value: meta.model_version || 'Ollama/LLaMA3' },
+              { label: 'Model Version', value: meta.model_version || 'Local vLLM' },
               { label: 'Tokens Used',  value: meta.tokens_used   ? String(meta.tokens_used) : '—' },
               { label: 'Latency',      value: meta.latency_ms    ? `${meta.latency_ms}ms`   : '—' },
               { label: 'Source Hash',  value: meta.source_hash   || (log.resource_id ? `0x${log.resource_id.slice(0, 6)}` : '—') },

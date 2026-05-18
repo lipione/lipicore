@@ -7,7 +7,7 @@ from .core.config import settings
 from .core.limiter import limiter
 from .core.context import request_ip
 from .db.session import init_db
-from .api import auth, banks, users, documents, chat, audit, analytics, tasks, export
+from .api import auth, banks, users, documents, chat, audit, analytics, tasks, export, configuration, evaluations
 
 
 @asynccontextmanager
@@ -68,3 +68,5 @@ app.include_router(audit.router,     prefix=f"{settings.API_V1_STR}/audit",     
 app.include_router(analytics.router, prefix=f"{settings.API_V1_STR}/analytics", tags=["analytics"])
 app.include_router(tasks.router,    prefix=f"{settings.API_V1_STR}/tasks",    tags=["tasks"])
 app.include_router(export.router,   prefix=f"{settings.API_V1_STR}/export",   tags=["export"])
+app.include_router(configuration.router, prefix=f"{settings.API_V1_STR}/config", tags=["config"])
+app.include_router(evaluations.router, prefix=f"{settings.API_V1_STR}/evaluations", tags=["evaluations"])

@@ -6,7 +6,8 @@ from ..core.security import get_password_hash
 
 def create_super_admin():
     with Session(engine) as session:
-        user = session.exec(select(User).where(User.email == settings.SUPER_ADMIN_EMAIL)).first()
+        admin_emails = {settings.SUPER_ADMIN_EMAIL, "admin@lipicore.io"}
+        user = session.exec(select(User).where(User.email.in_(admin_emails))).first()
         if not user:
             from ..models.bank import Bank
             print("Creating default bank...")
@@ -17,9 +18,9 @@ def create_super_admin():
                 session.commit()
                 session.refresh(bank)
                 
-            print(f"Creating super admin: admin@lipicore.io")
+            print(f"Creating super admin: {settings.SUPER_ADMIN_EMAIL}")
             admin = User(
-                email="admin@lipicore.io",
+                email=settings.SUPER_ADMIN_EMAIL,
                 password_hash=get_password_hash(settings.SUPER_ADMIN_PASSWORD),
                 name="Super Admin",
                 role="super_admin",

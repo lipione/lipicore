@@ -21,8 +21,11 @@ class Document(SQLModel, table=True):
     summary: Optional[str] = None
 
     # Status and progress
-    status: str = Field(default="uploaded")  # uploaded, processing, extracting_text, chunking, embedding, indexed, approved, disabled, failed
+    status: str = Field(default="uploaded")  # uploaded, queued, processing, extracting_text, chunking, embedding, indexed, approved, disabled, failed
+    version_state: str = Field(default="draft")  # draft, approved, superseded, archived, disabled
     version: str = "1.0"
+    supersedes_document_id: Optional[int] = Field(default=None, foreign_key="document.id")
+    approved_at: Optional[datetime] = None
     processing_progress: int = Field(default=0)
     processing_message: Optional[str] = None
 
@@ -43,6 +46,12 @@ class DocumentChunk(SQLModel, table=True):
     chunk_text: str
     page_number: Optional[int] = None
     qdrant_point_id: str
+    department: Optional[str] = None
+    access_level: int = 0
+    document_scope: Optional[str] = "global_knowledge"
+    session_id: Optional[int] = None
+    document_status: str = "uploaded"
+    version_state: str = "draft"
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     document: Optional["Document"] = Relationship(back_populates="chunks")
