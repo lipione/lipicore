@@ -62,7 +62,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-bankai}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-lipicore}
       - QDRANT_HOST=qdrant
       - MINIO_ENDPOINT=minio:9000
       - REDIS_URL=redis://redis:6379/0
@@ -122,7 +122,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-bankai}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-lipicore}
       - QDRANT_HOST=qdrant
       - MINIO_ENDPOINT=minio:9000
       - REDIS_URL=redis://redis:6379/0
@@ -164,8 +164,8 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-bankai}
-      - MESSENGER_DATABASE_URL=${MESSENGER_DATABASE_URL:-postgresql://postgres:postgres@db:5432/lipicore}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-lipicore}
+      - MESSENGER_DATABASE_URL=${MESSENGER_DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-lipicore}}
       - MESSENGER_UPLOAD_DIR=/app/messenger_uploads
       - COOKIE_SECURE=true
       - ALLOWED_ORIGINS=https://ai.silverlining.com.np,https://202.51.2.50,http://202.51.2.50,http://localhost:3000,http://localhost
