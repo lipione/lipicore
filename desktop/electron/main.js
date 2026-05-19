@@ -5,7 +5,6 @@ const {
   BrowserWindow,
   Menu,
   Tray,
-  dialog,
   ipcMain,
   nativeImage,
   session,
@@ -22,6 +21,18 @@ let isQuitting = false;
 
 function assetPath(...parts) {
   return path.join(__dirname, "..", ...parts);
+}
+
+function runtimeIconPath() {
+  const platformIcon = process.platform === "win32"
+    ? assetPath("assets", "icon.ico")
+    : assetPath("assets", "icon.icns");
+
+  if (fs.existsSync(platformIcon)) {
+    return platformIcon;
+  }
+
+  return assetPath("assets", "logo.svg");
 }
 
 function preferencesPath() {
@@ -84,7 +95,7 @@ function createMainWindow() {
     show: false,
     title: APP_NAME,
     backgroundColor: "#0f172a",
-    icon: assetPath("assets", "logo.svg"),
+    icon: runtimeIconPath(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: true,
@@ -184,8 +195,19 @@ function createMenu() {
 }
 
 function createTray() {
-  const image = nativeImage.createFromPath(assetPath("assets", "logo.svg"));
-  tray = new Tray(image.resize({ width: 18, height: 18 }));
+  const image = nativeImage.createFromPath(runtimeIconPath());
+
+  if (image.isEmpty()) {
+    return;
+  }
+
+  const trayImage = image.resize({ width: 18, height: 18 });
+
+  if (trayImage.isEmpty()) {
+    return;
+  }
+
+  tray = new Tray(trayImage);
   tray.setToolTip(APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open LipiCore", click: () => showMainWindow() },
@@ -243,22 +265,13 @@ function quitApp() {
 }
 
 function wireDownloads() {
-  session.defaultSession.on("will-download", async (_event, item) => {
-    item.pause();
-
+  session.defaultSession.on("will-download", (_event, item) => {
     const defaultPath = path.join(app.getPath("downloads"), item.getFilename());
-    const result = await dialog.showSaveDialog(mainWindow, {
+
+    item.setSaveDialogOptions({
       title: "Save LipiCore download",
       defaultPath
     });
-
-    if (result.canceled || !result.filePath) {
-      item.cancel();
-      return;
-    }
-
-    item.setSavePath(result.filePath);
-    item.resume();
   });
 }
 

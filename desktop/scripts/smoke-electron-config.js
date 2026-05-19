@@ -16,6 +16,7 @@ function assert(condition, message) {
 
 const root = path.resolve(__dirname, "..");
 const configPath = path.join(root, "electron/config.js");
+const mainPath = path.join(root, "electron/main.js");
 const requiredFiles = [
   "electron/config.js",
   "electron/allowed-origins.js",
@@ -31,6 +32,30 @@ const requiredFiles = [
 for (const filePath of requiredFiles) {
   assert(fs.existsSync(path.join(root, filePath)), `Missing ${filePath}`);
 }
+
+const mainSource = fs.readFileSync(mainPath, "utf8");
+
+assert(
+  mainSource.includes("item.setSaveDialogOptions("),
+  "Download handler must use Electron save dialog options"
+);
+assert(
+  !mainSource.includes("dialog.showSaveDialog"),
+  "Download handler must not await a custom save dialog"
+);
+assert(
+  !/will-download[\s\S]*preventDefault\(\)/.test(mainSource),
+  "Download handler must not prevent the default download flow"
+);
+assert(!mainSource.includes("item.pause()"), "Download handler must not pause downloads for dialog handling");
+assert(!mainSource.includes("item.resume()"), "Download handler must not resume manually handled downloads");
+assert(mainSource.includes("\"assets\", \"icon.ico\""), "Windows runtime icon path must be supported");
+assert(mainSource.includes("\"assets\", \"icon.icns\""), "macOS runtime icon path must be supported");
+assert(
+  !/icon:\s*assetPath\("assets", "logo\.svg"\)/.test(mainSource),
+  "BrowserWindow must not use SVG directly as its runtime icon"
+);
+assert(mainSource.includes(".isEmpty()"), "Tray icon must be checked before tray creation");
 
 assert(APP_URL === "https://ai.silverlining.com.np", "Default app URL must be production");
 assert(ALLOWED_ORIGINS.length === 2, "Only approved default origins should be allowed by default");
