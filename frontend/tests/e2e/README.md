@@ -116,7 +116,7 @@ See `../../E2E_TEST_GUIDE.md` for comprehensive testing guide including:
 - LLM response: 2-10 seconds
 - Full round-trip: 20-50 seconds
 
-*Timing depends on Ollama model inference speed and document size*
+*Timing depends on local vLLM model tier, GPU load, queue depth, and document size*
 
 ## CI/CD Integration
 

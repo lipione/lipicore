@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { useBranding } from '../contexts/BrandingContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const branding = useBranding();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
@@ -43,7 +45,7 @@ export default function Login() {
               </span>
             </div>
             <div>
-              <p className="font-black text-lg font-public-sans leading-none">BankAi</p>
+              <p className="font-black text-lg font-public-sans leading-none">{branding.product_name}</p>
               <p className="text-[10px] uppercase tracking-widest text-on-primary-container mt-0.5">Enterprise Intelligence</p>
             </div>
           </div>
@@ -52,8 +54,7 @@ export default function Login() {
             Secure Financial<br />Document Intelligence
           </h1>
           <p className="text-on-primary-container text-body-md leading-relaxed">
-            AI-powered analysis of your bank's private documents. Fully air-gapped from
-            live banking systems. Every query is encrypted, logged, and auditable.
+            {branding.welcome_message}
           </p>
 
           <div className="mt-12 space-y-4">
@@ -72,7 +73,7 @@ export default function Login() {
         </div>
 
         <p className="text-[11px] text-on-primary-container opacity-60">
-          © {new Date().getFullYear()} BankAi Enterprise Intelligence. Authorized access only.
+          © {new Date().getFullYear()} {branding.product_name}. Authorized access only.
         </p>
       </div>
 
@@ -86,12 +87,12 @@ export default function Login() {
                 account_balance
               </span>
             </div>
-            <span className="font-black text-lg text-slate-900 font-public-sans">BankAi</span>
+            <span className="font-black text-lg text-slate-900 font-public-sans">{branding.product_name}</span>
           </div>
 
           <h2 className="text-h2 font-h2 text-on-surface mb-1">Sign in</h2>
           <p className="text-body-sm text-outline mb-8">
-            Access your institution's AI workspace
+            Access {branding.bank_name}'s AI workspace
           </p>
 
           {error && (

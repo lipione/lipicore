@@ -2,15 +2,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
-from jose import jwt
-from datetime import timedelta
 
 from app.main import app
 from app.db.session import get_session
 from app.models.user import User
 from app.models.bank import Bank
-from app.core.security import get_password_hash
-from app.core.config import settings
+from app.core.security import create_access_token, get_password_hash
 
 # Setup in-memory database for testing
 sqlite_url = "sqlite://"
@@ -53,14 +50,27 @@ def setup_db():
             is_active=True
         )
         session.add(staff)
+
+        # Create test auditor user
+        auditor = User(
+            email="auditor@test.local",
+            password_hash=get_password_hash("password"),
+            name="Audit User",
+            role="auditor",
+            bank_id=bank.id,
+            is_active=True
+        )
+        session.add(auditor)
         session.commit()
         
     yield
     SQLModel.metadata.drop_all(engine)
 
 def get_token(email: str):
-    response = client.post("/api/auth/login", data={"username": email, "password": "password"})
-    return response.json()["access_token"]
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.email == email)).first()
+        assert user is not None
+        return create_access_token(user.id)
 
 def test_health_check():
     response = client.get("/health")
@@ -92,4 +102,32 @@ def test_audit_logs_access():
     
     # Staff cannot view
     response = client.get("/api/audit", headers={"Authorization": f"Bearer {staff_token}"})
+    assert response.status_code == 403
+
+def test_analytics_summary_requires_analytics_role():
+    admin_token = get_token("super@test.local")
+    auditor_token = get_token("auditor@test.local")
+    staff_token = get_token("staff@test.local")
+
+    response = client.get("/api/analytics/summary", headers={"Authorization": f"Bearer {admin_token}"})
+    assert response.status_code == 200
+
+    response = client.get("/api/analytics/summary", headers={"Authorization": f"Bearer {auditor_token}"})
+    assert response.status_code == 200
+
+    response = client.get("/api/analytics/summary", headers={"Authorization": f"Bearer {staff_token}"})
+    assert response.status_code == 403
+
+def test_model_status_requires_analytics_role():
+    admin_token = get_token("super@test.local")
+    auditor_token = get_token("auditor@test.local")
+    staff_token = get_token("staff@test.local")
+
+    response = client.get("/api/chat/models/status", headers={"Authorization": f"Bearer {admin_token}"})
+    assert response.status_code == 200
+
+    response = client.get("/api/chat/models/status", headers={"Authorization": f"Bearer {auditor_token}"})
+    assert response.status_code == 200
+
+    response = client.get("/api/chat/models/status", headers={"Authorization": f"Bearer {staff_token}"})
     assert response.status_code == 403

@@ -8,13 +8,43 @@ The Bank's Own LLM architecture is designed around isolation, security, and the 
 3. **PostgreSQL:** Stores relational metadata: Users, Banks, Document Metadata, Chat History, and Audit Logs.
 4. **MinIO:** S3-compatible object storage for storing raw uploaded documents securely.
 5. **Qdrant:** Vector database storing text chunk embeddings with payload metadata (bank_id, document_id) for precise, isolated retrieval.
-6. **LLM Engine:** Configurable engine (Ollama for local MVP, OpenAI/vLLM compatible API for production).
+6. **Redis:** Admission-control state for local model concurrency and RQ-backed document ingestion.
+7. **LLM Engine:** Local vLLM model servers exposed through OpenAI-compatible endpoints.
+8. **Ingestion Worker:** Extracts text/tables/OCR output, chunks content, embeds chunks, and indexes PostgreSQL/Qdrant outside the API process.
+9. **Evaluation Center:** Frontend and API workflow for running bank-specific RAG quality tests.
 
 ## Data Flow (Chat)
 1. User submits query.
 2. Backend authenticates user and determines `bank_id` and role permissions.
 3. Query is embedded using Sentence-Transformers.
-4. Qdrant is queried with the embedding, heavily filtered by `bank_id`.
-5. Backend verifies document access levels against the user's role.
-6. Context is constructed and sent to the LLM.
-7. LLM response and sources are saved to DB and returned to the user.
+4. Hybrid retrieval combines Qdrant vector search with PostgreSQL full-text search, filtered by `bank_id`, scope, session, and role.
+5. Backend verifies document access levels and drops low-relevance results before context construction.
+6. Retrieved candidates are reranked so the model receives fewer but more relevant chunks.
+7. Context is sent to the selected vLLM model tier through the local LLM gateway.
+8. LLM response, source snippets, full source passages, and metadata are saved to DB and returned to the user.
+9. Citation verification metadata is computed from the generated answer and retrieved source passages.
+
+## Data Flow (Document Ingestion)
+
+1. User uploads a document from Chat, Document Library, or AI Tasks.
+2. Backend stores the original file in MinIO and metadata in PostgreSQL.
+3. Backend enqueues a Redis/RQ ingestion job.
+4. The ingestion worker extracts text, OCR output, PDF tables, spreadsheet sheet/cell metadata, and presentation text.
+5. Extracted content is chunked and embedded.
+6. Chunks are written to PostgreSQL and Qdrant with `bank_id`, document lifecycle, document scope, and permission metadata.
+7. The UI shows queued, extracting, embedding, indexing, ready, or failed status.
+
+## Trust And Evaluation
+
+- Sources are shown only when they pass relevance and access filters.
+- The source evidence panel exposes the exact passage used by the answer, not only a document title.
+- RAG evaluation sets can be submitted to `POST /api/evaluations/rag` or through `/evaluations`.
+- Evaluation scores cover expected source recall, citation term recall, answer term recall, and expected not-found behavior.
+- Evaluation access is limited to analytics-capable roles: super admin, bank admin, auditor, and data auditor.
+
+## Current Limits
+
+- Citation verification is lexical overlap, not a formal entailment model.
+- Long, broad multi-document answers still need map-reduce or multi-step retrieval improvements.
+- Scanned, handwritten, chart-heavy, seal-heavy, and signature-heavy files remain weak.
+- Single-host Compose is a pilot architecture. Whole-bank deployment needs HA PostgreSQL, object storage, vector storage, Redis, backend replicas, and inference redundancy.

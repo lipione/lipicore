@@ -24,10 +24,10 @@ def get_raw_token(
     request: Request,
     bearer: Optional[str] = Depends(reusable_oauth2),
 ) -> str:
-    """Extract JWT from httpOnly cookie first, then fall back to Authorization header."""
-    token = request.cookies.get("access_token") or bearer
+    """Extract JWT from Authorization header first, then fall back to httpOnly cookie."""
+    token = bearer or request.cookies.get("access_token")
     if not token:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authenticated")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return token
 
 
@@ -87,5 +87,14 @@ def get_current_bank_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
     if current_user.role not in ["super_admin", "bank_admin"]:
+        raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
+    return current_user
+
+
+def get_current_analytics_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    analytics_roles = {"super_admin", "bank_admin", "auditor", "data_auditor"}
+    if current_user.role not in analytics_roles:
         raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
     return current_user

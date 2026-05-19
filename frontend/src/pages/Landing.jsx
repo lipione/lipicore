@@ -43,7 +43,9 @@ export default function Landing() {
                 Upload banking documents, ask follow-up questions, and get source-backed answers inside a dedicated private AI environment.
               </p>
               <div className="flex flex-wrap gap-4">
-                <button className="bg-secondary text-on-secondary px-8 py-4 rounded font-semibold text-body-md transition-all hover:shadow-lg">
+                <button
+                  onClick={() => navigate('/login')}
+                  className="bg-secondary text-on-secondary px-8 py-4 rounded font-semibold text-body-md transition-all hover:shadow-lg">
                   Request Enterprise Demo
                 </button>
                 <button
@@ -78,7 +80,7 @@ export default function Landing() {
         </section>
 
         {/* Core Value Cards - Bento Grid */}
-        <section id="solutions" className="py-16 px-6 bg-surface">
+        <section id="compliance" className="py-16 px-6 bg-surface">
           <div className="max-w-7xl mx-auto">
             <div className="text-center mb-12">
               <span className="font-label-caps text-label-caps text-secondary">ARCHITECTURAL PILLARS</span>
@@ -410,17 +412,21 @@ export default function Landing() {
         </section>
 
         {/* Final CTA */}
-        <section className="py-16 px-6 relative overflow-hidden bg-primary-container text-white">
+        <section id="contact" className="py-16 px-6 relative overflow-hidden bg-primary-container text-white">
           <div className="max-w-7xl mx-auto text-center relative z-10">
             <h2 className="font-h1 text-h1 mb-6">Give Your Bank Its Own AI Document Intelligence Server</h2>
             <p className="text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
               Empower your analysts with secure, private, and audit-ready intelligence. Schedule a consultation with our enterprise architects.
             </p>
             <div className="flex flex-wrap justify-center gap-6">
-              <button className="bg-tertiary-fixed-dim text-on-tertiary-fixed px-10 py-5 rounded font-bold text-lg hover:scale-105 transition-transform">
+              <button
+                onClick={() => navigate('/login')}
+                className="bg-tertiary-fixed-dim text-on-tertiary-fixed px-10 py-5 rounded font-bold text-lg hover:scale-105 transition-transform">
                 Request Enterprise Demo
               </button>
-              <button className="border border-white/20 px-10 py-5 rounded font-bold text-lg hover:bg-white/10 transition-colors">
+              <button
+                onClick={() => navigate('/login')}
+                className="border border-white/20 px-10 py-5 rounded font-bold text-lg hover:bg-white/10 transition-colors">
                 Contact Support
               </button>
             </div>
@@ -442,11 +448,11 @@ export default function Landing() {
             <p className="text-slate-500 mt-1">© 2026 Lipi. LipiCore Enterprise Server for financial institutions.</p>
           </div>
           <nav className="flex flex-wrap justify-center gap-8">
-            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#">Privacy Policy</a>
-            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#">Terms of Service</a>
-            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#">Security Whitepaper</a>
-            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#">API Docs</a>
-            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#">Contact Support</a>
+            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#security">Privacy Policy</a>
+            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#governance">Terms of Service</a>
+            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#security">Security Whitepaper</a>
+            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#infrastructure">API Docs</a>
+            <a className="text-slate-500 hover:text-slate-900 transition-colors" href="#contact">Contact Support</a>
           </nav>
         </div>
       </footer>

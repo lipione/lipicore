@@ -40,6 +40,11 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
@@ -53,7 +58,7 @@ services:
       minio:
         condition: service_started
       redis:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -61,8 +66,21 @@ services:
       - QDRANT_HOST=qdrant
       - MINIO_ENDPOINT=minio:9000
       - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_DIR=/app/uploads
+      - CHAT_UPLOAD_DIR=/app/chat_uploads
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+      - INGESTION_QUEUE_NAME=${INGESTION_QUEUE_NAME:-document-ingestion}
+      - INGESTION_JOB_TIMEOUT_SECONDS=${INGESTION_JOB_TIMEOUT_SECONDS:-1800}
+      - INGESTION_MAX_RETRIES=${INGESTION_MAX_RETRIES:-2}
+      - INGESTION_WORKER_CONCURRENCY=${INGESTION_WORKER_CONCURRENCY:-1}
+      - OCR_MAX_PAGES=${OCR_MAX_PAGES:-200}
       - COOKIE_SECURE=true
       - ALLOWED_ORIGINS=https://ai.silverlining.com.np,https://202.51.2.50,http://202.51.2.50,http://localhost:3000,http://localhost
+      # Legacy single-LLM fields kept in backend settings; force them to vLLM.
+      - LLM_PROVIDER=vllm
+      - LLM_MODEL=gemma-4
+      - LLM_API_BASE=http://lipicore-vllm-b:8000
+      - LLM_API_KEY=no-key
       # LLM routing — overrides .env so git is the source of truth
       - LLM_A_API_BASE=http://lipicore-vllm-b:8000
       - LLM_A_MODEL=gemma-4
@@ -73,25 +91,94 @@ services:
       - LLM_C_API_BASE=http://lipicore-vllm-c:8000
       - LLM_C_MODEL=gemma-4-26b-4bit
       - LLM_C_API_KEY=no-key
+      - LLM_QUEUE_STALE_SECONDS=${LLM_QUEUE_STALE_SECONDS:-10}
     ports:
       - "8000:8000"
+    volumes:
+      - upload_data:/app/uploads
+      - chat_upload_data:/app/chat_uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+  ingestion-worker:
+    build: ./backend
+    container_name: lipicore-ingestion-worker
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      vllm-b:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-bankai}
+      - QDRANT_HOST=qdrant
+      - MINIO_ENDPOINT=minio:9000
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_DIR=/app/uploads
+      - CHAT_UPLOAD_DIR=/app/chat_uploads
+      - INGESTION_QUEUE_NAME=${INGESTION_QUEUE_NAME:-document-ingestion}
+      - INGESTION_JOB_TIMEOUT_SECONDS=${INGESTION_JOB_TIMEOUT_SECONDS:-1800}
+      - INGESTION_MAX_RETRIES=${INGESTION_MAX_RETRIES:-2}
+      - INGESTION_WORKER_CONCURRENCY=${INGESTION_WORKER_CONCURRENCY:-1}
+      - OCR_MAX_PAGES=${OCR_MAX_PAGES:-200}
+      - COOKIE_SECURE=true
+      - ALLOWED_ORIGINS=https://ai.silverlining.com.np,https://202.51.2.50,http://202.51.2.50,http://localhost:3000,http://localhost
+      - LLM_PROVIDER=vllm
+      - LLM_MODEL=gemma-4
+      - LLM_API_BASE=http://lipicore-vllm-b:8000
+      - LLM_API_KEY=no-key
+      - LLM_A_API_BASE=http://lipicore-vllm-b:8000
+      - LLM_A_MODEL=gemma-4
+      - LLM_A_API_KEY=no-key
+      - LLM_B_API_BASE=http://lipicore-vllm-b:8000
+      - LLM_B_MODEL=gemma-4
+      - LLM_B_API_KEY=no-key
+      - LLM_C_API_BASE=http://lipicore-vllm-c:8000
+      - LLM_C_MODEL=gemma-4-26b-4bit
+      - LLM_C_API_KEY=no-key
+      - LLM_QUEUE_STALE_SECONDS=${LLM_QUEUE_STALE_SECONDS:-10}
+    command: ["python", "-m", "app.workers.ingestion_worker"]
+    volumes:
+      - upload_data:/app/uploads
+      - chat_upload_data:/app/chat_uploads
 
   frontend:
     build: ./frontend
     container_name: lipicore-frontend
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
   nginx:
     image: nginx:alpine
     container_name: lipicore-nginx
     restart: always
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
@@ -102,6 +189,11 @@ services:
     environment:
       - NGINX_HOST=_
       - NGINX_PORT=80
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   vllm-b:
     image: vllm/vllm-openai:latest
@@ -152,3 +244,5 @@ volumes:
   qdrant_data:
   minio_data:
   redis_data:
+  upload_data:
+  chat_upload_data:

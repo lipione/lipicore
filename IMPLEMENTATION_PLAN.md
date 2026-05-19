@@ -359,7 +359,7 @@ User selects file in chat
 1. No refresh tokens — JWT expires after 8h, requires re-login
 2. MinIO configured but files stored on disk — production should use MinIO
 3. No Alembic migrations — schema managed by SQLModel `create_all`
-4. Ollama must be running locally or in Docker
+4. Local vLLM model servers must be running and reachable from the backend
 5. Scanned PDF OCR uses vision LLM (not pytesseract) — quality depends on model
 6. No WebSocket — SSE only (no bidirectional events)
 7. Session summary auto-update not yet implemented

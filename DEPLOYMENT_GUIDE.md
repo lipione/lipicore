@@ -1,7 +1,7 @@
 # BankAi Enterprise Deployment Guide
 
-**Version:** 1.1
-**Date:** May 7, 2026
+**Version:** 1.2
+**Date:** May 19, 2026
 **For:** On-premises or private data center deployment
 
 ## System Requirements
@@ -196,8 +196,50 @@ docker compose restart nginx
 Rebuild after code changes:
 
 ```bash
-docker compose up -d --build
+./deploy/upgrade.sh
 ```
+
+For a health-only verification without rebuilding:
+
+```bash
+./deploy/upgrade.sh --check-only
+```
+
+When running on the server, the script checks the internal backend health URL
+by default. If you run it from a host that can reach the public domain, add:
+
+```bash
+./deploy/upgrade.sh --check-only --public-health-url https://ai.silverlining.com.np/health
+```
+
+For the test server, run backend tests as part of the upgrade gate:
+
+```bash
+./deploy/upgrade.sh --run-tests
+```
+
+After release upgrades that affect RAG, ingestion, prompts, embeddings, or model routing, run a bank-specific evaluation set:
+
+```text
+Frontend: /evaluations
+API: POST /api/evaluations/rag
+```
+
+Treat failures in expected sources, citation terms, or not-found behavior as release blockers for the affected workflow.
+
+The production nginx config uses Docker's embedded DNS resolver for backend
+and frontend upstreams. After backend or frontend containers are recreated,
+nginx should resolve the new container IP automatically; verify with:
+
+```bash
+curl -fsS https://ai.silverlining.com.np/health
+```
+
+The Compose file also defines health checks for Redis, backend, frontend, and
+nginx. Treat `running` as insufficient during an upgrade; the backend must show
+`healthy` before frontend/nginx readiness means anything. A temporarily
+`starting` backend is expected while it initializes Qdrant, seeds admin data,
+and warms the embedding model.
 
 ## Troubleshooting
 
@@ -299,5 +341,6 @@ docker compose ps
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2 | 2026-05-19 | Redis/RQ ingestion worker, document lifecycle and chunk permissions, reranking, citation verification, Evaluation Center, source evidence UI, health-gated upgrades |
 | 1.1 | 2026-05-07 | vLLM two-GPU runtime, Redis admission control, Let's Encrypt HTTPS |
 | 1.0 | 2026-04-28 | Initial enterprise deployment guide |

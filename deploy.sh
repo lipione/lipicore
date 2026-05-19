@@ -9,7 +9,7 @@
 #   -h, --help              Show this help message
 #   -e, --env FILE          Use custom environment file (default: .env.production)
 #   --skip-docker           Skip Docker installation (assumes already installed)
-#   --skip-models           Skip Ollama model pulling
+#   --skip-models           Skip local model readiness checks
 #   --no-ssl                Deploy without SSL (development only)
 ################################################################################
 
@@ -268,22 +268,21 @@ init_database() {
     print_success "Database initialized successfully"
 }
 
-pull_ollama_models() {
+verify_local_models() {
     if $SKIP_MODELS; then
-        print_warning "Skipping Ollama model pulling (--skip-models)"
-        print_warning "Models must be manually loaded before document processing can work"
+        print_warning "Skipping local model readiness checks (--skip-models)"
+        print_warning "vLLM model weights must be present before AI responses can work"
         return
     fi
 
-    print_header "Pulling Ollama models"
+    print_header "Checking local vLLM models"
 
     cd $APP_HOME
 
-    print_info "This may take a while depending on model sizes..."
-    print_info "Pulling gemma4 model..."
-    docker-compose exec -T ollama ollama pull gemma4
+    print_info "Checking vLLM service status..."
+    docker-compose ps vllm-b vllm-c || true
 
-    print_success "Ollama models loaded successfully"
+    print_success "Local model services checked"
 }
 
 verify_installation() {
@@ -357,7 +356,7 @@ main() {
     init_database
 
     if [ "$SKIP_MODELS" = false ]; then
-        pull_ollama_models
+        verify_local_models
     fi
 
     verify_installation

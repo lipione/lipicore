@@ -2,7 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import FilePreviewCard from '../components/chat/FilePreviewCard';
+import AnswerTrustBadge from '../components/chat/AnswerTrustBadge';
+import ChatModeSelector, { CHAT_MODES, modeByValue } from '../components/chat/ChatModeSelector';
+import SourceEvidencePanel from '../components/chat/SourceEvidencePanel';
 import useDropZone from '../hooks/useDropZone';
+import { useBranding } from '../contexts/BrandingContext';
 
 const EXPORT_FORMATS = [
   { fmt: 'pdf',  label: 'PDF',         icon: 'picture_as_pdf' },
@@ -11,6 +15,8 @@ const EXPORT_FORMATS = [
   { fmt: 'pptx', label: 'PowerPoint',  icon: 'slideshow' },
   { fmt: 'txt',  label: 'Text',        icon: 'article' },
 ];
+
+const LAST_CHAT_SESSION_KEY = 'bankai:lastChatSessionId';
 
 function ChatExportButton({ content }) {
   const [open, setOpen]     = useState(false);
@@ -67,9 +73,9 @@ function ChatExportButton({ content }) {
 const FILE_ACCEPT = '.pdf,.docx,.txt,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png';
 
 const MODEL_OPTIONS = [
-  { value: null, label: 'Auto', icon: 'auto_awesome', description: 'Route to the best Gemma tier' },
-  { value: 'gemma-4', label: 'Fast', icon: 'bolt', description: 'Gemma 4 4B' },
-  { value: 'gemma-4-26b-4bit', label: 'Analyst', icon: 'psychology', description: 'Gemma 4 26B' },
+  { value: null, label: 'Auto', icon: 'auto_awesome', description: 'Backend routes to the best local vLLM tier' },
+  { value: 'gemma-4', label: 'Fast', icon: 'bolt', description: 'Gemma 4 4B on local vLLM' },
+  { value: 'gemma-4-26b-4bit', label: 'Analyst', icon: 'psychology', description: 'Gemma 4 26B on local vLLM' },
 ];
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
@@ -131,10 +137,99 @@ function activeDocumentId(doc) {
   return Number.isInteger(id) ? id : null;
 }
 
-function welcomeMsg() {
+function deriveClientAnswerMetadata(message) {
+  if (message?.answer_metadata) return message.answer_metadata;
+  const sourceCount = message?.sources?.length || 0;
+  const sourceVerification = message?.sources?.find(source => source?.citation_verification)?.citation_verification;
+  if (sourceCount > 0) {
+    return {
+      mode: 'ask_knowledge',
+      answer_type: 'official_source_backed',
+      source_count: sourceCount,
+      requires_sources: true,
+      citation_verification: {
+        status: sourceVerification || 'no_sources',
+      },
+    };
+  }
+  return null;
+}
+
+const CAPACITY_ERROR_MARKERS = [
+  'AI engine is busy',
+  'Error connecting to AI engine',
+  'AI engine returned error',
+];
+
+function classifyStreamStatus(message) {
+  if (!message) return null;
+  const text = String(message);
+  if (/queued behind/i.test(text)) {
+    return {
+      kind: 'queued',
+      icon: 'pending_actions',
+      label: text,
+      detail: 'Your request is waiting for a local model slot.',
+    };
+  }
+  if (/model workers are busy|request is queued/i.test(text)) {
+    return {
+      kind: 'busy',
+      icon: 'hourglass_top',
+      label: 'All model workers are busy',
+      detail: 'BankAi will start when a local model slot is available.',
+    };
+  }
+  if (/generating response/i.test(text)) {
+    return {
+      kind: 'generating',
+      icon: 'bolt',
+      label: 'Generating response',
+      detail: 'The local model is writing the answer.',
+    };
+  }
+  return {
+    kind: 'status',
+    icon: 'sync',
+    label: text,
+    detail: '',
+  };
+}
+
+function isCapacityErrorText(text) {
+  return CAPACITY_ERROR_MARKERS.some(marker => String(text || '').includes(marker));
+}
+
+function formatCapacityFailure(text) {
+  if (String(text || '').includes('returned error')) {
+    return '**AI capacity error.** The local model returned an error while generating the answer. Please retry, or choose the Fast model if the Analyst model is busy.';
+  }
+  if (String(text || '').includes('Error connecting')) {
+    return '**AI connection error.** BankAi could not reach the local model worker. Please retry shortly.';
+  }
+  return '**AI capacity is busy.** The local model queue is full right now. Please retry shortly or use a shorter prompt.';
+}
+
+function capacityFailureMetadata(mode, reason) {
+  return {
+    mode,
+    answer_type: 'capacity_busy',
+    source_count: 0,
+    requires_sources: false,
+    failure_reason: reason,
+    citation_verification: {
+      status: 'no_sources',
+      supported_sentence_count: 0,
+      unsupported_sentence_count: 0,
+      unsupported_sentences: [],
+    },
+  };
+}
+
+function welcomeMsg(branding) {
   return {
     id: 'welcome', role: 'assistant',
-    content: 'नमस्ते! I am **LipiCore** — your secure financial document intelligence workspace.\n\nUpload a document using the attachment icon below, or ask me anything about your uploaded documents.',
+    content: `नमस्ते! I am **${branding.product_name}** — ${branding.welcome_message}\n\nUpload a document using the attachment icon below, or ask me anything about approved bank knowledge.`,
     sources: [], suggestions: [],
   };
 }
@@ -145,6 +240,7 @@ export default function ChatAssistant() {
   const navigate        = useNavigate();
   const outletCtx       = useOutletContext() || {};
   const language        = outletCtx.language || localStorage.getItem('language') || 'en';
+  const branding        = useBranding();
 
   const [messages, setMessages]               = useState([]);
   const [input, setInput]                     = useState('');
@@ -154,24 +250,56 @@ export default function ChatAssistant() {
   const [activeDocuments, setActiveDocuments] = useState([]);
   const [streamingText, setStreamingText]     = useState('');
   const [statusMsg, setStatusMsg]             = useState('');
+  const [queueState, setQueueState]           = useState(null);
+  const [elapsedSeconds, setElapsedSeconds]   = useState(0);
   const [sidebarOpen, setSidebarOpen]         = useState(false);
   const [editingId, setEditingId]             = useState(null);
   const [editText, setEditText]               = useState('');
   const [userScrolled, setUserScrolled]       = useState(false);
   const [abortCtrl, setAbortCtrl]             = useState(null);
   const [selectedLLM, setSelectedLLM]         = useState(null);
+  const [selectedMode, setSelectedMode]       = useState('ask_knowledge');
 
   const endRef      = useRef(null);
   const bodyRef     = useRef(null);
   const fileRef     = useRef(null);
   const textareaRef = useRef(null);
   const streamingTextRef = useRef('');
+  const streamStartedAtRef = useRef(null);
+
+  const allowedModes = branding.allowed_modes || CHAT_MODES.map(mode => mode.value);
+  const selectedModeOption = modeByValue(selectedMode);
+  const sourceMessage = [...messages].reverse().find(
+    message => message.role === 'assistant' && (message.sources?.length || 0) > 0
+  );
+  const evidenceSources = sourceMessage?.sources || [];
+  const showPromptChips = messages.length <= 1 && !isLoading;
+  const promptChips = [
+    { label: 'Policy answer', mode: 'ask_knowledge', text: 'What is the approved policy for ' },
+    { label: 'Customer reply', mode: 'draft', text: 'Draft a customer care reply for ' },
+    { label: 'Summarize circular', mode: 'summarize', text: 'Summarize this circular for branch staff: ' },
+    { label: 'Translate to Nepali', mode: 'translate', text: 'Translate this into Nepali using banking terms: ' },
+  ].filter(chip => allowedModes.includes(chip.mode));
+
+  useEffect(() => {
+    if (allowedModes.length > 0 && !allowedModes.includes(selectedMode)) {
+      setSelectedMode(allowedModes[0]);
+    }
+  }, [allowedModes, selectedMode]);
 
   const scrollBottom = useCallback(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
   useEffect(() => { if (!userScrolled) scrollBottom(); }, [messages, streamingText, userScrolled]);
+
+  useEffect(() => {
+    if (!isLoading || !streamStartedAtRef.current) return undefined;
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - streamStartedAtRef.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isLoading]);
 
   // ── Fetch sessions list ──────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -182,6 +310,7 @@ export default function ChatAssistant() {
   const loadSession = useCallback(async (id) => {
     try {
       setSessionId(id);
+      localStorage.setItem(LAST_CHAT_SESSION_KEY, String(id));
       setSidebarOpen(false);
       setActiveDocuments([]);  // Clear stale documents immediately
 
@@ -193,9 +322,13 @@ export default function ChatAssistant() {
         id: m.id, role: m.role, content: m.content,
         sources: safeJson(m.sources_json, []),
         suggestions: safeJson(m.suggestions_json, []),
+        answer_metadata: deriveClientAnswerMetadata({
+          sources: safeJson(m.sources_json, []),
+          answer_metadata: safeJson(m.answer_metadata_json, null),
+        }),
         created_at: m.created_at,
       }));
-      if (loaded.length === 0) loaded.unshift(welcomeMsg());
+      if (loaded.length === 0) loaded.unshift(welcomeMsg(branding));
       setMessages(loaded);
 
       // Restore active session documents (only for this session)
@@ -212,18 +345,19 @@ export default function ChatAssistant() {
         setActiveDocuments([]);
       }
     } catch (err) { console.error('loadSession', err); }
-  }, []);
+  }, [branding]);
 
   const createNewSession = useCallback(async () => {
     try {
       const r = await api.post('/chat/sessions', { title: 'New Analysis' });
       setSessionId(r.data.id);
+      localStorage.setItem(LAST_CHAT_SESSION_KEY, String(r.data.id));
       setActiveDocuments([]);
-      setMessages([welcomeMsg()]);
+      setMessages([welcomeMsg(branding)]);
       navigate(`?session=${r.data.id}`);
       fetchSessions();
     } catch (_) {}
-  }, [fetchSessions, navigate]);
+  }, [branding, fetchSessions, navigate]);
 
   // ── Poll document status ────────────────────────────────────────────────
   useEffect(() => {
@@ -268,21 +402,38 @@ export default function ChatAssistant() {
 
   // ── Bootstrap ────────────────────────────────────────────────────────────
   useEffect(() => {
+    let cancelled = false;
+
     const init = async () => {
       const r = await api.get('/chat/sessions').catch(() => ({ data: [] }));
-      setSessions(r.data);
+      const availableSessions = r.data || [];
+      if (cancelled) return;
+      setSessions(availableSessions);
 
       const sid = searchParams.get('session');
       const prompt = searchParams.get('prompt');
       if (sid) {
-        await loadSession(parseInt(sid));
+        await loadSession(Number(sid));
         if (prompt) setInput(decodeURIComponent(prompt));
-      } else {
-        await createNewSession();
+        return;
       }
+
+      const storedSessionId = Number(localStorage.getItem(LAST_CHAT_SESSION_KEY));
+      const storedStillExists = availableSessions.some(session => session.id === storedSessionId);
+      const nextSessionId = storedStillExists ? storedSessionId : availableSessions[0]?.id;
+
+      if (nextSessionId) {
+        navigate(`?session=${nextSessionId}`, { replace: true });
+        await loadSession(nextSessionId);
+        return;
+      }
+
+      await createNewSession();
     };
+
     init();
-  }, []);
+    return () => { cancelled = true; };
+  }, [createNewSession, loadSession, navigate, searchParams]);
 
   // ── File upload ──────────────────────────────────────────────────────────
   const handleFileSelect = useCallback(async (file, sid = null) => {
@@ -410,12 +561,14 @@ export default function ChatAssistant() {
       created_at: new Date().toISOString(),
     }]);
     setInput('');
-    setActiveDocuments(busy);
     if (textareaRef.current) { textareaRef.current.style.height = 'auto'; }
     setIsLoading(true);
     setStreamingText('');
     streamingTextRef.current = '';
+    streamStartedAtRef.current = Date.now();
     setStatusMsg('');
+    setQueueState(null);
+    setElapsedSeconds(0);
     setUserScrolled(false);
 
     const ctrl = new AbortController();
@@ -430,6 +583,7 @@ export default function ChatAssistant() {
           message: content,
           language,
           active_document_ids: usedDocs.map(d => d.id),
+          mode: selectedMode,
           ...(selectedLLM ? { model_override: selectedLLM } : {}),
         }),
         signal: ctrl.signal,
@@ -442,6 +596,8 @@ export default function ChatAssistant() {
       let buffer   = '';
       let sources  = [];
       let suggestions = [];
+      let answerMetadata = null;
+      let capacityFailureReason = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -454,15 +610,25 @@ export default function ChatAssistant() {
           if (!t.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(t.slice(6));
-            if (data.type === 'status') { setStatusMsg(data.message || ''); }
+            if (data.type === 'status') {
+              const message = data.message || '';
+              setStatusMsg(message);
+              setQueueState(classifyStreamStatus(message));
+            }
             else if (data.token) {
-              fullText += data.token;
+              if (isCapacityErrorText(data.token)) {
+                capacityFailureReason = data.token;
+                fullText = formatCapacityFailure(data.token);
+              } else {
+                fullText += data.token;
+              }
               streamingTextRef.current = fullText;
               setStreamingText(fullText);
               setStatusMsg('');
             }
             if (data.sources)     sources     = data.sources;
             if (data.suggestions) suggestions = data.suggestions;
+            if (data.answer_metadata) answerMetadata = data.answer_metadata;
           } catch (_) {}
         }
       }
@@ -471,6 +637,9 @@ export default function ChatAssistant() {
         id: Date.now() + 1, role: 'assistant',
         content: fullText || 'No response received.',
         sources, suggestions,
+        answer_metadata: capacityFailureReason
+          ? capacityFailureMetadata(selectedMode, capacityFailureReason)
+          : answerMetadata || deriveClientAnswerMetadata({ sources }),
         created_at: new Date().toISOString(),
       }]);
       fetchSessions();
@@ -491,7 +660,7 @@ export default function ChatAssistant() {
         }]);
       }
     } finally {
-      setIsLoading(false); setStreamingText(''); streamingTextRef.current = ''; setStatusMsg(''); setAbortCtrl(null);
+      setIsLoading(false); setStreamingText(''); streamingTextRef.current = ''; streamStartedAtRef.current = null; setStatusMsg(''); setQueueState(null); setElapsedSeconds(0); setAbortCtrl(null);
     }
   };
 
@@ -523,11 +692,14 @@ export default function ChatAssistant() {
         <div className="flex items-center justify-between px-3 sm:px-6 py-2 border-b border-slate-200 flex-shrink-0 gap-2 lg:gap-4 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 bg-primary-container rounded flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-white text-[15px]" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+              <span className="material-symbols-outlined text-white text-[15px]" style={{ fontVariationSettings: "'FILL' 1" }}>{selectedModeOption.icon}</span>
             </div>
-            <span className="font-semibold text-on-surface text-sm truncate max-w-xs">
-              {sessions.find(s => s.id === sessionId)?.title || 'New Analysis'}
-            </span>
+            <div className="min-w-0">
+              <span className="font-semibold text-on-surface text-sm truncate max-w-xs block">
+                {sessions.find(s => s.id === sessionId)?.title || 'New Analysis'}
+              </span>
+              <span className="text-[10px] text-slate-500 font-label-caps uppercase tracking-wider">{selectedModeOption.label}</span>
+            </div>
           </div>
           <div className="flex items-center gap-2 lg:gap-3 flex-wrap justify-end">
             {/* LLM Model Selector */}
@@ -598,10 +770,11 @@ export default function ChatAssistant() {
             {isLoading && statusMsg && !streamingText && (
               <div className="flex gap-4 items-center">
                 <AiBadge />
-                <div className="flex items-center gap-3">
-                  <span className="text-body-sm text-slate-500 italic">{statusMsg}</span>
-                  <ThinkingDots />
-                </div>
+                <QueueStatusIndicator
+                  status={queueState}
+                  fallback={statusMsg}
+                  elapsedSeconds={elapsedSeconds}
+                />
               </div>
             )}
 
@@ -619,7 +792,7 @@ export default function ChatAssistant() {
               <div className="flex gap-4 items-center">
                 <AiBadge />
                 <div className="flex items-center gap-2">
-                  <span className="text-body-sm text-slate-500 italic">LipiCore is analyzing your documents…</span>
+                  <span className="text-body-sm text-slate-500 italic">{branding.product_name} is analyzing your documents…</span>
                   <ThinkingDots />
                 </div>
               </div>
@@ -640,6 +813,33 @@ export default function ChatAssistant() {
         {/* Footer input */}
         <footer className="p-3 sm:p-6 bg-white border-t border-slate-200 flex-shrink-0">
           <div className="max-w-3xl mx-auto space-y-3">
+            <ChatModeSelector
+              allowedModes={allowedModes}
+              selectedMode={selectedMode}
+              onChange={setSelectedMode}
+              disabled={isLoading}
+            />
+
+            {showPromptChips && promptChips.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {promptChips.map(chip => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMode(chip.mode);
+                      setInput(chip.text);
+                      textareaRef.current?.focus();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 hover:border-secondary hover:text-secondary transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">{modeByValue(chip.mode).icon}</span>
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {activeDocuments.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {activeDocuments.map(d => (
@@ -676,7 +876,7 @@ export default function ChatAssistant() {
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
                 placeholder={activeDocuments.length > 0
                   ? `Ask about ${activeDocuments.map(d => d.name || d.file_name).slice(0, 2).join(', ')} in English or नेपाली...`
-                  : 'Ask LipiCore about your documents in English or नेपाली…'}
+                  : `${selectedModeOption.prompt || `Ask ${branding.product_name}...`}`}
                 className="w-full pl-12 pr-20 sm:pr-28 py-4 bg-slate-100 border-none focus:ring-2 focus:ring-secondary/20 rounded font-body-sm text-on-surface placeholder:text-slate-400 resize-none min-h-[56px] max-h-[160px] leading-relaxed outline-none"
                 rows={1}
                 disabled={isLoading && !abortCtrl}
@@ -702,6 +902,8 @@ export default function ChatAssistant() {
           </div>
         </footer>
       </div>
+
+      <SourceEvidencePanel sources={evidenceSources} />
 
       {/* History sidebar */}
       {sidebarOpen && (
@@ -758,6 +960,28 @@ function ThinkingDots() {
   );
 }
 
+function QueueStatusIndicator({ status, fallback, elapsedSeconds }) {
+  const active = status || classifyStreamStatus(fallback);
+  const label = active?.label || fallback || 'Working';
+  const detail = active?.detail || 'Please keep this chat open while the response is generated.';
+  const isQueued = active?.kind === 'queued' || active?.kind === 'busy';
+  const elapsedLabel = elapsedSeconds >= 10 ? `${elapsedSeconds}s elapsed` : null;
+
+  return (
+    <div className={`min-w-0 max-w-xl border rounded px-3 py-2 ${isQueued ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={`material-symbols-outlined text-[18px] ${isQueued ? 'text-amber-600' : 'text-slate-500'}`}>{active?.icon || 'sync'}</span>
+        <span className={`text-body-sm font-medium truncate ${isQueued ? 'text-amber-900' : 'text-slate-700'}`}>{label}</span>
+        <ThinkingDots />
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+        <span>{detail}</span>
+        {elapsedLabel && <span className="font-semibold text-slate-600">{elapsedLabel}</span>}
+      </div>
+    </div>
+  );
+}
+
 function MsgBubble({ msg, idx, isLast, isLoading, editingId, editText, setEditText,
   onCopy, onRegenerate, onEdit, onSubmitEdit, onCancelEdit, onSuggestion }) {
   const isUser    = msg.role === 'user';
@@ -778,31 +1002,15 @@ function MsgBubble({ msg, idx, isLast, isLoading, editingId, editText, setEditTe
           </div>
         ) : (
           <div className={isUser ? 'bg-white border border-slate-200 rounded shadow-card p-4' : 'space-y-3'}>
+            {!isUser && <AnswerTrustBadge message={msg} />}
+
             {isUser
               ? <p className="text-body-sm text-on-surface leading-relaxed" data-testid="message-content">{msg.content}</p>
               : <div className="text-body-sm text-on-surface" data-testid="message-content">{renderMarkdown(msg.content)}</div>
             }
 
-
-
-            {/* Source chips */}
-            {!isUser && msg.sources && msg.sources.length > 0 && activeDocuments.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-2">
-                {msg.sources.map((s, i) => (
-                  <span key={i} title={s.snippet} data-testid="source-card"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded text-[11px] font-medium text-slate-600">
-                    <span className="material-symbols-outlined text-[13px] text-secondary">description</span>
-                    {s.document_title || s.title || 'Source'}
-                    {(s.section_label || s.section_number) && (
-                      <span className="text-slate-500">· {s.section_label || s.section_number}</span>
-                    )}
-                    {s.page_number && <span className="text-slate-400">[p.{s.page_number}]</span>}
-                    {!s.page_number && !s.section_label && !s.section_number && Number.isInteger(s.chunk_index) && (
-                      <span className="text-slate-400">[chunk {s.chunk_index + 1}]</span>
-                    )}
-                  </span>
-                ))}
-              </div>
+            {!isUser && msg.sources && msg.sources.length > 0 && (
+              <SourceEvidencePanel sources={msg.sources} compact />
             )}
 
             {/* Action bar — assistant */}

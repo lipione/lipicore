@@ -99,7 +99,7 @@ class _RedisAdmissionGate:
         await redis.zremrangebyscore(
             self._waiting_key,
             "-inf",
-            now - (settings.LLM_QUEUE_TIMEOUT_SECONDS * 2),
+            now - settings.LLM_QUEUE_STALE_SECONDS,
         )
         active, waiting = await redis.zcard(self._active_key), await redis.zcard(self._waiting_key)
         return {"active": int(active), "waiting": int(waiting), "limit": self._limit}
@@ -122,7 +122,7 @@ class _RedisAdmissionGate:
                     self._active_key,
                     self._waiting_key,
                     now,
-                    now - (timeout_seconds * 2),
+                    now - settings.LLM_QUEUE_STALE_SECONDS,
                     now,
                     self._limit,
                     token,

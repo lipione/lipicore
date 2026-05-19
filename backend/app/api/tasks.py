@@ -17,6 +17,21 @@ router = APIRouter()
 
 ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.xlsx', '.xls', '.csv', '.pptx', '.ppt'}
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB for task files
+MAX_TASK_INPUT_CHARS = 12_000
+TASK_HEAD_CHARS = 8_000
+TASK_TAIL_CHARS = 3_000
+
+
+def _fit_task_context(text: str) -> tuple[str, bool]:
+    if len(text) <= MAX_TASK_INPUT_CHARS:
+        return text, False
+
+    notice = (
+        f"[Content shortened for model context: kept the first {TASK_HEAD_CHARS} "
+        f"and last {TASK_TAIL_CHARS} characters from {len(text)} total characters.]"
+    )
+    shortened = f"{text[:TASK_HEAD_CHARS]}\n\n{notice}\n\n{text[-TASK_TAIL_CHARS:]}"
+    return shortened, True
 
 
 def _read_file_content(file_path: str, filename: str) -> str:
@@ -97,6 +112,7 @@ async def run_task(
 
     masked_content = detect_and_mask_pii(combined_content)
     masked_extra = detect_and_mask_pii(extra) if extra else ""
+    masked_content, input_shortened = _fit_task_context(masked_content)
 
     user_prompt = template.user_prompt_template.format(
         content=masked_content,
@@ -117,7 +133,12 @@ async def run_task(
         resource_type="task",
         bank_id=current_user.bank_id,
         user_id=current_user.id,
-        metadata={"template": template_id, "has_file": file is not None and file.filename != ""},
+        metadata={
+            "template": template_id,
+            "has_file": file is not None and file.filename != "",
+            "input_shortened": input_shortened,
+            "input_chars": len(combined_content),
+        },
     )
 
     return {

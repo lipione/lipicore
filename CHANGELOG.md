@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-05-19
+
+- Upgraded BankAi into a stronger airgapped bank AI appliance baseline:
+  - Added Redis/RQ document ingestion with a separate `ingestion-worker`.
+  - Added document lifecycle states, chunk-level permission metadata, and approved/superseded/disabled retrieval filtering.
+  - Added hybrid retrieval reranking and citation verification metadata.
+  - Expanded OCR/table extraction for PDFs and spreadsheets.
+  - Added RAG evaluation API and frontend Evaluation Center.
+  - Added source passage viewer with page/section/chunk/relevance metadata.
+  - Added visible answer trust and citation verification badges in chat.
+  - Improved Document Library ingestion status and ready-for-chat visibility.
+  - Improved AI Tasks guided workflow with prompt readiness and review metadata.
+  - Added model capacity analytics for fast/deep local vLLM tiers.
+  - Added Docker health checks and `deploy/upgrade.sh` for health-gated upgrades.
+- Tightened backend access control for analytics, model-capacity telemetry, and RAG evaluations.
+- Fixed nginx upstream resolution by using Docker DNS re-resolution for backend/frontend containers.
+- Verified on the remote test server:
+  - `npm run build`
+  - `npm run lint` with zero errors and existing e2e console warnings only
+  - remote backend tests: `37 passed`
+  - public smoke checks for `/health`, `/chat`, `/documents`, `/tasks`, `/analytics`, and `/evaluations`
+
 ## 2026-05-07
 
 - Fixed the chat shell for mobile by replacing the always-pinned sidebar with a responsive drawer and mobile-safe top bar.

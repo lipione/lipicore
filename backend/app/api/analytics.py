@@ -8,7 +8,7 @@ from ..models.user import User
 from ..models.document import Document
 from ..models.chat import ChatSession, ChatMessage
 from ..models.audit import AuditLog
-from .deps import get_current_user
+from .deps import get_current_analytics_user
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ router = APIRouter()
 @router.get("/summary")
 def get_analytics_summary(
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_analytics_user),
 ) -> Any:
     bank_id = current_user.bank_id
 

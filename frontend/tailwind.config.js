@@ -9,9 +9,9 @@ export default {
     extend: {
       colors: {
         // Financial Enterprise AI design tokens
-        'primary':                  '#000000',
+        'primary':                  'var(--brand-primary)',
         'on-primary':               '#ffffff',
-        'primary-container':        '#131b2e',
+        'primary-container':        'var(--brand-primary)',
         'on-primary-container':     '#7c839b',
         'primary-fixed':            '#dae2fd',
         'primary-fixed-dim':        '#bec6e0',
@@ -19,7 +19,7 @@ export default {
         'on-primary-fixed-variant': '#3f465c',
         'inverse-primary':          '#bec6e0',
 
-        'secondary':                '#0051d5',
+        'secondary':                'var(--brand-accent)',
         'on-secondary':             '#ffffff',
         'secondary-container':      '#316bf3',
         'on-secondary-container':   '#fefcff',

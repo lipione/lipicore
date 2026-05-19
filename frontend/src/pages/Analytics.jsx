@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
 const CHART_HEIGHTS = [40, 55, 45, 60, 75, 70, 85, 80, 95, 100, 85, 90, 75, 65, 70, 80, 90, 85, 95, 88, 72, 78, 83, 91, 86, 70, 75, 88, 95, 100];
@@ -18,6 +19,25 @@ const DEPARTMENTS = [
   { name: 'Wealth Advisory',    analyses: 8535,  conf: 98.2, trend: '+44.2%', positive: true,  status: 'onboarding' },
 ];
 
+const MODEL_LABELS = {
+  fast: {
+    label: 'Fast Model',
+    detail: 'Default staff chat and drafting route',
+    icon: 'bolt',
+  },
+  deep: {
+    label: 'Analyst Model',
+    detail: 'Deeper analysis route for heavier prompts',
+    icon: 'psychology',
+  },
+};
+
+const CAPACITY_EVIDENCE = [
+  { label: '100 staff API smoke', value: '0 failures', detail: '2,357 requests · p95 57ms' },
+  { label: '20 staff stream burst', value: 'p95 29.95s', detail: '20/20 real answers' },
+  { label: '40 staff stream burst', value: 'p95 80.19s', detail: '40/40 real answers · slow tail' },
+];
+
 function ConfBadge({ conf }) {
   const cls = conf >= 98 ? 'bg-green-50 text-green-700'
     : conf >= 95       ? 'bg-yellow-50 text-yellow-700'
@@ -25,8 +45,87 @@ function ConfBadge({ conf }) {
   return <span className={`px-2 py-1 text-xs font-bold rounded ${cls}`}>{conf}%</span>;
 }
 
+function capacityState(model) {
+  const active = Number(model?.active || 0);
+  const waiting = Number(model?.waiting || 0);
+  const limit = Math.max(Number(model?.limit || 0), 1);
+  const usage = Math.min(Math.round((active / limit) * 100), 100);
+  if (waiting > 0) return { label: 'Queued', cls: 'bg-amber-50 text-amber-800 border-amber-200', usage };
+  if (usage >= 90) return { label: 'Saturated', cls: 'bg-rose-50 text-rose-800 border-rose-200', usage };
+  if (active > 0) return { label: 'Serving', cls: 'bg-sky-50 text-sky-800 border-sky-200', usage };
+  return { label: 'Available', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200', usage };
+}
+
+function capacityInterpretation(model) {
+  const active = Number(model?.active || 0);
+  const waiting = Number(model?.waiting || 0);
+  const limit = Number(model?.limit || 0);
+  if (!limit) return 'No configured capacity reported for this route.';
+  if (waiting > 0) return 'Staff requests are waiting. Expect slower answers until slots free up.';
+  if (active >= limit) return 'All slots are occupied. New requests may queue or time out.';
+  if (active > 0) return 'The model is serving requests and still has spare slots.';
+  return 'No active requests. New staff prompts should start immediately.';
+}
+
+function ModelCapacityCard({ name, model }) {
+  const config = MODEL_LABELS[name] || { label: name, detail: 'Local model route', icon: 'memory' };
+  const active = Number(model?.active || 0);
+  const waiting = Number(model?.waiting || 0);
+  const limit = Number(model?.limit || 0);
+  const state = capacityState(model);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-lg">
+      <div className="flex items-start justify-between gap-md">
+        <div className="flex items-start gap-sm min-w-0">
+          <div className="w-9 h-9 rounded bg-primary-container text-white flex items-center justify-center flex-shrink-0">
+            <span className="material-symbols-outlined text-[18px]">{config.icon}</span>
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-h2 text-h2 text-on-surface">{config.label}</h3>
+            <p className="text-body-sm text-outline mt-1">{config.detail}</p>
+          </div>
+        </div>
+        <span className={`px-2.5 py-1 border rounded text-[11px] font-bold uppercase tracking-wide ${state.cls}`}>
+          {state.label}
+        </span>
+      </div>
+
+      <div className="mt-lg grid grid-cols-3 gap-sm">
+        <div>
+          <p className="font-label-caps text-label-caps text-outline uppercase">Active</p>
+          <p className="text-2xl font-bold text-on-surface mt-1">{active}</p>
+        </div>
+        <div>
+          <p className="font-label-caps text-label-caps text-outline uppercase">Waiting</p>
+          <p className={`text-2xl font-bold mt-1 ${waiting > 0 ? 'text-amber-700' : 'text-on-surface'}`}>{waiting}</p>
+        </div>
+        <div>
+          <p className="font-label-caps text-label-caps text-outline uppercase">Limit</p>
+          <p className="text-2xl font-bold text-on-surface mt-1">{limit}</p>
+        </div>
+      </div>
+
+      <div className="mt-md">
+        <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+          <span>Slot usage</span>
+          <span>{state.usage}%</span>
+        </div>
+        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${waiting > 0 ? 'bg-amber-500' : 'bg-secondary'}`} style={{ width: `${state.usage}%` }} />
+        </div>
+      </div>
+      <div className="mt-md rounded border border-slate-100 bg-slate-50 p-sm">
+        <p className="text-[11px] text-slate-600 leading-relaxed">{capacityInterpretation(model)}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Analytics() {
+  const navigate = useNavigate();
   const [stats,    setStats]    = useState(null);
+  const [modelStatus, setModelStatus] = useState(null);
   const [period,   setPeriod]   = useState('30d');
   const [loading,  setLoading]  = useState(true);
   const [syncTime, setSyncTime] = useState(new Date());
@@ -40,20 +139,26 @@ export default function Analytics() {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/analytics/summary');
-      setStats(res.data);
+      const [summaryRes, modelRes] = await Promise.all([
+        api.get('/analytics/summary'),
+        api.get('/chat/models/status'),
+      ]);
+      setStats(summaryRes.data);
+      setModelStatus(modelRes.data);
     } catch {
       setStats(null);
+      setModelStatus(null);
     } finally {
       setLoading(false);
+      setSyncTime(new Date());
     }
   };
 
   const topStats = [
     {
       label:   'Total Analyses Completed',
-      value:   stats?.total_queries?.toLocaleString()    ?? '142,894',
-      trend:   '+12.4% vs last month',
+      value:   stats?.total_queries?.toLocaleString()    ?? '0',
+      trend:   `${stats?.queries_this_week ?? 0} this week`,
       icon:    'analytics',
       accent:  'bg-secondary',
       trendCls: 'text-on-tertiary-container',
@@ -61,16 +166,16 @@ export default function Analytics() {
     },
     {
       label:   'Avg. Confidence Score',
-      value:   stats?.avg_confidence ? `${stats.avg_confidence}%` : '98.2%',
-      bar:     stats?.avg_confidence ?? 98,
+      value:   stats?.avg_confidence ? `${stats.avg_confidence}%` : '—',
+      bar:     stats?.avg_confidence ?? 0,
       icon:    'verified',
       accent:  'bg-on-tertiary-container',
       trendCls: 'text-on-tertiary-container',
     },
     {
       label:   'System Latency (Avg)',
-      value:   stats?.avg_latency_ms  ? `${stats.avg_latency_ms}ms` : '420ms',
-      trend:   'Optimized performance',
+      value:   stats?.avg_latency_ms  ? `${stats.avg_latency_ms}ms` : '—',
+      trend:   'Measured by backend summary',
       icon:    'speed',
       accent:  'bg-secondary-container',
       trendCls: 'text-on-tertiary-container',
@@ -78,7 +183,7 @@ export default function Analytics() {
     },
     {
       label:   'Active Users',
-      value:   stats?.active_users?.toLocaleString() ?? '2,410',
+      value:   stats?.active_users?.toLocaleString() ?? '0',
       trend:   'Institutional access active',
       icon:    'groups',
       accent:  'bg-slate-400',
@@ -100,6 +205,30 @@ export default function Analytics() {
 
   const minutesAgo = Math.round((new Date() - syncTime) / 60000);
 
+  const exportSnapshot = () => {
+    const rows = [
+      ['Metric', 'Value'],
+      ['Total analyses completed', stats?.total_queries ?? 0],
+      ['Queries this week', stats?.queries_this_week ?? 0],
+      ['Total sessions', stats?.total_sessions ?? 0],
+      ['Active sessions', stats?.active_sessions ?? 0],
+      ['Active users', stats?.active_users ?? 0],
+      ['Total documents', stats?.total_documents ?? 0],
+      ['Security events', stats?.security_events ?? 0],
+      ['Trust score', stats?.trust_score ?? 0],
+      ['Average confidence', stats?.avg_confidence ?? ''],
+      ['Average latency ms', stats?.avg_latency_ms ?? ''],
+    ];
+    const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'bankai-analytics-snapshot.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-xl max-w-container-max mx-auto">
       {/* Header */}
@@ -120,9 +249,10 @@ export default function Analytics() {
             <option value="30d">Last 30 Days</option>
             <option value="90d">Last 90 Days</option>
           </select>
-          <button className="flex items-center gap-2 px-md py-sm border border-slate-300 rounded-lg text-on-surface font-label-caps text-label-caps bg-white hover:bg-slate-50 transition-colors">
+          <button onClick={exportSnapshot}
+            className="flex items-center gap-2 px-md py-sm border border-slate-300 rounded-lg text-on-surface font-label-caps text-label-caps bg-white hover:bg-slate-50 transition-colors">
             <span className="material-symbols-outlined text-sm">file_download</span>
-            Export Report
+            Export Snapshot
           </button>
         </div>
       </div>
@@ -150,6 +280,50 @@ export default function Analytics() {
             ) : null}
           </div>
         ))}
+      </div>
+
+      {/* Model capacity */}
+      <div className="mb-gutter">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-md mb-md">
+          <div>
+            <h2 className="font-h2 text-h2 text-on-surface">Model Capacity</h2>
+            <p className="text-outline font-body-sm text-body-sm mt-1">
+              Live local-model slots and tested capacity evidence for bank IT.
+            </p>
+          </div>
+          <button onClick={fetchStats}
+            className="self-start lg:self-auto flex items-center gap-2 px-md py-sm border border-slate-300 rounded-lg text-on-surface font-label-caps text-label-caps bg-white hover:bg-slate-50 transition-colors">
+            <span className="material-symbols-outlined text-sm">refresh</span>
+            Refresh Capacity
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-gutter">
+            {modelStatus
+              ? Object.entries(modelStatus).map(([name, model]) => <ModelCapacityCard key={name} name={name} model={model} />)
+              : ['fast', 'deep'].map(name => <ModelCapacityCard key={name} name={name} model={{ active: 0, waiting: 0, limit: 0 }} />)
+            }
+          </div>
+          <div className="bg-white border border-slate-200 rounded-lg p-lg">
+            <h3 className="font-h2 text-h2 text-on-surface">Capacity Evidence</h3>
+            <p className="text-body-sm text-outline mt-1 mb-md">Measured on the current test server.</p>
+            <div className="space-y-sm">
+              {CAPACITY_EVIDENCE.map(item => (
+                <div key={item.label} className="border border-slate-100 rounded p-sm">
+                  <div className="flex justify-between gap-sm">
+                    <span className="text-body-sm font-semibold text-on-surface">{item.label}</span>
+                    <span className="text-body-sm font-bold text-secondary">{item.value}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-md">
+              Streaming and normal API capacity are separate claims. Tail latency rises sharply during large simultaneous generation bursts.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Chart section */}
@@ -245,8 +419,9 @@ export default function Analytics() {
         </table>
         <div className="px-lg py-4 bg-slate-50 flex justify-between items-center">
           <span className="text-xs text-slate-500">Showing 5 of 12 departments</span>
-          <button className="text-xs font-bold text-secondary hover:underline uppercase tracking-widest">
-            View Full Breakdown
+          <button onClick={() => navigate('/reports')}
+            className="text-xs font-bold text-secondary hover:underline uppercase tracking-widest">
+            Open Reports
           </button>
         </div>
       </div>

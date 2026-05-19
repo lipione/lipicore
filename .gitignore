@@ -6,10 +6,19 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 pytest-cache-files-*/
+.venv/
+.venv-load/
+venv/
+env/
 
 node_modules/
 dist/
 build/
+coverage/
+htmlcov/
+playwright-report/
+test-results/
+reports/
 
 .DS_Store
 Thumbs.db
@@ -26,3 +35,5 @@ bankai-deploy.tgz
 desktop/node_modules/
 desktop/release/
 desktop/dist/
+.superpowers/
+.claude/

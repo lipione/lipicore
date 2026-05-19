@@ -51,6 +51,20 @@ def delete_points_by_document(document_id: int, bank_id: int):
     )
 
 
+def update_points_by_document_payload(document_id: int, bank_id: int, payload: dict):
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    qdrant_client.set_payload(
+        collection_name=COLLECTION_NAME,
+        payload=payload,
+        points=Filter(
+            must=[
+                FieldCondition(key="document_id", match=MatchValue(value=document_id)),
+                FieldCondition(key="bank_id", match=MatchValue(value=bank_id)),
+            ]
+        ),
+    )
+
+
 def search_points(
     query_vector: list[float],
     bank_id: int,
@@ -58,6 +72,9 @@ def search_points(
     document_ids: list[int] | None = None,
     session_id: int | None = None,
     document_scope: str | None = None,
+    document_statuses: list[str] | None = None,
+    version_states: list[str] | None = None,
+    max_access_level: int | None = None,
 ):
     from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
 
@@ -68,6 +85,13 @@ def search_points(
         must.append(FieldCondition(key="session_id", match=MatchValue(value=session_id)))
     if document_scope:
         must.append(FieldCondition(key="document_scope", match=MatchValue(value=document_scope)))
+    if document_statuses:
+        must.append(FieldCondition(key="document_status", match=MatchAny(any=document_statuses)))
+    if version_states:
+        must.append(FieldCondition(key="version_state", match=MatchAny(any=version_states)))
+    if max_access_level is not None:
+        from qdrant_client.models import Range
+        must.append(FieldCondition(key="access_level", range=Range(lte=max_access_level)))
 
     results = qdrant_client.query_points(
         collection_name=COLLECTION_NAME,

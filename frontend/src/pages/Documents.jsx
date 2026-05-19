@@ -13,7 +13,7 @@ export default function Documents() {
   const fileInputRef = useRef(null);
   const mainRef = useRef(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const canApprove = ['super_admin', 'bank_admin', 'compliance_user', 'document_reviewer'].includes(user.role);
+  const canApprove = ['super_admin', 'bank_admin', 'compliance_user', 'compliance_officer', 'document_reviewer'].includes(user.role);
 
   // Fetch documents
   const fetchDocs = useCallback(async () => {
@@ -183,16 +183,49 @@ export default function Documents() {
   const statusColor = (status) => {
     const colors = {
       uploaded: 'text-slate-500',
+      queued: 'text-blue-600',
       processing: 'text-blue-600',
       extracting_text: 'text-blue-600',
       chunking: 'text-blue-600',
       embedding: 'text-blue-600',
       indexing: 'text-blue-600',
+      indexed: 'text-green-600',
       ready: 'text-green-600',
       approved: 'text-green-700 font-bold',
       failed: 'text-red-600',
+      disabled: 'text-slate-500',
     };
     return colors[status] || 'text-slate-500';
+  };
+
+  const statusMeta = (doc) => {
+    const status = doc.status || 'uploaded';
+    const map = {
+      uploaded: { label: 'Uploaded', detail: 'Waiting for ingestion queue', icon: 'cloud_done', pct: 10 },
+      queued: { label: 'Queued', detail: 'Waiting for worker capacity', icon: 'pending_actions', pct: 15 },
+      processing: { label: 'Processing', detail: 'Preparing document', icon: 'sync', pct: doc.processing_progress || 25 },
+      extracting_text: { label: 'Extracting text/OCR', detail: 'Reading pages, OCR, and tables', icon: 'document_scanner', pct: doc.processing_progress || 35 },
+      chunking: { label: 'Chunking', detail: 'Splitting into searchable passages', icon: 'segment', pct: doc.processing_progress || 55 },
+      embedding: { label: 'Embedding', detail: 'Creating vector search index', icon: 'hub', pct: doc.processing_progress || 70 },
+      indexing: { label: 'Indexing', detail: 'Writing chunks to knowledge base', icon: 'database', pct: doc.processing_progress || 85 },
+      indexed: { label: 'Ready for chat', detail: 'Indexed and retrievable', icon: 'forum', pct: 100 },
+      ready: { label: 'Ready for review', detail: 'Processed, not yet approved', icon: 'fact_check', pct: 100 },
+      approved: { label: 'Approved knowledge', detail: 'Available as official source', icon: 'verified', pct: 100 },
+      failed: { label: 'Failed', detail: doc.processing_message || 'Ingestion failed', icon: 'error', pct: doc.processing_progress || 0 },
+      disabled: { label: 'Disabled', detail: 'Hidden from retrieval', icon: 'visibility_off', pct: 0 },
+    };
+    return map[status] || { label: status, detail: doc.processing_message || 'Status pending', icon: 'description', pct: doc.processing_progress || 0 };
+  };
+
+  const versionBadgeClass = (state) => {
+    const map = {
+      approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      draft: 'bg-amber-50 text-amber-700 border-amber-200',
+      superseded: 'bg-slate-100 text-slate-600 border-slate-200',
+      archived: 'bg-slate-100 text-slate-600 border-slate-200',
+      disabled: 'bg-rose-50 text-rose-700 border-rose-200',
+    };
+    return map[state] || 'bg-slate-50 text-slate-600 border-slate-200';
   };
 
   return (
@@ -313,10 +346,14 @@ export default function Documents() {
                 </div>
               )}
 
-              {filtered.map(doc => (
+              {filtered.map(doc => {
+                const meta = statusMeta(doc);
+                const isProcessing = ['uploaded', 'queued', 'processing', 'extracting_text', 'chunking', 'embedding', 'indexing'].includes(doc.status);
+                const isReadyForChat = ['indexed', 'approved'].includes(doc.status);
+                return (
                 <div
                   key={doc.id}
-                  className={`flex items-center gap-4 p-4 bg-white border rounded-lg transition-all ${
+                  className={`grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 p-4 bg-white border rounded-lg transition-all ${
                     selectedIds.has(doc.id)
                       ? 'border-primary bg-primary/5 shadow-sm'
                       : 'border-slate-200 hover:shadow-sm'
@@ -339,32 +376,55 @@ export default function Documents() {
 
                   {/* File info */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 truncate text-sm">{doc.file_name}</p>
-                    <div className="flex items-center gap-2 mt-1 text-xs">
-                      <span className={`font-semibold ${statusColor(doc.status)} capitalize`}>
-                        {doc.status === 'extracting_text' || doc.status === 'chunking' || doc.status === 'embedding' || doc.status === 'indexing'
-                          ? `Processing... ${doc.processing_progress}%`
-                          : doc.status}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-900 truncate text-sm">{doc.file_name}</p>
+                      {isReadyForChat && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold uppercase">
+                          <span className="material-symbols-outlined text-[12px]">forum</span>
+                          Chat ready
+                        </span>
+                      )}
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${versionBadgeClass(doc.version_state)}`}>
+                        {doc.version_state || 'draft'}
                       </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
+                      <span className={`inline-flex items-center gap-1 font-semibold ${statusColor(doc.status)}`}>
+                        <span className="material-symbols-outlined text-[14px]">{meta.icon}</span>
+                        {meta.label}
+                      </span>
+                      <span className="text-slate-500">{doc.processing_message || meta.detail}</span>
                       {doc.document_type && doc.document_type !== 'other' && (
                         <span className="px-2 py-0.5 bg-primary/10 text-primary rounded font-semibold">
                           {doc.document_type}
                           {doc.department ? ` · ${doc.department}` : ''}
                         </span>
                       )}
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-semibold">
+                        {doc.document_scope === 'session_upload' ? 'Chat upload' : 'Knowledge library'}
+                      </span>
                       <span className="text-slate-400">
                         {new Date(doc.created_at).toLocaleDateString()}
                       </span>
                     </div>
+                    {doc.summary && (
+                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">{doc.summary}</p>
+                    )}
                   </div>
 
                   {/* Progress bar (if processing) */}
-                  {['uploaded', 'processing', 'extracting_text', 'chunking', 'embedding', 'indexing'].includes(doc.status) && (
-                    <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                  {isProcessing && (
+                    <div className="w-36 flex-shrink-0">
+                      <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                        <span>{meta.label}</span>
+                        <span>{Math.max(0, Math.min(meta.pct || 0, 100))}%</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${doc.processing_progress || 0}%` }}
+                          style={{ width: `${Math.max(0, Math.min(meta.pct || 0, 100))}%` }}
                       />
+                      </div>
                     </div>
                   )}
 
@@ -395,7 +455,8 @@ export default function Documents() {
                     </div>
                   )}
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>

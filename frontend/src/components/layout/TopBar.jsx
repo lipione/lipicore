@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import RoleBadge from '../lipicore/RoleBadge';
 import { getCurrentUserRole } from '../../config/rolePermissions';
+import { useBranding } from '../../contexts/BrandingContext';
 
 const TOP_NAV = [
   { label: 'Chat',       to: '/chat' },
@@ -11,6 +12,7 @@ const TOP_NAV = [
 
 export default function TopBar({ language, onLanguageChange, onMenuClick }) {
   const navigate = useNavigate();
+  const branding = useBranding();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const initials = (user.name || user.email || 'U').split(/[\s@]/)[0].slice(0, 2).toUpperCase();
   const userRole = getCurrentUserRole();
@@ -35,7 +37,7 @@ export default function TopBar({ language, onLanguageChange, onMenuClick }) {
         </button>
         <div className="flex items-center gap-1.5">
           <span className="text-xl font-bold tracking-tighter text-slate-900 font-public-sans">
-            LipiCore
+            {branding.product_name}
           </span>
           <span className="text-[10px] font-semibold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded hidden sm:inline">
             Enterprise

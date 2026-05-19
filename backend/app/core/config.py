@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "password")
     MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "bank-documents")
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    INGESTION_QUEUE_NAME: str = os.getenv("INGESTION_QUEUE_NAME", "document-ingestion")
+    INGESTION_JOB_TIMEOUT_SECONDS: int = int(os.getenv("INGESTION_JOB_TIMEOUT_SECONDS", "1800"))
+    INGESTION_JOB_RESULT_TTL_SECONDS: int = int(os.getenv("INGESTION_JOB_RESULT_TTL_SECONDS", "86400"))
+    INGESTION_JOB_FAILURE_TTL_SECONDS: int = int(os.getenv("INGESTION_JOB_FAILURE_TTL_SECONDS", "604800"))
+    INGESTION_MAX_RETRIES: int = int(os.getenv("INGESTION_MAX_RETRIES", "2"))
+    INGESTION_WORKER_CONCURRENCY: int = int(os.getenv("INGESTION_WORKER_CONCURRENCY", "1"))
+    OCR_MAX_PAGES: int = int(os.getenv("OCR_MAX_PAGES", "200"))
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_uploads"))
     CHAT_UPLOAD_DIR: str = os.getenv("CHAT_UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_chat_uploads"))
@@ -73,6 +80,7 @@ class Settings(BaseSettings):
     LLM_USER_MAX_CONCURRENCY: int = int(os.getenv("LLM_USER_MAX_CONCURRENCY", "1"))
     LLM_ADMIN_MAX_CONCURRENCY: int = int(os.getenv("LLM_ADMIN_MAX_CONCURRENCY", "2"))
     LLM_QUEUE_TIMEOUT_SECONDS: float = float(os.getenv("LLM_QUEUE_TIMEOUT_SECONDS", "120"))
+    LLM_QUEUE_STALE_SECONDS: float = float(os.getenv("LLM_QUEUE_STALE_SECONDS", "10"))
     LLM_FAST_MAX_TOKENS: int = int(os.getenv("LLM_FAST_MAX_TOKENS", "512"))
     LLM_DEEP_MAX_TOKENS: int = int(os.getenv("LLM_DEEP_MAX_TOKENS", "768"))
 

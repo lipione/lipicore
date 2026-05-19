@@ -5,9 +5,10 @@ from pypdf import PdfReader
 from docx import Document as DocxDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client.models import PointStruct
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from ..models.document import Document, DocumentChunk
+from ..core.config import settings
 from .embedding_service import generate_embeddings
 from .qdrant_service import upload_points
 
@@ -28,25 +29,58 @@ def _extract_section_label(text: str | None) -> str | None:
     return " ".join(match.group(0).strip().split())[:80]
 
 
-def extract_text(file_path: str, file_type: str) -> str:
+def extract_pages(file_path: str, file_type: str) -> list[dict]:
+    pages = []
     text = ""
     ft = file_type.lower()
     if ft == 'pdf':
+        pdf_page_count = 0
+        try:
+            import pdfplumber
+
+            with pdfplumber.open(file_path) as pdf:
+                pdf_page_count = len(pdf.pages)
+                for index, page in enumerate(pdf.pages, start=1):
+                    page_parts = []
+                    page_text = page.extract_text() or ""
+                    if page_text.strip():
+                        page_parts.append(page_text)
+                    try:
+                        tables = page.extract_tables() or []
+                    except Exception:
+                        tables = []
+                    for table_index, table in enumerate(tables, start=1):
+                        page_parts.append(f"[Table {table_index} on page {index}]")
+                        for row_index, row in enumerate(table or [], start=1):
+                            values = [str(cell).strip() if cell is not None else "" for cell in row]
+                            page_parts.append(f"Row {row_index}: " + " | ".join(values))
+                    combined = "\n".join(part for part in page_parts if part.strip())
+                    if combined.strip():
+                        pages.append({"page_number": index, "text": combined})
+                        text += combined + "\n"
+        except Exception:
+            pass
+
         try:
             from pdf2image import convert_from_path
             import base64
             from .llm_service import call_vision_llm
 
             reader = PdfReader(file_path)
-            for page in reader.pages:
-                page_text = page.extract_text()
-                text += page_text + "\n"
+            pdf_page_count = pdf_page_count or len(reader.pages)
+            if not text.strip():
+                for index, page in enumerate(reader.pages, start=1):
+                    page_text = page.extract_text()
+                    if page_text:
+                        pages.append({"page_number": index, "text": page_text})
+                        text += page_text + "\n"
 
             # If PDF has no extractable text (scanned/image-based), fall back to vision OCR
             if not text.strip():
                 try:
-                    images = convert_from_path(file_path, first_page=1, last_page=min(3, len(reader.pages)))
-                    for img in images:
+                    last_page = min(settings.OCR_MAX_PAGES, pdf_page_count)
+                    images = convert_from_path(file_path, first_page=1, last_page=last_page)
+                    for index, img in enumerate(images, start=1):
                         import io
                         img_bytes = io.BytesIO()
                         img.save(img_bytes, format='PNG')
@@ -55,6 +89,7 @@ def extract_text(file_path: str, file_type: str) -> str:
                             "Extract all text from this document image. Be thorough and preserve formatting.",
                             img_b64
                         )
+                        pages.append({"page_number": index, "text": desc})
                         text += desc + "\n"
                 except Exception:
                     pass  # Vision OCR also failed, will be caught by empty text check
@@ -64,26 +99,41 @@ def extract_text(file_path: str, file_type: str) -> str:
         doc = DocxDocument(file_path)
         for para in doc.paragraphs:
             text += para.text + "\n"
+        pages.append({"page_number": None, "text": text})
     elif ft == 'txt':
         with open(file_path, 'r', encoding='utf-8') as f:
             text = f.read()
+        pages.append({"page_number": None, "text": text})
     elif ft in ['xlsx', 'xls']:
         from openpyxl import load_workbook
-        wb = load_workbook(file_path, read_only=True, data_only=True)
+        wb = load_workbook(file_path, read_only=False, data_only=True)
         for sheet in wb.worksheets:
-            text += f"\n--- Sheet: {sheet.title} ---\n"
-            for row in sheet.iter_rows(values_only=True):
-                vals = [str(c) if c is not None else "" for c in row]
-                text += " | ".join(vals) + "\n"
+            sheet_lines = [f"\n--- Sheet: {sheet.title} ---"]
+            if sheet.merged_cells.ranges:
+                merged_ranges = ", ".join(str(cell_range) for cell_range in sheet.merged_cells.ranges)
+                sheet_lines.append(f"Merged ranges: {merged_ranges}")
+            for row in sheet.iter_rows():
+                cells = []
+                for cell in row:
+                    if cell.value is None:
+                        continue
+                    cells.append(f"{cell.coordinate}={cell.value}")
+                if cells:
+                    sheet_lines.append(" | ".join(cells))
+            sheet_text = "\n".join(sheet_lines) + "\n"
+            pages.append({"page_number": None, "text": sheet_text})
+            text += sheet_text
         wb.close()
     elif ft in ['pptx', 'ppt']:
         from pptx import Presentation
         prs = Presentation(file_path)
         for i, slide in enumerate(prs.slides):
-            text += f"\n--- Slide {i+1} ---\n"
+            slide_text = f"\n--- Slide {i+1} ---\n"
             for shape in slide.shapes:
                 if hasattr(shape, "text"):
-                    text += shape.text + "\n"
+                    slide_text += shape.text + "\n"
+            pages.append({"page_number": i + 1, "text": slide_text})
+            text += slide_text
     elif ft in ['jpg', 'jpeg', 'png']:
         import base64
         from .llm_service import call_vision_llm
@@ -95,7 +145,34 @@ def extract_text(file_path: str, file_type: str) -> str:
             image_b64
         )
         text = f"Image/Photo Description:\n{description}"
-    return text
+        pages.append({"page_number": 1, "text": text})
+    if not pages and text.strip():
+        pages.append({"page_number": None, "text": text})
+    return pages
+
+
+def extract_text(file_path: str, file_type: str) -> str:
+    return "\n".join(page["text"] for page in extract_pages(file_path, file_type))
+
+
+def build_indexable_chunks(pages: list[dict], chunk_size: int = 1000, chunk_overlap: int = 200) -> list[dict]:
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        length_function=len,
+    )
+    indexable_chunks = []
+    for page in pages:
+        page_text = (page.get("text") or "").strip()
+        if not page_text:
+            continue
+        for chunk_text in text_splitter.split_text(page_text):
+            indexable_chunks.append({
+                "text": chunk_text,
+                "page_number": page.get("page_number"),
+                "section_label": _extract_section_label(chunk_text),
+            })
+    return indexable_chunks
 
 
 def auto_catalog(text: str, filename: str) -> dict:
@@ -166,7 +243,8 @@ def process_document(document_id: int):
             db.commit()
 
             # 1. Extract text
-            text = extract_text(doc.file_path, doc.file_type)
+            pages = extract_pages(doc.file_path, doc.file_type)
+            text = "\n".join(page["text"] for page in pages)
 
             doc.status = "chunking"
             doc.processing_progress = 30
@@ -174,13 +252,8 @@ def process_document(document_id: int):
             db.add(doc)
             db.commit()
 
-            # 2. Split into chunks
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200,
-                length_function=len,
-            )
-            chunks = text_splitter.split_text(text)
+            # 2. Split into page-aware chunks
+            chunks = build_indexable_chunks(pages)
 
             if not chunks:
                 doc.status = "failed"
@@ -199,20 +272,26 @@ def process_document(document_id: int):
             BATCH = 64
             embeddings = []
             for i in range(0, len(chunks), BATCH):
-                embeddings.extend(generate_embeddings(chunks[i:i + BATCH]))
+                embeddings.extend(generate_embeddings([chunk["text"] for chunk in chunks[i:i + BATCH]]))
 
             # 4. Store in Qdrant and DB (bulk insert)
             points = []
             chunk_records = []
-            for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 point_id = str(uuid.uuid4())
-                section_label = _extract_section_label(chunk_text)
                 chunk_records.append(DocumentChunk(
                     bank_id=doc.bank_id,
                     document_id=doc.id,
                     chunk_index=i,
-                    chunk_text=chunk_text,
-                    qdrant_point_id=point_id
+                    chunk_text=chunk["text"],
+                    page_number=chunk["page_number"],
+                    department=doc.department,
+                    access_level=doc.access_level or 0,
+                    document_scope=doc.document_scope,
+                    session_id=doc.session_id,
+                    document_status=doc.status,
+                    version_state=doc.version_state,
+                    qdrant_point_id=point_id,
                 ))
                 points.append(PointStruct(
                     id=point_id,
@@ -221,8 +300,13 @@ def process_document(document_id: int):
                         "bank_id": doc.bank_id,
                         "document_id": doc.id,
                         "chunk_index": i,
-                        "text": chunk_text,
-                        "section_label": section_label,
+                        "text": chunk["text"],
+                        "page_number": chunk["page_number"],
+                        "section_label": chunk["section_label"],
+                        "department": doc.department,
+                        "access_level": doc.access_level or 0,
+                        "document_status": doc.status,
+                        "version_state": doc.version_state,
                         "document_scope": doc.document_scope,
                         "session_id": doc.session_id,
                     }
@@ -256,6 +340,28 @@ def process_document(document_id: int):
             db.add(doc)
             db.commit()
 
+            for chunk_record in db.exec(select(DocumentChunk).where(DocumentChunk.document_id == doc.id)).all():
+                chunk_record.department = doc.department
+                chunk_record.access_level = doc.access_level or 0
+                chunk_record.document_scope = doc.document_scope
+                chunk_record.session_id = doc.session_id
+                chunk_record.document_status = doc.status
+                chunk_record.version_state = doc.version_state
+                db.add(chunk_record)
+            db.commit()
+            try:
+                from .qdrant_service import update_points_by_document_payload
+                update_points_by_document_payload(doc.id, doc.bank_id, {
+                    "department": doc.department,
+                    "access_level": doc.access_level or 0,
+                    "document_status": doc.status,
+                    "version_state": doc.version_state,
+                    "document_scope": doc.document_scope,
+                    "session_id": doc.session_id,
+                })
+            except Exception:
+                pass
+
             # Auto-catalog in background (non-blocking)
             try:
                 from .llm_service import call_llm
@@ -266,6 +372,19 @@ def process_document(document_id: int):
                     doc.department = catalog["department"]
                 db.add(doc)
                 db.commit()
+                for chunk_record in db.exec(select(DocumentChunk).where(DocumentChunk.document_id == doc.id)).all():
+                    chunk_record.department = doc.department
+                    chunk_record.access_level = doc.access_level or 0
+                    db.add(chunk_record)
+                db.commit()
+                try:
+                    from .qdrant_service import update_points_by_document_payload
+                    update_points_by_document_payload(doc.id, doc.bank_id, {
+                        "department": doc.department,
+                        "access_level": doc.access_level or 0,
+                    })
+                except Exception:
+                    pass
             except Exception:
                 pass  # Cataloging failure doesn't block document readiness
 
@@ -279,3 +398,4 @@ def process_document(document_id: int):
                     db.commit()
             except Exception:
                 pass
+            raise

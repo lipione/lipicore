@@ -1,0 +1,41 @@
+{
+  "name": "customer-care-rag-seed",
+  "description": "Starter RAG evaluation set for bank customer-care staff. Replace source titles with the bank's approved uploaded document titles before using this as a release gate.",
+  "pass_threshold": 0.9,
+  "user_role": "staff_user",
+  "cases": [
+    {
+      "id": "cc-identity-before-account-support",
+      "question": "What must customer care verify before helping a customer with account information?",
+      "expected_source_titles": ["Customer Care SOP", "Account Servicing Procedure"],
+      "required_citation_terms": ["identity", "account"],
+      "required_answer_terms": ["verify", "identity", "account"]
+    },
+    {
+      "id": "cc-card-dispute-escalation",
+      "question": "When should a debit card dispute be escalated, and which team handles it?",
+      "expected_source_titles": ["Card Dispute SOP", "Customer Complaint Handling Procedure"],
+      "required_citation_terms": ["dispute", "escalat"],
+      "required_answer_terms": ["debit card", "dispute", "escalat"]
+    },
+    {
+      "id": "cc-kyc-update-required-documents",
+      "question": "Which documents should staff request when a customer wants to update KYC details?",
+      "expected_source_titles": ["KYC Update Procedure", "Customer Onboarding Policy"],
+      "required_citation_terms": ["KYC", "document"],
+      "required_answer_terms": ["KYC", "document"]
+    },
+    {
+      "id": "cc-complaint-registration-timeline",
+      "question": "What is the required timeline for registering and acknowledging a customer complaint?",
+      "expected_source_titles": ["Customer Complaint Handling Procedure"],
+      "required_citation_terms": ["complaint", "acknowledg"],
+      "required_answer_terms": ["complaint", "acknowledg"]
+    },
+    {
+      "id": "cc-unsupported-product-not-found",
+      "question": "What is the approved customer-care process for a crypto staking account?",
+      "expect_not_found": true
+    }
+  ]
+}

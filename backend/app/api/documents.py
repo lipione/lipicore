@@ -4,7 +4,7 @@ import os
 import uuid
 import shutil
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlmodel import Session, select
 from sqlalchemy import or_, and_, delete as sa_delete
 
@@ -14,7 +14,7 @@ from ..models.user import User
 from ..models.document import Document
 from ..schemas.document import DocumentResponse
 from .deps import get_current_user, get_current_bank_admin
-from ..services.ingestion_service import process_document
+from ..services.ingestion_queue import enqueue_document_ingestion
 from ..services.audit_service import log_audit_event
 from fastapi.responses import StreamingResponse
 import asyncio
@@ -23,6 +23,8 @@ import json
 router = APIRouter()
 
 UPLOAD_DIR = settings.UPLOAD_DIR
+ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.xlsx', '.xls', '.pptx', '.ppt'}
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # Match nginx client_max_body_size.
 
 
 def ensure_upload_dir() -> None:
@@ -30,7 +32,6 @@ def ensure_upload_dir() -> None:
 
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -44,9 +45,8 @@ async def upload_document(
         else:
             raise HTTPException(status_code=500, detail="No bank assigned")
 
-    ALLOWED = {'.pdf', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.xlsx', '.xls', '.pptx', '.ppt'}
     ext = Path(file.filename).suffix.lower()
-    if ext not in ALLOWED:
+    if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Supported: PDF, DOCX, TXT, JPG, PNG, XLSX, PPTX")
 
     ensure_upload_dir()
@@ -57,6 +57,8 @@ async def upload_document(
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="File is empty")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File exceeds 50 MB limit")
 
     # Write to disk
     with open(file_path, "wb") as buffer:
@@ -88,7 +90,12 @@ async def upload_document(
         metadata={"file_name": doc.file_name}
     )
 
-    background_tasks.add_task(process_document, doc.id)
+    try:
+        enqueue_document_ingestion(doc.id, db)
+        db.refresh(doc)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     return doc
 
 @router.get("", response_model=List[DocumentResponse])
@@ -196,9 +203,33 @@ def approve_document(
         raise HTTPException(status_code=403, detail="Not authorized to approve")
 
     doc.status = "approved"
+    doc.version_state = "approved"
+    doc.approved_at = datetime.utcnow()
     db.add(doc)
+    from ..models.document import DocumentChunk
+    chunks = db.exec(select(DocumentChunk).where(DocumentChunk.document_id == doc.id)).all()
+    for chunk in chunks:
+        chunk.department = doc.department
+        chunk.access_level = doc.access_level or 0
+        chunk.document_scope = doc.document_scope
+        chunk.session_id = doc.session_id
+        chunk.document_status = doc.status
+        chunk.version_state = doc.version_state
+        db.add(chunk)
     db.commit()
     db.refresh(doc)
+    try:
+        from ..services.qdrant_service import update_points_by_document_payload
+        update_points_by_document_payload(doc.id, doc.bank_id, {
+            "department": doc.department,
+            "access_level": doc.access_level or 0,
+            "document_status": doc.status,
+            "version_state": doc.version_state,
+            "document_scope": doc.document_scope,
+            "session_id": doc.session_id,
+        })
+    except Exception:
+        pass
 
     log_audit_event(
         db=db,

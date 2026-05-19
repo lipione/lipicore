@@ -12,6 +12,7 @@ from app.models.document import Document, DocumentChunk  # noqa: F401
 from app.models.chat import ChatSession, ChatMessage  # noqa: F401
 from app.models.audit import AuditLog, SecurityEvent  # noqa: F401
 from app.models.token import RevokedToken  # noqa: F401
+from app.models.branding import BrandingSettings  # noqa: F401
 
 config = context.config
 

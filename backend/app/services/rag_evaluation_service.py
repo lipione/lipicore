@@ -1,0 +1,178 @@
+from typing import Any, Callable
+
+from sqlmodel import Session
+
+from .rag_service import NOT_FOUND_RESPONSE, generate_rag_response
+
+
+AnswerGenerator = Callable[..., tuple[str, list[dict[str, Any]]]]
+
+
+def _value(case: Any, key: str, default: Any = None) -> Any:
+    if isinstance(case, dict):
+        return case.get(key, default)
+    return getattr(case, key, default)
+
+
+def _case_id(case: Any, index: int) -> str:
+    return str(_value(case, "id", None) or f"case-{index + 1}")
+
+
+def _normalize(text: Any) -> str:
+    return " ".join(str(text or "").lower().split())
+
+
+def _contains_term(text: str, term: str) -> bool:
+    normalized_term = _normalize(term)
+    return bool(normalized_term) and normalized_term in text
+
+
+def _recall(found: set[Any], expected: list[Any]) -> float:
+    expected_set = set(expected or [])
+    if not expected_set:
+        return 1.0
+    return len(found & expected_set) / len(expected_set)
+
+
+def _normalized_recall(found: set[str], expected: list[str]) -> float:
+    expected_set = {_normalize(value) for value in expected or [] if _normalize(value)}
+    if not expected_set:
+        return 1.0
+    return len(found & expected_set) / len(expected_set)
+
+
+def _term_recall(text: str, terms: list[str]) -> float:
+    terms = [term for term in (terms or []) if str(term).strip()]
+    if not terms:
+        return 1.0
+    hits = sum(1 for term in terms if _contains_term(text, term))
+    return hits / len(terms)
+
+
+def _citation_text(sources: list[dict[str, Any]]) -> str:
+    chunks: list[str] = []
+    for source in sources or []:
+        chunks.extend(
+            str(source.get(key) or "")
+            for key in ("document_title", "file_name", "section_label", "snippet")
+        )
+        if source.get("page_number") is not None:
+            chunks.append(f"page {source.get('page_number')}")
+    return _normalize(" ".join(chunks))
+
+
+def _format_missing_terms(terms: list[str], text: str) -> str:
+    missing = [term for term in terms or [] if not _contains_term(text, term)]
+    return ", ".join(missing)
+
+
+def evaluate_rag_cases(
+    *,
+    cases: list[Any],
+    db: Session,
+    bank_id: int,
+    user_role: str = "staff_user",
+    pass_threshold: float = 1.0,
+    answer_generator: AnswerGenerator = generate_rag_response,
+) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+
+    for index, case in enumerate(cases):
+        case_id = _case_id(case, index)
+        question = str(_value(case, "question", "") or "")
+        expected_doc_ids = [int(doc_id) for doc_id in (_value(case, "expected_source_document_ids", []) or [])]
+        expected_source_titles = list(_value(case, "expected_source_titles", []) or [])
+        citation_terms = list(_value(case, "required_citation_terms", []) or [])
+        answer_terms = list(_value(case, "required_answer_terms", []) or [])
+        expect_not_found = bool(_value(case, "expect_not_found", False))
+        active_document_ids = _value(case, "active_document_ids", None)
+        session_id = _value(case, "session_id", None)
+
+        failures: list[str] = []
+        try:
+            answer, sources = answer_generator(
+                question,
+                bank_id,
+                user_role,
+                db,
+                active_document_ids=active_document_ids,
+                session_id=session_id,
+            )
+        except Exception as exc:
+            answer = ""
+            sources = []
+            failures.append(f"generator error: {type(exc).__name__}: {exc}")
+
+        source_ids = {source.get("document_id") for source in sources or [] if source.get("document_id") is not None}
+        source_titles = {
+            _normalize(source.get("document_title") or source.get("title") or source.get("file_name"))
+            for source in sources or []
+            if _normalize(source.get("document_title") or source.get("title") or source.get("file_name"))
+        }
+        id_recall = _recall(source_ids, expected_doc_ids)
+        title_recall = _normalized_recall(source_titles, expected_source_titles)
+        source_recall = min(id_recall, title_recall)
+        if id_recall < 1:
+            missing_ids = sorted(set(expected_doc_ids) - source_ids)
+            failures.append(f"missing expected source documents: {', '.join(str(doc_id) for doc_id in missing_ids)}")
+        if title_recall < 1:
+            missing_titles = [
+                title for title in expected_source_titles
+                if _normalize(title) not in source_titles
+            ]
+            failures.append(f"missing expected source titles: {', '.join(missing_titles)}")
+
+        normalized_citations = _citation_text(sources or [])
+        citation_term_recall = _term_recall(normalized_citations, citation_terms)
+        if citation_term_recall < 1:
+            failures.append(f"missing citation terms: {_format_missing_terms(citation_terms, normalized_citations)}")
+
+        normalized_answer = _normalize(answer)
+        answer_term_recall = _term_recall(normalized_answer, answer_terms)
+        if answer_term_recall < 1:
+            failures.append(f"missing answer terms: {_format_missing_terms(answer_terms, normalized_answer)}")
+
+        not_found_passed = None
+        if expect_not_found:
+            not_found_passed = normalized_answer == _normalize(NOT_FOUND_RESPONSE) and len(sources or []) == 0
+            if not not_found_passed:
+                failures.append("expected not-found response with no sources")
+
+        results.append(
+            {
+                "id": case_id,
+                "question": question,
+                "passed": len(failures) == 0,
+                "answer": answer,
+                "sources": sources or [],
+                "source_recall": round(source_recall, 4),
+                "citation_term_recall": round(citation_term_recall, 4),
+                "answer_term_recall": round(answer_term_recall, 4),
+                "not_found_passed": not_found_passed,
+                "failures": failures,
+            }
+        )
+
+    total = len(results)
+    passed = sum(1 for result in results if result["passed"])
+    pass_rate = passed / total if total else 0
+
+    def avg(key: str) -> float:
+        if not results:
+            return 0
+        return round(sum(float(result[key]) for result in results) / len(results), 4)
+
+    return {
+        "summary": {
+            "total_cases": total,
+            "passed_cases": passed,
+            "failed_cases": total - passed,
+            "pass_rate": round(pass_rate, 4),
+            "gate_passed": pass_rate >= pass_threshold,
+            "failed_case_ids": [result["id"] for result in results if not result["passed"]],
+            "source_recall_avg": avg("source_recall"),
+            "citation_term_recall_avg": avg("citation_term_recall"),
+            "answer_term_recall_avg": avg("answer_term_recall"),
+        },
+        "cases": results,
+    }

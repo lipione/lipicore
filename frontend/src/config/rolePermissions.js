@@ -1,8 +1,10 @@
 export const ROLES = {
   STAFF_USER: 'staff_user',
   COMPLIANCE_USER: 'compliance_user',
+  COMPLIANCE_OFFICER: 'compliance_officer',
   DOCUMENT_REVIEWER: 'document_reviewer',
   AUDITOR: 'auditor',
+  DATA_AUDITOR: 'data_auditor',
   BANK_ADMIN: 'bank_admin',
   SUPER_ADMIN: 'super_admin',
 };
@@ -10,8 +12,10 @@ export const ROLES = {
 export const ROLE_LABELS = {
   staff_user: 'Staff',
   compliance_user: 'Compliance',
+  compliance_officer: 'Compliance Officer',
   document_reviewer: 'Reviewer',
   auditor: 'Auditor',
+  data_auditor: 'Data Auditor',
   bank_admin: 'Bank Admin',
   super_admin: 'Super Admin',
 };
@@ -19,8 +23,10 @@ export const ROLE_LABELS = {
 export const ROLE_COLORS = {
   staff_user: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300' },
   compliance_user: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+  compliance_officer: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
   document_reviewer: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
   auditor: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  data_auditor: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
   bank_admin: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
   super_admin: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
 };
@@ -29,8 +35,10 @@ export const ROLE_COLORS = {
 const ROLE_RANK = {
   staff_user: 1,
   compliance_user: 2,
+  compliance_officer: 2,
   document_reviewer: 3,
   auditor: 4,
+  data_auditor: 4,
   bank_admin: 5,
   super_admin: 6,
 };
@@ -51,6 +59,7 @@ export const PERMISSIONS = {
 
   // Reports & Analytics
   VIEW_ANALYTICS: 'view_analytics',
+  VIEW_EVALUATIONS: 'view_evaluations',
   VIEW_REPORTS: 'view_reports',
   EXPORT_REPORTS: 'export_reports',
 
@@ -87,6 +96,17 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.MANAGE_COMPLIANCE,
     PERMISSIONS.VIEW_REPORTS,
   ],
+  compliance_officer: [
+    PERMISSIONS.USE_CHAT,
+    PERMISSIONS.USE_CHAT_FILE_UPLOAD,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.UPLOAD_DOCUMENTS,
+    PERMISSIONS.VIEW_PROCESS_NAVIGATOR,
+    PERMISSIONS.VIEW_REGULATORY_LIBRARY,
+    PERMISSIONS.MANAGE_COMPLIANCE,
+    PERMISSIONS.VIEW_REPORTS,
+    PERMISSIONS.VIEW_TASKS,
+  ],
   document_reviewer: [
     PERMISSIONS.USE_CHAT,
     PERMISSIONS.USE_CHAT_FILE_UPLOAD,
@@ -103,6 +123,21 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_DOCUMENTS,
     PERMISSIONS.VIEW_PROCESS_NAVIGATOR,
     PERMISSIONS.VIEW_ANALYTICS,
+    PERMISSIONS.VIEW_EVALUATIONS,
+    PERMISSIONS.VIEW_REPORTS,
+    PERMISSIONS.EXPORT_REPORTS,
+    PERMISSIONS.VIEW_AUDIT_LOGS,
+    PERMISSIONS.EXPORT_AUDIT_LOGS,
+    PERMISSIONS.VIEW_REGULATORY_LIBRARY,
+    PERMISSIONS.VIEW_TASKS,
+  ],
+  data_auditor: [
+    PERMISSIONS.USE_CHAT,
+    PERMISSIONS.USE_CHAT_FILE_UPLOAD,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.VIEW_PROCESS_NAVIGATOR,
+    PERMISSIONS.VIEW_ANALYTICS,
+    PERMISSIONS.VIEW_EVALUATIONS,
     PERMISSIONS.VIEW_REPORTS,
     PERMISSIONS.EXPORT_REPORTS,
     PERMISSIONS.VIEW_AUDIT_LOGS,
@@ -119,6 +154,7 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.MANAGE_DOCUMENT_LIBRARY,
     PERMISSIONS.VIEW_PROCESS_NAVIGATOR,
     PERMISSIONS.VIEW_ANALYTICS,
+    PERMISSIONS.VIEW_EVALUATIONS,
     PERMISSIONS.VIEW_REPORTS,
     PERMISSIONS.EXPORT_REPORTS,
     PERMISSIONS.VIEW_AUDIT_LOGS,
