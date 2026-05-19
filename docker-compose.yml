@@ -76,6 +76,31 @@ services:
     ports:
       - "8000:8000"
 
+  messenger-backend:
+    build: ./backend
+    container_name: lipicore-messenger-backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-bankai}
+      - MESSENGER_DATABASE_URL=${MESSENGER_DATABASE_URL:-postgresql://postgres:postgres@db:5432/lipicore}
+      - MESSENGER_UPLOAD_DIR=/app/messenger_uploads
+      - COOKIE_SECURE=true
+      - ALLOWED_ORIGINS=https://ai.silverlining.com.np,https://202.51.2.50,http://202.51.2.50,http://localhost:3000,http://localhost
+    command: ["uvicorn", "app.messenger_main:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - messenger_upload_data:/app/messenger_uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   frontend:
     build: ./frontend
     container_name: lipicore-frontend
@@ -92,6 +117,7 @@ services:
     depends_on:
       - frontend
       - backend
+      - messenger-backend
     ports:
       - "80:80"
       - "443:443"
@@ -152,3 +178,4 @@ volumes:
   qdrant_data:
   minio_data:
   redis_data:
+  messenger_upload_data:
