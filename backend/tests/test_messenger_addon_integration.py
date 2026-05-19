@@ -1,8 +1,17 @@
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT.parent
+
+
+def require_project_file(name: str) -> Path:
+    path = PROJECT / name
+    if not path.exists():
+        pytest.skip(f"{name} is not present in the backend image")
+    return path
 
 
 def test_core_app_does_not_mount_messenger_routes():
@@ -28,7 +37,7 @@ def test_dedicated_messenger_entrypoint_exists_without_ai_imports():
 
 
 def test_compose_routes_messenger_as_separate_service():
-    compose = (PROJECT / "docker-compose.yml").read_text()
+    compose = require_project_file("docker-compose.yml").read_text()
 
     assert "messenger-backend:" in compose
     assert "app.messenger_main:app" in compose
@@ -38,7 +47,7 @@ def test_compose_routes_messenger_as_separate_service():
 
 
 def test_nginx_routes_messenger_before_core_api():
-    nginx = (PROJECT / "nginx.conf").read_text()
+    nginx = require_project_file("nginx.conf").read_text()
 
     assert "set $messenger_upstream messenger-backend:8000;" in nginx
     assert nginx.index("location /api/messenger") < nginx.index("location /api {")
