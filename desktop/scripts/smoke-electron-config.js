@@ -19,7 +19,12 @@ const configPath = path.join(root, "electron/config.js");
 const requiredFiles = [
   "electron/config.js",
   "electron/allowed-origins.js",
+  "electron/main.js",
   "electron/preload.js",
+  "splash/splash.html",
+  "splash/splash.css",
+  "splash/splash.js",
+  "assets/logo.svg",
   "package.json"
 ];
 
