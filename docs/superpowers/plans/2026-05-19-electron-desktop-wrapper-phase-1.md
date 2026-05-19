@@ -945,6 +945,20 @@ function isMainWindowPermissionRequest(webContents, permission, requestingUrl, i
   return Boolean(requestingUrl && isAllowedUrl(requestingUrl));
 }
 
+function isAllowedPermissionCheck(permission, requestingOrigin, details = {}) {
+  if (permission !== "notifications") {
+    return false;
+  }
+
+  if (details.isMainFrame === false) {
+    return false;
+  }
+
+  return [requestingOrigin, details.requestingUrl, details.embeddingOrigin].some((requestUrl) => (
+    Boolean(requestUrl && isAllowedUrl(requestUrl))
+  ));
+}
+
 function wirePermissions() {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details = {}) => {
     const requestingUrl = details.requestingUrl || webContents.getURL();
@@ -954,10 +968,8 @@ function wirePermissions() {
     );
   });
 
-  session.defaultSession.setPermissionCheckHandler((webContents, permission, _requestingOrigin, details = {}) => {
-    const requestingUrl = details.requestingUrl || webContents?.getURL();
-
-    return isMainWindowPermissionRequest(webContents, permission, requestingUrl, details.isMainFrame);
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details = {}) => {
+    return isAllowedPermissionCheck(permission, requestingOrigin, details);
   });
 }
 

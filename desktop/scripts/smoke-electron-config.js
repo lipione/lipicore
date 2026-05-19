@@ -58,7 +58,11 @@ assert(
 assert(mainSource.includes(".isEmpty()"), "Tray icon must be checked before tray creation");
 assert(
   mainSource.includes("function isMainWindowPermissionRequest("),
-  "Permission policy must use a clear helper"
+  "Permission request policy must use a clear helper"
+);
+assert(
+  mainSource.includes("function isAllowedPermissionCheck("),
+  "Permission check policy must use a URL-based helper"
 );
 assert(
   mainSource.includes("setPermissionCheckHandler("),
@@ -79,6 +83,14 @@ assert(
 assert(
   mainSource.includes("isAllowedUrl(requestingUrl)") || mainSource.includes("isAllowedUrl(urlToCheck)"),
   "Permission policy must require an allowed LipiCore URL"
+);
+assert(
+  mainSource.includes("details.embeddingOrigin"),
+  "Permission check policy must inspect embedding origins"
+);
+assert(
+  !/setPermissionCheckHandler\([\s\S]*isMainWindowPermissionRequest/.test(mainSource),
+  "Permission check policy must not require main window webContents"
 );
 assert(
   !mainSource.includes("allowedPermissions.has(permission)"),
