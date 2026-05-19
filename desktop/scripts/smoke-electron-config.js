@@ -56,6 +56,34 @@ assert(
   "BrowserWindow must not use SVG directly as its runtime icon"
 );
 assert(mainSource.includes(".isEmpty()"), "Tray icon must be checked before tray creation");
+assert(
+  mainSource.includes("function isMainWindowPermissionRequest("),
+  "Permission policy must use a clear helper"
+);
+assert(
+  mainSource.includes("setPermissionCheckHandler("),
+  "Permission checks must be handled explicitly"
+);
+assert(
+  mainSource.includes("webContents !== mainWindow.webContents"),
+  "Permission policy must be scoped to the main window webContents"
+);
+assert(
+  mainSource.includes('permission !== "notifications"'),
+  "Only notification permissions may be allowed"
+);
+assert(
+  mainSource.includes("isMainFrame === false"),
+  "Sub-frame permission requests must be denied when frame details are available"
+);
+assert(
+  mainSource.includes("isAllowedUrl(requestingUrl)") || mainSource.includes("isAllowedUrl(urlToCheck)"),
+  "Permission policy must require an allowed LipiCore URL"
+);
+assert(
+  !mainSource.includes("allowedPermissions.has(permission)"),
+  "Permission policy must not allow notifications without checking requester"
+);
 
 assert(APP_URL === "https://ai.silverlining.com.np", "Default app URL must be production");
 assert(ALLOWED_ORIGINS.length === 2, "Only approved default origins should be allowed by default");

@@ -929,10 +929,35 @@ function wireDownloads() {
   });
 }
 
+function isMainWindowPermissionRequest(webContents, permission, requestingUrl, isMainFrame) {
+  if (permission !== "notifications") {
+    return false;
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed() || webContents !== mainWindow.webContents) {
+    return false;
+  }
+
+  if (isMainFrame === false) {
+    return false;
+  }
+
+  return Boolean(requestingUrl && isAllowedUrl(requestingUrl));
+}
+
 function wirePermissions() {
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowedPermissions = new Set(["notifications"]);
-    callback(allowedPermissions.has(permission));
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details = {}) => {
+    const requestingUrl = details.requestingUrl || webContents.getURL();
+
+    callback(
+      isMainWindowPermissionRequest(webContents, permission, requestingUrl, details.isMainFrame)
+    );
+  });
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, _requestingOrigin, details = {}) => {
+    const requestingUrl = details.requestingUrl || webContents?.getURL();
+
+    return isMainWindowPermissionRequest(webContents, permission, requestingUrl, details.isMainFrame);
   });
 }
 
