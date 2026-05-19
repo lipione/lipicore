@@ -1,26 +1,17 @@
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import messenger
 from .core.config import settings
 from .core.context import request_ip
-from .db.messenger_session import get_messenger_session, init_messenger_db
+from .db.messenger_session import get_messenger_session
 from .db.session import get_session
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_messenger_db()
-    yield
 
 
 app = FastAPI(
     title=f"{settings.PROJECT_NAME} Secure Messenger",
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/messenger/openapi.json",
-    lifespan=lifespan,
 )
 
 app.dependency_overrides[get_session] = get_messenger_session

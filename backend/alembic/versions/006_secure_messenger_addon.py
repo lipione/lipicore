@@ -17,6 +17,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("messenger_policy"):
+        return
+
     op.create_table(
         "messenger_policy",
         sa.Column("id", sa.Integer(), nullable=False),
