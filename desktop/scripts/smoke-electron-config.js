@@ -26,6 +26,8 @@ const requiredFiles = [
   "splash/splash.css",
   "splash/splash.js",
   "assets/logo.svg",
+  "assets/icon.icns",
+  "assets/icon.ico",
   "package.json"
 ];
 
