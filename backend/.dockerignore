@@ -1,0 +1,15 @@
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+htmlcov/
+coverage/
+*.log
+*.tmp
+*.bak
+uploads/
+chat_uploads/
+messenger_uploads/

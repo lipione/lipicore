@@ -8,7 +8,7 @@ PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-360}"
 CHECK_ONLY=false
 RUN_TESTS=false
-SERVICES=(redis backend frontend nginx)
+SERVICES=(redis backend messenger-backend frontend nginx)
 
 usage() {
   cat <<'EOF'
@@ -28,7 +28,7 @@ Options:
 Examples:
   deploy/upgrade.sh
   deploy/upgrade.sh --check-only
-  deploy/upgrade.sh --service backend --service frontend --run-tests
+  deploy/upgrade.sh --service backend --service messenger-backend --service frontend --run-tests
 EOF
 }
 
@@ -141,6 +141,15 @@ check_health_url() {
   printf '\n'
 }
 
+run_migrations() {
+  if [ "$CHECK_ONLY" = true ]; then
+    return 0
+  fi
+
+  log "Running database migrations"
+  compose exec -T backend alembic upgrade head
+}
+
 main() {
   parse_args "$@"
 
@@ -157,11 +166,17 @@ main() {
     log "Check-only mode: skipping rebuild/restart"
   fi
 
-  for service in redis backend frontend nginx; do
+  for service in redis backend messenger-backend frontend nginx; do
     wait_for_service "$service"
   done
 
-  compose ps redis backend frontend nginx
+  run_migrations
+
+  for service in backend messenger-backend frontend nginx; do
+    wait_for_service "$service"
+  done
+
+  compose ps redis backend messenger-backend frontend nginx
   check_health_url local "$LOCAL_HEALTH_URL"
 
   if [ -n "$PUBLIC_HEALTH_URL" ]; then

@@ -170,3 +170,72 @@ Expected: Vite build exits 0.
 - [ ] **Step 3: Run browser check**
 
 Start the dev server, open the authenticated app path where possible, and visually inspect the widget for layout, overlap, and console errors.
+
+### Task 5: Separate Add-on Service Integration
+
+**Files:**
+- Create: `backend/app/messenger_main.py`
+- Create: `backend/app/db/messenger_session.py`
+- Create: `backend/tests/test_messenger_addon_integration.py`
+- Modify: `backend/app/main.py`
+- Modify: `backend/app/core/config.py`
+- Modify: `docker-compose.yml`
+- Modify: `nginx.conf`
+- Modify: `.env.example`
+
+- [ ] **Step 1: Write failing static integration tests**
+
+```python
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+PROJECT = ROOT.parent
+
+def test_core_app_does_not_mount_messenger_routes():
+    main_source = (ROOT / "app/main.py").read_text()
+    assert "messenger" not in main_source
+    assert "/messenger" not in main_source
+
+def test_dedicated_messenger_entrypoint_exists_without_ai_imports():
+    source = (ROOT / "app/messenger_main.py").read_text()
+    assert "messenger.router" in source
+    forbidden = ["qdrant", "embedding", "llm", "rag", "documents.router", "chat.router"]
+    assert not any(term in source.lower() for term in forbidden)
+
+def test_compose_routes_messenger_as_separate_service():
+    compose = (PROJECT / "docker-compose.yml").read_text()
+    assert "messenger-backend:" in compose
+    assert "app.messenger_main:app" in compose
+    backend_block = compose.split("\n  backend:", 1)[1].split("\n  messenger-backend:", 1)[0]
+    assert "MESSENGER_UPLOAD_DIR" not in backend_block
+
+def test_nginx_routes_messenger_before_core_api():
+    nginx = (PROJECT / "nginx.conf").read_text()
+    assert "set $messenger_upstream messenger-backend:8000;" in nginx
+    assert nginx.index("location /api/messenger") < nginx.index("location /api {")
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `JWT_SECRET=test-secret SUPER_ADMIN_PASSWORD=test-password .venv/bin/python -m pytest tests/test_messenger_addon_integration.py -q`
+Expected: FAIL because `app/messenger_main.py` does not exist and `app/main.py` still mounts messenger.
+
+- [ ] **Step 3: Implement the dedicated messenger app**
+
+Create `app/messenger_main.py` with its own FastAPI app, health endpoint, CORS, request IP middleware, messenger DB initialization, and only the `/api/messenger` router.
+
+- [ ] **Step 4: Move routing out of core**
+
+Remove messenger import/router registration from `app/main.py`, add `MESSENGER_DATABASE_URL`, and route `/api/messenger` to `messenger-backend` in nginx before the generic `/api` block.
+
+- [ ] **Step 5: Update Compose**
+
+Add a `messenger-backend` service using the same backend image but command `uvicorn app.messenger_main:app --host 0.0.0.0 --port 8000`. Mount only `messenger_upload_data` and do not mount it into core backend or ingestion worker.
+
+- [ ] **Step 6: Run tests and build**
+
+Run:
+`JWT_SECRET=test-secret SUPER_ADMIN_PASSWORD=test-password .venv/bin/python -m pytest tests/test_messenger_addon_integration.py tests/test_messenger.py -q`
+`npm run build`
+
+Expected: all tests and frontend build pass.

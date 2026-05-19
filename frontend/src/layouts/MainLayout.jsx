@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
+import SecureMessengerWidget from '../components/messenger/SecureMessengerWidget';
 
 export default function MainLayout() {
   const [language, setLanguage] = useState(
@@ -39,6 +40,7 @@ export default function MainLayout() {
         <main className="flex-1 overflow-auto mt-16">
           <Outlet context={{ language, setLanguage: handleLanguageChange }} />
         </main>
+        <SecureMessengerWidget />
       </div>
     </div>
   );

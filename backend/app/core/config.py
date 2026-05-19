@@ -39,6 +39,7 @@ class Settings(BaseSettings):
         return _parse_origins(self.ALLOWED_ORIGINS_RAW)
 
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/lipicore")
+    MESSENGER_DATABASE_URL: str = os.getenv("MESSENGER_DATABASE_URL") or os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/lipicore")
 
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
@@ -58,6 +59,7 @@ class Settings(BaseSettings):
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_uploads"))
     CHAT_UPLOAD_DIR: str = os.getenv("CHAT_UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_chat_uploads"))
+    MESSENGER_UPLOAD_DIR: str = os.getenv("MESSENGER_UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_messenger_uploads"))
 
     # vLLM backends — each backend can serve one or more models
     # LLM_A (vllm-b): LipiLLM fast inference
