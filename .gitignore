@@ -21,3 +21,8 @@ Thumbs.db
 uploads/
 chat_uploads/
 bankai-deploy.tgz
+
+# Electron desktop outputs
+desktop/node_modules/
+desktop/release/
+desktop/dist/

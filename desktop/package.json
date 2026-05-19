@@ -1,0 +1,60 @@
+{
+  "name": "lipicore-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LipiCore Desktop secure server-connected wrapper",
+  "main": "electron/main.js",
+  "author": "LipiCore",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "electron .",
+    "lint": "eslint electron scripts",
+    "icons": "node scripts/generate-icons.js",
+    "smoke": "node scripts/smoke-electron-config.js",
+    "check": "npm run lint && npm run smoke",
+    "build:mac": "electron-builder --mac dmg",
+    "build:win": "electron-builder --win nsis",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "eslint": "^8.57.1",
+    "png2icons": "^2.0.1",
+    "sharp": "^0.33.5"
+  },
+  "build": {
+    "appId": "np.com.silverlining.lipicore.desktop",
+    "productName": "LipiCore Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "splash/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        "dmg"
+      ],
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
