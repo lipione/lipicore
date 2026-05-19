@@ -58,8 +58,8 @@ Create `desktop/package.json` with this exact content:
     "dist": "electron-builder"
   },
   "devDependencies": {
-    "electron": "^33.4.11",
-    "electron-builder": "^25.1.8",
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^8.57.1",
     "png2icons": "^2.0.1",
     "sharp": "^0.33.5"
