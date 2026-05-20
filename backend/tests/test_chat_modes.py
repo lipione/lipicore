@@ -5,6 +5,7 @@ from app.api.chat import (
     derive_answer_metadata,
     general_fallback_system_identity,
     mode_instruction,
+    prepare_vllm_payload_messages,
     should_show_document_search_status,
 )
 from app.schemas.chat import ChatRequest
@@ -102,3 +103,39 @@ def test_document_search_status_only_shows_when_document_search_is_expected():
     assert should_show_document_search_status(active_document_ids=[], mode="ask_knowledge", has_image=False) is True
     assert should_show_document_search_status(active_document_ids=[], mode="draft", has_image=False) is False
     assert should_show_document_search_status(active_document_ids=[10], mode="analyze_file", has_image=True) is False
+
+
+def test_prepare_vllm_payload_trims_old_history_to_leave_generation_room():
+    history = [
+        type("Msg", (), {"role": "user", "content": f"old question {idx} " + ("x" * 900)})()
+        for idx in range(8)
+    ]
+    history.append(type("Msg", (), {"role": "user", "content": "client wants to insure a house"})())
+
+    messages, max_tokens, was_trimmed = prepare_vllm_payload_messages(
+        system="You are BankAi.",
+        history=history,
+        desired_max_tokens=512,
+        context_limit=1200,
+    )
+
+    assert was_trimmed is True
+    assert max_tokens >= 128
+    assert messages[0]["role"] == "system"
+    assert messages[-1]["content"] == "client wants to insure a house"
+    assert len(messages) < len(history) + 1
+
+
+def test_prepare_vllm_payload_reduces_output_tokens_for_large_prompt():
+    history = [type("Msg", (), {"role": "user", "content": "short question"})()]
+
+    _messages, max_tokens, was_trimmed = prepare_vllm_payload_messages(
+        system="policy context " + ("x" * 2700),
+        history=history,
+        desired_max_tokens=512,
+        context_limit=1200,
+    )
+
+    assert was_trimmed is False
+    assert max_tokens < 512
+    assert max_tokens >= 128

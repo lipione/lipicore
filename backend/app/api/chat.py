@@ -80,6 +80,10 @@ CHAT_UPLOAD_DIR = settings.CHAT_UPLOAD_DIR
 
 KNOWLEDGE_SEARCH_MODES = {"ask_knowledge", "analyze_file", "compare"}
 SOURCE_REQUIRED_MODES = {"analyze_file", "compare"}
+MODEL_CONTEXT_LIMIT_TOKENS = 4096
+MODEL_TOKEN_HEADROOM = 96
+MIN_GENERATION_TOKENS = 128
+APPROX_CHARS_PER_TOKEN = 3
 
 MODE_INSTRUCTIONS = {
     "ask_knowledge": (
@@ -120,6 +124,57 @@ def general_fallback_system_identity(language: str, mode: str) -> str:
         "Do not claim this is official bank policy, an approved circular, or a bank-specific rule. "
         "For internal bank policy, tell the user to verify against approved documents or a supervisor."
     )
+
+
+def _estimate_message_tokens(content: str) -> int:
+    return max(1, (len(content or "") + APPROX_CHARS_PER_TOKEN - 1) // APPROX_CHARS_PER_TOKEN)
+
+
+def _vllm_message(role: str, content: str) -> dict:
+    return {"role": role, "content": content}
+
+
+def _message_cost(message: dict) -> int:
+    return _estimate_message_tokens(message.get("content", "")) + 6
+
+
+def prepare_vllm_payload_messages(
+    *,
+    system: str,
+    history,
+    desired_max_tokens: int,
+    context_limit: int = MODEL_CONTEXT_LIMIT_TOKENS,
+) -> tuple[list[dict], int, bool]:
+    system_message = _vllm_message("system", system)
+    history_messages = [
+        _vllm_message("assistant" if msg.role == "assistant" else "user", msg.content)
+        for msg in history
+    ]
+    max_tokens = min(desired_max_tokens, max(MIN_GENERATION_TOKENS, context_limit // 8))
+    input_budget = max(MIN_GENERATION_TOKENS, context_limit - max_tokens - MODEL_TOKEN_HEADROOM)
+    selected_reversed: list[dict] = []
+    used_tokens = _message_cost(system_message)
+    was_trimmed = False
+
+    for message in reversed(history_messages):
+        cost = _message_cost(message)
+        if selected_reversed and used_tokens + cost > input_budget:
+            was_trimmed = True
+            continue
+        if not selected_reversed and used_tokens + cost > input_budget:
+            selected_reversed.append(message)
+            was_trimmed = True
+            continue
+        selected_reversed.append(message)
+        used_tokens += cost
+
+    selected = list(reversed(selected_reversed))
+    estimated_input_tokens = _message_cost(system_message) + sum(_message_cost(message) for message in selected)
+    available_output_tokens = context_limit - estimated_input_tokens - MODEL_TOKEN_HEADROOM
+    if available_output_tokens < max_tokens:
+        max_tokens = max(MIN_GENERATION_TOKENS, available_output_tokens)
+
+    return [system_message, *selected], max_tokens, was_trimmed
 
 
 def should_show_document_search_status(
@@ -672,14 +727,14 @@ async def stream_chat_message(
         if not has_image and not sources_list and mode not in SOURCE_REQUIRED_MODES:
             sys_identity = general_fallback_system_identity(chat_request.language, mode)
 
-        vllm_messages = [{"role": "system", "content": sys_identity}]
-        for msg in history[-10:]:
-            vllm_messages.append({
-                "role": "assistant" if msg.role == "assistant" else "user",
-                "content": msg.content,
-            })
-
         selected_profile = resolve_model_profile(chat_request.model_override)
+        vllm_messages, response_max_tokens, trimmed_history = prepare_vllm_payload_messages(
+            system=sys_identity,
+            history=history[-10:],
+            desired_max_tokens=selected_profile.max_tokens,
+        )
+        if trimmed_history:
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Older chat context was shortened to fit the local model.'})}\n\n"
         status = await model_status()
         selected_status = status.get(selected_profile.key, {})
         if selected_status.get("active", 0) >= selected_status.get("limit", 1):
@@ -704,7 +759,7 @@ async def stream_chat_message(
                     "stream": True,
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "max_tokens": profile.max_tokens,
+                    "max_tokens": response_max_tokens,
                 }
 
                 logger.info(f"[STREAM] About to call vLLM at {url} with model={profile.model}")
@@ -716,7 +771,12 @@ async def stream_chat_message(
                         if response.status_code != 200:
                             body = await response.aread()
                             logger.error(f"[STREAM] vLLM error body: {body[:500]}")
-                            yield f"data: {json.dumps({'token': f'AI engine returned error {response.status_code}.', 'done': True})}\n\n"
+                            error_text = body.decode("utf-8", errors="ignore")
+                            if response.status_code == 400 and "maximum context length" in error_text:
+                                token = "AI prompt was too long for the local model. I shortened chat history, but this request still exceeded the model context. Please start a new chat or use fewer selected documents."
+                            else:
+                                token = f"AI engine returned error {response.status_code}."
+                            yield f"data: {json.dumps({'token': token, 'done': True})}\n\n"
                             return
                         logger.info("[STREAM] Starting to read vLLM lines")
                         token_count = 0
