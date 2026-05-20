@@ -40,11 +40,11 @@ from ..services.rag_service import (
     async_generate_rag_response,
     get_system_identity,
     RAG_PROMPT_TEMPLATE,
-    GENERAL_PROMPT_TEMPLATE,
 )
 from ..services.audit_service import log_audit_event
 from ..services.guardrail_service import detect_prompt_injection, detect_and_mask_pii
 from ..services.query_rewrite_service import rewrite_query_for_retrieval
+from ..services.llm_service import async_call_llm
 from ..services.llm_gateway import model_status, reserve_model, resolve_model_profile
 from ..services.ingestion_queue import enqueue_document_ingestion
 from ..services.citation_verifier import attach_source_verification, verify_answer_against_sources
@@ -78,12 +78,13 @@ router = APIRouter()
 
 CHAT_UPLOAD_DIR = settings.CHAT_UPLOAD_DIR
 
-SOURCE_REQUIRED_MODES = {"ask_knowledge", "analyze_file", "compare"}
+KNOWLEDGE_SEARCH_MODES = {"ask_knowledge", "analyze_file", "compare"}
+SOURCE_REQUIRED_MODES = {"analyze_file", "compare"}
 
 MODE_INSTRUCTIONS = {
     "ask_knowledge": (
-        "Mode: Ask Bank Knowledge. Answer only from approved bank knowledge when available. "
-        "If approved sources do not support the answer, say that the answer was not found in approved sources."
+        "Mode: Ask BankAi. Use approved bank knowledge with citations when relevant sources are available. "
+        "If no approved source matches, answer as general knowledge and clearly avoid presenting it as approved bank policy."
     ),
     "analyze_file": (
         "Mode: Analyze Uploaded File. Focus on the user's selected session files. "
@@ -112,6 +113,15 @@ def mode_instruction(mode: str) -> str:
     return MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["ask_knowledge"])
 
 
+def general_fallback_system_identity(language: str, mode: str) -> str:
+    return (
+        f"{get_system_identity(language)}\n\n{mode_instruction(mode)}\n\n"
+        "No approved document source matched this question. Answer using general knowledge only. "
+        "Do not claim this is official bank policy, an approved circular, or a bank-specific rule. "
+        "For internal bank policy, tell the user to verify against approved documents or a supervisor."
+    )
+
+
 def should_show_document_search_status(
     *,
     active_document_ids: list[int] | None,
@@ -120,7 +130,7 @@ def should_show_document_search_status(
 ) -> bool:
     if has_image:
         return False
-    return bool(active_document_ids) or mode in SOURCE_REQUIRED_MODES
+    return bool(active_document_ids) or mode in KNOWLEDGE_SEARCH_MODES
 
 
 def derive_answer_metadata(
@@ -141,8 +151,9 @@ def derive_answer_metadata(
     else:
         answer_type = "general_answer"
 
-    if answer and any(term in answer.lower() for term in ("escalate", "supervisor", "compliance team")):
-        answer_type = "escalate" if source_count == 0 and mode == "ask_knowledge" else answer_type
+    if answer and requires_sources and source_count == 0:
+        if any(term in answer.lower() for term in ("escalate", "supervisor", "compliance team")):
+            answer_type = "escalate"
 
     return {
         "mode": mode,
@@ -386,6 +397,14 @@ async def create_chat_message(
             user_id=current_user.id,
             user_department=current_user.department,
         )
+        if answer == NOT_FOUND_RESPONSE and mode not in SOURCE_REQUIRED_MODES:
+            answer = await async_call_llm(
+                safe_message,
+                system=general_fallback_system_identity(chat_request.language, mode),
+                user_id=current_user.id,
+                role=current_user.role,
+            )
+            sources = []
 
     citation_verification = verify_answer_against_sources(answer=answer, sources=sources)
     sources = attach_source_verification(sources, citation_verification)
@@ -649,6 +668,9 @@ async def stream_chat_message(
                 logger.error(f"[STREAM] Error saving not-found message: {e}")
             yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
             return
+
+        if not has_image and not sources_list and mode not in SOURCE_REQUIRED_MODES:
+            sys_identity = general_fallback_system_identity(chat_request.language, mode)
 
         vllm_messages = [{"role": "system", "content": sys_identity}]
         for msg in history[-10:]:

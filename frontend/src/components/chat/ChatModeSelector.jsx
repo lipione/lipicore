@@ -1,10 +1,10 @@
 export const CHAT_MODES = [
   {
     value: 'ask_knowledge',
-    label: 'Ask Knowledge',
+    label: 'Ask BankAi',
     icon: 'policy',
-    description: 'Use approved bank knowledge with citations.',
-    prompt: 'What does the approved policy say about ',
+    description: 'General chat that cites approved knowledge when it matches.',
+    prompt: 'Tell me about ',
   },
   {
     value: 'analyze_file',

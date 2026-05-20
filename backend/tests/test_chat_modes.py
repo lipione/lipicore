@@ -1,7 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
-from app.api.chat import derive_answer_metadata, mode_instruction, should_show_document_search_status
+from app.api.chat import (
+    derive_answer_metadata,
+    general_fallback_system_identity,
+    mode_instruction,
+    should_show_document_search_status,
+)
 from app.schemas.chat import ChatRequest
 
 
@@ -34,7 +39,7 @@ def test_answer_metadata_marks_ask_knowledge_with_sources_as_official():
     assert metadata["mode"] == "ask_knowledge"
     assert metadata["answer_type"] == "official_source_backed"
     assert metadata["source_count"] == 1
-    assert metadata["requires_sources"] is True
+    assert metadata["requires_sources"] is False
 
 
 def test_answer_metadata_marks_uploaded_file_answers():
@@ -49,15 +54,15 @@ def test_answer_metadata_marks_uploaded_file_answers():
     assert metadata["source_count"] == 1
 
 
-def test_answer_metadata_marks_source_required_answer_without_sources_as_not_found():
+def test_answer_metadata_marks_ask_knowledge_without_sources_as_general():
     metadata = derive_answer_metadata(
         mode="ask_knowledge",
         sources=[],
         active_document_ids=[],
-        answer="I do not have enough approved information to answer.",
+        answer="Property insurance protects property against covered loss. Verify internal policy with a supervisor.",
     )
 
-    assert metadata["answer_type"] == "not_found"
+    assert metadata["answer_type"] == "general_answer"
     assert metadata["source_count"] == 0
 
 
@@ -71,6 +76,25 @@ def test_answer_metadata_marks_draft_without_sources_as_general():
 
     assert metadata["answer_type"] == "general_answer"
     assert metadata["requires_sources"] is False
+
+
+def test_answer_metadata_marks_hard_source_required_mode_without_sources_as_not_found():
+    metadata = derive_answer_metadata(
+        mode="compare",
+        sources=[],
+        active_document_ids=[],
+        answer="I do not have enough approved information to answer.",
+    )
+
+    assert metadata["answer_type"] == "not_found"
+    assert metadata["requires_sources"] is True
+
+
+def test_general_fallback_warns_not_official_policy():
+    instruction = general_fallback_system_identity("en", "ask_knowledge")
+
+    assert "general knowledge only" in instruction
+    assert "official bank policy" in instruction
 
 
 def test_document_search_status_only_shows_when_document_search_is_expected():
