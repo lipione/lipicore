@@ -11,7 +11,7 @@ This document defines conservative deployment tiers. These are capacity targets,
 - Per-user model limit: staff `1`, admin `2`.
 - Model queue timeout: `LLM_QUEUE_TIMEOUT_SECONDS=120`; stale queue tokens are pruned after `LLM_QUEUE_STALE_SECONDS=10`.
 - Upload limits: Document Library `50 MB`, AI Tasks `20 MB`.
-- Chat context: 4096-token model context, with RAG top chunks kept intentionally small.
+- Chat context: 8192-token model context, with RAG top chunks kept intentionally small.
 
 ## Measured Test-Server Evidence
 

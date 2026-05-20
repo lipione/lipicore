@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.chat import (
+    MODEL_CONTEXT_LIMIT_TOKENS,
     derive_answer_metadata,
     general_fallback_system_identity,
     mode_instruction,
@@ -20,6 +21,10 @@ def test_chat_request_defaults_to_bank_knowledge_mode():
 def test_chat_request_rejects_unknown_mode():
     with pytest.raises(ValidationError):
         ChatRequest(message="Draft a memo", mode="department_bot")
+
+
+def test_chat_context_window_defaults_to_8k():
+    assert MODEL_CONTEXT_LIMIT_TOKENS == 8192
 
 
 def test_mode_instruction_marks_drafts_as_non_policy_output():

@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     LLM_QUEUE_STALE_SECONDS: float = float(os.getenv("LLM_QUEUE_STALE_SECONDS", "10"))
     LLM_FAST_MAX_TOKENS: int = int(os.getenv("LLM_FAST_MAX_TOKENS", "512"))
     LLM_DEEP_MAX_TOKENS: int = int(os.getenv("LLM_DEEP_MAX_TOKENS", "768"))
+    LLM_CONTEXT_WINDOW_TOKENS: int = int(os.getenv("LLM_CONTEXT_WINDOW_TOKENS", "8192"))
 
     # LLM_D (vllm-d): Qwen3.6 27B for report generation
     LLM_D_API_BASE: str = os.getenv("LLM_D_API_BASE", "http://localhost:8004")

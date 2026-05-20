@@ -92,6 +92,7 @@ services:
       - LLM_C_MODEL=gemma-4-26b-4bit
       - LLM_C_API_KEY=no-key
       - LLM_QUEUE_STALE_SECONDS=${LLM_QUEUE_STALE_SECONDS:-10}
+      - LLM_CONTEXT_WINDOW_TOKENS=${LLM_CONTEXT_WINDOW_TOKENS:-8192}
     ports:
       - "8000:8000"
     volumes:
@@ -149,6 +150,7 @@ services:
       - LLM_C_MODEL=gemma-4-26b-4bit
       - LLM_C_API_KEY=no-key
       - LLM_QUEUE_STALE_SECONDS=${LLM_QUEUE_STALE_SECONDS:-10}
+      - LLM_CONTEXT_WINDOW_TOKENS=${LLM_CONTEXT_WINDOW_TOKENS:-8192}
     command: ["python", "-m", "app.workers.ingestion_worker"]
     volumes:
       - upload_data:/app/uploads
@@ -231,7 +233,7 @@ services:
     entrypoint: /bin/bash
     command:
       - -c
-      - "vllm serve /data/models/llm/gemma-4-E4B-it --host 0.0.0.0 --port 8000 --gpu-memory-utilization 0.45 --max-model-len 4096 --max-num-seqs 16 --served-model-name gemma-4 --enable-prefix-caching --kv-cache-dtype fp8"
+      - "vllm serve /data/models/llm/gemma-4-E4B-it --host 0.0.0.0 --port 8000 --gpu-memory-utilization 0.55 --max-model-len 8192 --max-num-batched-tokens 8192 --max-num-seqs 8 --served-model-name gemma-4 --enable-prefix-caching --kv-cache-dtype fp8"
     volumes:
       - /data:/data
     ports:
@@ -253,7 +255,7 @@ services:
     entrypoint: /bin/bash
     command:
       - -c
-      - "vllm serve /data/models/llm/gemma-4-26b-a4b-awq-4bit --host 0.0.0.0 --port 8000 --gpu-memory-utilization 0.80 --max-model-len 4096 --max-num-batched-tokens 4096 --max-num-seqs 8 --served-model-name gemma-4-26b-4bit --enable-prefix-caching --kv-cache-dtype fp8"
+      - "vllm serve /data/models/llm/gemma-4-26b-a4b-awq-4bit --host 0.0.0.0 --port 8000 --gpu-memory-utilization 0.88 --max-model-len 8192 --max-num-batched-tokens 8192 --max-num-seqs 4 --served-model-name gemma-4-26b-4bit --enable-prefix-caching --kv-cache-dtype fp8"
     volumes:
       - /data:/data
     ports:
