@@ -1,5 +1,6 @@
 import re
 from collections import Counter
+from datetime import datetime
 from types import SimpleNamespace
 
 from sqlalchemy import bindparam, text
@@ -40,12 +41,15 @@ def get_system_identity(language: str = "en") -> str:
     return f"""You are BankAi, a secure and intelligent banking assistant.
 Never refer to yourself as Gemma, Google, or any other AI model name. You are BankAi.
 Always be professional, helpful, and concise. {lang_instruction}
+Give one direct staff-ready answer. Do not provide multiple alternative answers, model-choice options, or long preambles unless the user explicitly asks for alternatives.
 You may use markdown formatting such as **bold**, bullet points, and numbered lists for clarity."""
 
 
 RAG_PROMPT_TEMPLATE = """{system}
 
 Answer the user's question using ONLY the provided context from approved bank documents.
+Give one staff-ready answer. Start with the answer, then add only the key cited details staff need to act.
+Do not offer multiple alternative answers or generic option lists unless the user explicitly asks for alternatives.
 If the context does not contain enough information to answer, respond with exactly:
 "I could not find this in the approved documents. Please consult the relevant policy or contact your supervisor."
 Do NOT use your general knowledge to answer banking, compliance, or policy questions.
@@ -62,6 +66,7 @@ GENERAL_PROMPT_TEMPLATE = """{system}
 
 You can answer general questions about banking, finance, compliance, and business.
 Be professional, accurate, and concise.
+Give one direct staff-ready answer. Do not provide multiple alternative answers, model-choice options, or long preambles unless the user explicitly asks for alternatives.
 If you are unsure, say so honestly.
 
 Question: {question}
@@ -93,6 +98,7 @@ def _build_source(doc: Document, score: float, result=None) -> dict:
     payload = getattr(result, "payload", {}) or {}
     passage = payload.get("text") or ""
     section_label = payload.get("section_label") or payload.get("section_number") or _extract_section_label(payload.get("text"))
+    warnings = _source_warnings(doc)
     return {
         "document_id":     doc.id,
         "document_title":  doc.title or doc.file_name,
@@ -107,7 +113,32 @@ def _build_source(doc: Document, score: float, result=None) -> dict:
         "snippet":         passage[:180],
         "passage":         passage,
         "relevance_score": score,
+        "source_warnings": warnings,
+        "effective_from":  doc.effective_from.isoformat() if doc.effective_from else None,
+        "effective_to":    doc.effective_to.isoformat() if doc.effective_to else None,
+        "review_due_at":   doc.review_due_at.isoformat() if doc.review_due_at else None,
+        "regulator":       doc.regulator,
+        "jurisdiction":    doc.jurisdiction,
+        "superseded_reason": doc.superseded_reason,
+        "extraction_confidence": payload.get("extraction_confidence"),
+        "ocr_confidence": payload.get("ocr_confidence"),
+        "table_confidence": payload.get("table_confidence"),
+        "page_bbox_json": payload.get("page_bbox_json"),
     }
+
+
+def _source_warnings(doc: Document) -> list[str]:
+    warnings: list[str] = []
+    now = datetime.utcnow()
+    if doc.version_state == "superseded":
+        warnings.append("superseded_source")
+    if doc.effective_from and doc.effective_from > now:
+        warnings.append("not_yet_effective")
+    if doc.effective_to and doc.effective_to < now:
+        warnings.append("expired_source")
+    if doc.review_due_at and doc.review_due_at < now:
+        warnings.append("review_due")
+    return warnings
 
 
 def _document_visible_to_user(doc: Document, session_id, user_role, user_department: str | None = None) -> bool:
@@ -283,6 +314,10 @@ def _python_keyword_search(
                 "chunk_index": chunk.chunk_index,
                 "text": chunk.chunk_text,
                 "page_number": chunk.page_number,
+                "extraction_confidence": chunk.extraction_confidence,
+                "ocr_confidence": chunk.ocr_confidence,
+                "table_confidence": chunk.table_confidence,
+                "page_bbox_json": chunk.page_bbox_json,
                 "section_label": _extract_section_label(chunk.chunk_text),
                 "department": chunk.department,
                 "access_level": chunk.access_level,
@@ -338,6 +373,10 @@ def _postgres_keyword_search(
             c.chunk_index,
             c.chunk_text,
             c.page_number,
+            c.extraction_confidence,
+            c.ocr_confidence,
+            c.table_confidence,
+            c.page_bbox_json,
             d.document_scope,
             d.session_id,
             d.department,
@@ -381,6 +420,10 @@ def _postgres_keyword_search(
                 "chunk_index": row["chunk_index"],
                 "text": text_value,
                 "page_number": row["page_number"],
+                "extraction_confidence": row.get("extraction_confidence"),
+                "ocr_confidence": row.get("ocr_confidence"),
+                "table_confidence": row.get("table_confidence"),
+                "page_bbox_json": row.get("page_bbox_json"),
                 "section_label": _extract_section_label(text_value),
                 "department": row.get("department"),
                 "access_level": row.get("access_level", 0),
@@ -579,6 +622,7 @@ async def async_generate_rag_response(
     session_id: int | None = None,
     user_id: int | None = None,
     user_department: str | None = None,
+    model_name: str | None = None,
 ):
     try:
         query_vector = generate_embeddings([question])[0]
@@ -598,6 +642,6 @@ async def async_generate_rag_response(
     context = _build_context(high_confidence, db)
     prompt = RAG_PROMPT_TEMPLATE.format(system=sys_identity, context=context, question=question)
     sources = _build_sources(high_confidence, db)
-    answer = await async_call_llm(prompt, user_id=user_id, role=user_role)
+    answer = await async_call_llm(prompt, user_id=user_id, role=user_role, model_name=model_name)
     verification = verify_answer_against_sources(answer=answer, sources=sources)
     return answer, attach_source_verification(sources, verification)

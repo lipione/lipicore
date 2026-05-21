@@ -20,14 +20,14 @@ export default function Features() {
           details: ['P&L extraction', 'Balance sheet analysis', 'Cash flow insights', 'Ratio calculations']
         },
         {
-          title: 'Compliance Validation',
-          desc: 'Validate documents against NRB directives and internal governance frameworks',
-          details: ['Automated compliance checks', 'Policy violation detection', 'Regulatory alignment', 'Audit trail generation']
+          title: 'Compliance Review Support',
+          desc: 'Compare documents against approved directives and internal governance references for human review',
+          details: ['Source-backed checklists', 'Potential gap notes', 'Citation review', 'Audit trail generation']
         },
         {
-          title: 'Loan Agreement Audit',
-          desc: 'Extract and verify key terms from loan agreements with precision',
-          details: ['Interest rate extraction', 'Term date identification', 'Clause verification', 'Risk flagging']
+          title: 'Loan File Review Support',
+          desc: 'Extract key terms and open questions from loan files for lending staff review',
+          details: ['Interest rate extraction', 'Term date identification', 'Clause references', 'Risk factor notes']
         }
       ]
     },
@@ -49,7 +49,7 @@ export default function Features() {
         {
           title: 'Source Attribution',
           desc: 'Every answer is backed by specific document references with page numbers',
-          details: ['Quote extraction', 'Page references', 'Confidence scores', 'Full traceability']
+          details: ['Quote extraction', 'Page references', 'Confidence indicators', 'Full traceability']
         },
         {
           title: 'Multi-Language Queries',
@@ -69,9 +69,9 @@ export default function Features() {
           details: ['Isolated network', 'No internet required', 'Full data control', 'On-premise only']
         },
         {
-          title: 'End-to-End Encryption',
-          desc: '256-bit AES encryption for all data at rest and in transit',
-          details: ['Data encryption', 'Transport security', 'Key management', 'Hardware security']
+          title: 'Encryption Controls',
+          desc: 'Deployment-ready controls for encrypted transport, protected storage, and bank-owned key policy',
+          details: ['Data encryption options', 'Transport security', 'Key management policy', 'Hardware security alignment']
         },
         {
           title: 'Audit Logging',
@@ -84,9 +84,9 @@ export default function Features() {
           details: ['User roles', 'Permission management', 'Department-level access', 'Custom rules']
         },
         {
-          title: 'SOC2 Type II Compliant',
-          desc: 'Enterprise security standards with third-party validation',
-          details: ['SOC2 certification', 'GDPR ready', 'HIPAA compatible', 'PCI DSS compliant']
+          title: 'Compliance-Ready Controls',
+          desc: 'Controls and logs that support bank security review and third-party audit work',
+          details: ['Security review support', 'Privacy controls', 'Audit evidence', 'Policy mapping']
         }
       ]
     },
@@ -97,23 +97,23 @@ export default function Features() {
       features: [
         {
           title: 'High-Performance Processing',
-          desc: 'Process 100+ documents per hour with parallel processing',
-          details: ['50 MB/s upload speed', 'Sub-second queries', '<200ms API response', '100+ docs/hour']
+          desc: 'Process documents asynchronously with capacity measured on the selected pilot infrastructure',
+          details: ['Async upload queue', 'Measured API latency', 'Document processing reports', 'Capacity test evidence']
         },
         {
           title: 'Redundancy & Backup',
-          desc: 'RAID 1 (OS) and RAID 6 (data) for automatic redundancy and failover',
-          details: ['Automatic failover', 'Zero-downtime updates', 'Nightly backups', '30-day retention']
+          desc: 'Backup, restore, and redundancy options sized by deployment tier',
+          details: ['Backup policy', 'Restore drills', 'Retention settings', 'Deployment-tier design']
         },
         {
-          title: '99.95% Uptime SLA',
-          desc: 'Enterprise-grade reliability with service level guarantees',
-          details: ['99.95% uptime', '<1 hour MTTR', 'Proactive monitoring', 'Dedicated support']
+          title: 'Tiered Availability Design',
+          desc: 'Availability targets depend on pilot, department, or whole-bank HA architecture',
+          details: ['Tiered SLA design', 'Monitoring', 'Incident response', 'Dedicated support options']
         },
         {
           title: 'Scalability',
-          desc: 'Support for 500+ concurrent users with multiple hardware tiers',
-          details: ['500+ concurrent users', 'Compact to Enterprise tiers', 'Upgrade path', 'Load balancing']
+          desc: 'Scale from controlled pilots to department and whole-bank deployments after load testing',
+          details: ['Pilot to enterprise tiers', 'Measured concurrency', 'Upgrade path', 'Load balancing']
         }
       ]
     },
@@ -177,9 +177,9 @@ export default function Features() {
 
   const benefits = [
     { icon: 'savings', title: '50% Time Reduction', desc: 'Cut document analysis time in half' },
-    { icon: 'verified_user', title: '90% Accuracy', desc: 'Significantly better than manual analysis' },
-    { icon: 'lock', title: 'Zero Breaches', desc: 'Air-gapped deployment guarantees security' },
-    { icon: 'trending_up', title: '6-12 Month ROI', desc: 'Enterprise customers see ROI quickly' },
+    { icon: 'verified_user', title: 'Source Evidence', desc: 'Answers show the documents and passages used' },
+    { icon: 'lock', title: 'Private Deployment', desc: 'Bank data stays inside controlled infrastructure' },
+    { icon: 'trending_up', title: 'Pilot Metrics', desc: 'Measure accuracy, latency, and escalation reduction' },
   ];
 
   return (
@@ -191,7 +191,7 @@ export default function Features() {
             Comprehensive Features
           </h1>
           <p className="text-xl text-slate-600">
-            Explore all the powerful capabilities that make BankAi the industry-leading document intelligence platform
+            Explore the staff-assistance, source-backed search, governance, and deployment controls behind LipiCore
           </p>
         </div>
       </div>
@@ -288,12 +288,12 @@ export default function Features() {
           </h2>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { cert: 'SOC2 Type II', icon: 'verified_user', desc: 'Security audited and certified' },
-              { cert: 'GDPR Ready', icon: 'privacy_tip', desc: 'EU data protection compliant' },
-              { cert: 'HIPAA Compatible', icon: 'health_and_safety', desc: 'Healthcare data ready' },
-              { cert: 'PCI DSS', icon: 'credit_card', desc: 'Payment data secure' },
-              { cert: 'NRB Compliant', icon: 'policy', desc: 'Nepal banking standards' },
-              { cert: 'ISO 27001', icon: 'shield', desc: 'Information security aligned' },
+              { cert: 'Audit Evidence', icon: 'verified_user', desc: 'Logs and exports for review' },
+              { cert: 'Privacy Controls', icon: 'privacy_tip', desc: 'Bank-controlled data handling' },
+              { cert: 'Access Governance', icon: 'health_and_safety', desc: 'Roles and permissions' },
+              { cert: 'Payment Data Policy', icon: 'credit_card', desc: 'Controls for sensitive data handling' },
+              { cert: 'NRB Review Support', icon: 'policy', desc: 'Source-backed regulatory lookup' },
+              { cert: 'ISO 27001 Alignment', icon: 'shield', desc: 'Security controls for bank review' },
             ].map((cert) => (
               <div key={cert.cert} className="bg-white border border-slate-200 rounded-lg p-8 text-center hover:shadow-lg transition-all">
                 <span className="material-symbols-outlined text-primary text-5xl flex justify-center mb-4">
@@ -318,12 +318,12 @@ export default function Features() {
               <h3 className="font-bold text-slate-900 mb-6">Throughput</h3>
               <div className="space-y-4">
                 {[
-                  { metric: 'Concurrent Users', value: '500+' },
-                  { metric: 'Upload Speed', value: '50 MB/s' },
-                  { metric: 'Document Processing', value: '100+ docs/hour' },
-                  { metric: 'API Response Time', value: '<200 ms' },
-                  { metric: 'Query Processing', value: '5-10 seconds' },
-                  { metric: 'Storage Capacity', value: '50,000+ documents' },
+                  { metric: 'Concurrent Users', value: 'Measured by tier' },
+                  { metric: 'Upload Capacity', value: 'Configurable' },
+                  { metric: 'Document Processing', value: 'Queue-based' },
+                  { metric: 'API Response Time', value: 'Load tested' },
+                  { metric: 'Query Processing', value: 'Model dependent' },
+                  { metric: 'Storage Capacity', value: 'Sized per bank' },
                 ].map((item) => (
                   <div key={item.metric} className="flex justify-between items-center pb-4 border-b border-slate-100">
                     <span className="text-slate-600">{item.metric}</span>
@@ -337,12 +337,12 @@ export default function Features() {
               <h3 className="font-bold text-slate-900 mb-6">Reliability</h3>
               <div className="space-y-4">
                 {[
-                  { metric: 'Uptime SLA', value: '99.95%' },
-                  { metric: 'MTTR', value: '<1 hour' },
-                  { metric: 'Automatic Failover', value: 'Yes' },
-                  { metric: 'Backup Frequency', value: 'Nightly' },
-                  { metric: 'Recovery Time', value: '<2 hours' },
-                  { metric: 'Data Redundancy', value: 'RAID 6' },
+                  { metric: 'Uptime SLA', value: 'By tier' },
+                  { metric: 'MTTR', value: 'By contract' },
+                  { metric: 'Automatic Failover', value: 'HA tier' },
+                  { metric: 'Backup Frequency', value: 'Policy based' },
+                  { metric: 'Recovery Time', value: 'Drill tested' },
+                  { metric: 'Data Redundancy', value: 'Architecture based' },
                 ].map((item) => (
                   <div key={item.metric} className="flex justify-between items-center pb-4 border-b border-slate-100">
                     <span className="text-slate-600">{item.metric}</span>

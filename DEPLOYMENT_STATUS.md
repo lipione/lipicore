@@ -1,7 +1,7 @@
 # BankAi Public Deployment - Live
 
-**Date:** May 7, 2026
-**Status:** Production stack deployed; chat UX fixes ready for live rollout
+**Date:** May 21, 2026
+**Status:** Production stack deployed; queued long-document analysis documented for rollout
 
 ## Public Access
 
@@ -29,6 +29,7 @@ nginx reverse proxy
         +-- Qdrant vector database
         +-- MinIO object storage
         +-- Redis admission control
+        +-- RQ ingestion and long-document analysis queue
         +-- vLLM fast model on GPU 0
         +-- vLLM deep model on GPU 1
 ```
@@ -44,6 +45,7 @@ nginx reverse proxy
 | Qdrant | `lipicore-qdrant` | vector search | internal |
 | MinIO | `lipicore-minio` | document storage | internal |
 | Redis | `lipicore-redis` | LLM request admission control | internal |
+| ingestion worker | `ingestion-worker` | document ingestion and queued long-document analysis | internal |
 | vLLM fast | `lipicore-vllm-b` | clean Gemma 4 4B on GPU 0 | 8002 |
 | vLLM deep | `lipicore-vllm-c` | clean Gemma 4 26B 4-bit on GPU 1 | 8003 |
 
@@ -60,6 +62,11 @@ current stack.
 The backend routes normal chat work to the fast tier and deep/file-analysis work
 to the 26B tier. Redis coordinates distributed queueing so the backend can reject
 or wait on requests instead of overloading GPU memory.
+
+Heavy OCR, large PDF, and Excel workbook analysis should be queued from Document
+Library. The job uses the ingestion worker plus the deep model, stores progress
+and results in PostgreSQL, and should be monitored separately from interactive
+chat latency.
 
 ## TLS Status
 
@@ -90,6 +97,8 @@ curl -I https://ai.silverlining.com.np
 curl -s http://localhost:8002/v1/models
 curl -s http://localhost:8003/v1/models
 docker compose logs --tail=100 backend
+docker compose logs --tail=100 ingestion-worker
+docker compose logs --tail=100 redis
 docker compose logs --tail=100 vllm-b
 docker compose logs --tail=100 vllm-c
 ```
@@ -98,6 +107,12 @@ Authenticated operators can also check model admission state through:
 
 ```text
 GET /api/chat/models/status
+```
+
+Long-document job status is available through authenticated API calls:
+
+```text
+GET /api/long-document-analysis
 ```
 
 ## Operator Notes

@@ -17,6 +17,6 @@ class BrandingSettings(SQLModel, table=True):
     )
     support_contact: Optional[str] = None
     disclaimer: str = Field(default="Internal staff use only. Verify critical outputs against approved source documents.")
-    allowed_modes_json: str = Field(default='["ask_knowledge","analyze_file","summarize","draft","translate","compare"]')
+    allowed_modes_json: str = Field(default='["ask_knowledge","approved_knowledge","analyze_file","summarize","draft","translate","compare"]')
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

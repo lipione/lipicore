@@ -36,7 +36,7 @@ export default function TopBar({ language, onLanguageChange, onMenuClick }) {
           <span className="material-symbols-outlined text-[21px]">menu</span>
         </button>
         <div className="flex items-center gap-1.5">
-          <span className="text-xl font-bold tracking-tighter text-slate-900 font-public-sans">
+          <span className="text-xl font-bold text-slate-900 font-public-sans">
             {branding.product_name}
           </span>
           <span className="text-[10px] font-semibold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded hidden sm:inline">
@@ -49,7 +49,7 @@ export default function TopBar({ language, onLanguageChange, onMenuClick }) {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `h-full flex items-center px-1 mr-6 text-sm font-medium font-public-sans tracking-tight transition-colors border-b-2 ${
+                `h-full flex items-center px-1 mr-6 text-sm font-medium font-public-sans transition-colors border-b-2 ${
                   isActive
                     ? 'text-slate-900 border-slate-900'
                     : 'text-slate-500 border-transparent hover:text-slate-900'

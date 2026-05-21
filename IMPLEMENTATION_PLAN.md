@@ -154,6 +154,7 @@ App.jsx
 | F5 | Expanded PII masking (Nepal phone, email, account#) | P1 | `guardrail_service.py` |
 | F6 | Real Analytics aggregates endpoint | P2 | `api/analytics.py` |
 | F7 | Session summary auto-update | P2 | `chat.py`, `ChatSession` model |
+| F8 | Queued long-document analysis for heavy OCR/PDF/XLS work | P1 | `api/long_document_analysis.py`, `services/long_document_analysis_service.py`, `Documents.jsx` |
 
 ---
 

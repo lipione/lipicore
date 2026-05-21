@@ -4,6 +4,7 @@ from datetime import datetime
 
 ALLOWED_CHAT_MODES = {
     "ask_knowledge",
+    "approved_knowledge",
     "analyze_file",
     "summarize",
     "draft",

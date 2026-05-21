@@ -14,6 +14,11 @@ const TRUST_STATES = {
     icon: 'info',
     className: 'bg-slate-50 text-slate-700 border-slate-200',
   },
+  unsupported_source: {
+    label: 'Source support incomplete',
+    icon: 'rule',
+    className: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
   not_found: {
     label: 'Not found in approved sources',
     icon: 'find_in_page',

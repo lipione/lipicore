@@ -4,6 +4,8 @@
 **Status:** ✓ COMPLETE - E2E test suite created and ready for deployment  
 **Test Coverage:** Session-Aware RAG with document upload and source attribution
 
+Queued long-document analysis is not covered by this test suite yet. It should be verified separately with large PDF, scanned PDF, and Excel fixtures because the workflow queues background jobs and stores results asynchronously.
+
 ## What Was Implemented
 
 ### 1. Test Infrastructure Setup
@@ -317,6 +319,8 @@ A comprehensive end-to-end testing suite has been successfully implemented to ve
 4. ✓ Multi-turn question answering with context persistence
 
 All critical system services are operational and ready for testing. The E2E tests provide automated verification of the core differentiating feature (session-aware RAG) that allows users to chat with their uploaded documents while maintaining proper source attribution.
+
+Next E2E expansion: queue `/api/long-document-analysis`, poll job status, and verify that completed results appear in the Document Library.
 
 **Ready for:** Production deployment, CI/CD integration, and continuous quality assurance.
 

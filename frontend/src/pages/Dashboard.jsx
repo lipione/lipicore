@@ -1,59 +1,172 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
 const QUICK_START = [
   {
-    icon: 'monitoring',
-    title: 'Analyze Financial Report',
-    desc: 'Extract P&L metrics, variance analysis, and KPIs from quarterly filings.',
-    prompt: 'Please analyze this financial report and extract key P&L metrics.',
+    icon: 'chat',
+    title: 'Ask BankAi',
+    desc: 'General staff chat that uses approved knowledge when available and keeps staff responsible for the final answer.',
+    prompt: 'Help me answer a bank staff question. Use approved bank knowledge when available, cite sources, and say when no approved source supports the answer.',
   },
   {
     icon: 'policy',
-    title: 'Compliance Check',
-    desc: 'Validate documents against NRB directives and internal governance frameworks.',
-    prompt: 'Check this document for compliance with NRB regulations.',
+    title: 'Ask Approved Knowledge',
+    desc: 'Strict source-backed policy, circular, SOP, and product-document answers for branch and operations teams.',
+    prompt: 'Answer only from approved bank policies, circulars, SOPs, and product documents. If the answer is not supported by approved knowledge, say that clearly.',
   },
   {
-    icon: 'contract',
-    title: 'Loan Agreement Audit',
-    desc: 'Extract key dates, interest rates, and clauses from loan agreements.',
-    prompt: 'Audit this loan agreement and highlight any discrepancies.',
+    icon: 'inventory_2',
+    title: 'Analyze Large File',
+    desc: 'Queue long PDF, scanned document, and Excel analysis instead of blocking staff chat.',
+    route: '/documents',
   },
   {
-    icon: 'rule',
-    title: 'Policy Comparison',
-    desc: 'Compare uploaded policy documents against approved internal standards.',
-    prompt: 'Compare this policy document against approved internal standards.',
+    icon: 'support_agent',
+    title: 'Support Case Draft',
+    desc: 'Capture a customer-care or branch issue and prepare a staff-reviewed draft response.',
+    route: '/support-desk',
   },
 ];
 
-const STATUS_BADGE = {
-  COMPLETED: 'badge-verified',
-  'IN REVIEW': 'badge-processing',
-  FAILED:     'badge-failed',
-};
+const FINAL_JOB_STATES = new Set(['completed', 'failed']);
+
+function parseJson(value, fallback) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function docIcon(type) {
+  const normalized = (type || '').toLowerCase();
+  if (normalized === 'pdf') return 'description';
+  if (normalized === 'xlsx' || normalized === 'xls') return 'table_chart';
+  if (normalized === 'docx' || normalized === 'doc') return 'article';
+  if (normalized === 'pptx' || normalized === 'ppt') return 'slideshow';
+  return 'insert_drive_file';
+}
+
+function formatLabel(value) {
+  return String(value || 'unknown').replaceAll('_', ' ');
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return '-';
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toLocaleString() : value;
+}
+
+function statusTone(status) {
+  const tones = {
+    queued: 'bg-blue-50 text-blue-700 border-blue-200',
+    processing: 'bg-blue-50 text-blue-700 border-blue-200',
+    packing_context: 'bg-blue-50 text-blue-700 border-blue-200',
+    generating: 'bg-amber-50 text-amber-700 border-amber-200',
+    completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    failed: 'bg-rose-50 text-rose-700 border-rose-200',
+  };
+  return tones[status] || 'bg-slate-50 text-slate-600 border-slate-200';
+}
+
+function MetricCard({ label, value, icon, detail }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-md flex items-center gap-md min-w-0">
+      <div className="w-10 h-10 bg-surface-container-low rounded flex items-center justify-center flex-shrink-0">
+        <span className="material-symbols-outlined text-secondary text-[20px]">{icon}</span>
+      </div>
+      <div className="min-w-0">
+        <p className="font-label-caps text-label-caps text-outline uppercase">{label}</p>
+        <p className="text-2xl font-bold text-on-surface mt-0.5">{value}</p>
+        {detail && <p className="text-xs text-slate-500 truncate">{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
+function CapacityStrip({ modelStatus }) {
+  const rows = ['fast', 'deep', 'vision'].map((key) => ({ key, ...(modelStatus?.[key] || {}) }));
+  if (!modelStatus) {
+    return (
+      <div className="rounded border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+        Model capacity is available to analytics users from Model Lab.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      {rows.map((row) => {
+        const limit = Number(row.limit || 0);
+        const active = Number(row.active || 0);
+        const pct = limit > 0 ? Math.min(100, Math.round((active / limit) * 100)) : 0;
+        return (
+          <div key={row.key} className="rounded border border-slate-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900 capitalize">{row.key}</p>
+                <p className="text-xs text-slate-500">{active}/{limit || '-'} active, {row.waiting || 0} waiting</p>
+              </div>
+              <span className="material-symbols-outlined text-[18px] text-slate-400">
+                {row.key === 'vision' ? 'document_scanner' : row.key === 'deep' ? 'psychology' : 'bolt'}
+              </span>
+            </div>
+            <div className="mt-3 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full rounded-full bg-secondary" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [stats, setStats]     = useState(null);
+  const [stats, setStats] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [pinnedDocs, setPinnedDocs] = useState([]);
+  const [analysisJobs, setAnalysisJobs] = useState([]);
+  const [reviewQueue, setReviewQueue] = useState([]);
+  const [modelStatus, setModelStatus] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
+    let mounted = true;
     Promise.allSettled([
       api.get('/analytics/summary'),
       api.get('/chat/sessions?limit=5'),
       api.get('/documents?limit=3'),
-    ]).then(([statsRes, sessRes, docsRes]) => {
+      api.get('/long-document-analysis?limit=100'),
+      api.get('/document-review/queue'),
+      api.get('/model-lab/status'),
+    ]).then(([statsRes, sessRes, docsRes, jobsRes, reviewRes, modelRes]) => {
+      if (!mounted) return;
       if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
-      if (sessRes.status === 'fulfilled')  setSessions(sessRes.value.data);
-      if (docsRes.status === 'fulfilled')  setPinnedDocs(docsRes.value.data.slice(0, 3));
+      if (sessRes.status === 'fulfilled') setSessions(sessRes.value.data || []);
+      if (docsRes.status === 'fulfilled') setPinnedDocs((docsRes.value.data || []).slice(0, 3));
+      if (jobsRes.status === 'fulfilled') setAnalysisJobs(jobsRes.value.data || []);
+      if (reviewRes.status === 'fulfilled') setReviewQueue(reviewRes.value.data || []);
+      if (modelRes.status === 'fulfilled') setModelStatus(modelRes.value.data?.models || null);
     });
+    return () => {
+      mounted = false;
+    };
   }, []);
+
+  const longDocSummary = useMemo(() => {
+    const active = analysisJobs.filter((job) => !FINAL_JOB_STATES.has(job.status)).length;
+    return {
+      active,
+      completed: analysisJobs.filter((job) => job.status === 'completed').length,
+      failed: analysisJobs.filter((job) => job.status === 'failed').length,
+      total: analysisJobs.length,
+    };
+  }, [analysisJobs]);
+
+  const recentJobs = analysisJobs.slice(0, 4);
 
   const startChatWith = async (prompt) => {
     try {
@@ -64,174 +177,231 @@ export default function Dashboard() {
     }
   };
 
-  const docIcon = (type) => {
-    const t = (type || '').toLowerCase();
-    if (t === 'pdf')  return 'description';
-    if (t === 'xlsx' || t === 'xls') return 'table_chart';
-    if (t === 'docx') return 'article';
-    if (t === 'pptx') return 'slideshow';
-    return 'folder_zip';
+  const runQuickStart = (item) => {
+    if (item.route) {
+      navigate(item.route);
+      return;
+    }
+    startChatWith(item.prompt);
   };
 
   return (
     <div className="p-xl max-w-container-max mx-auto">
-      {/* Welcome */}
       <section className="mb-xl">
-        <h1 className="text-h1 font-h1 text-on-background mb-sm">
-          Welcome back, {user.name?.split(' ')[0] || 'Administrator'}
-        </h1>
-        <p className="text-body-lg text-outline mb-lg">
-          Secure financial analysis and document auditing powered by BankAi.
-        </p>
-
-        {/* Hero banner */}
-        <div className="relative w-full h-40 rounded-xl overflow-hidden bg-primary-container flex items-end p-lg">
-          <div className="absolute inset-0 opacity-10" style={{
-            backgroundImage: 'repeating-linear-gradient(45deg, #ffffff 0, #ffffff 1px, transparent 0, transparent 50%)',
-            backgroundSize: '20px 20px',
-          }} />
-          <div className="flex items-center gap-3 z-10">
-            <span className="px-2.5 py-1 bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold uppercase rounded">
-              System Status: Active
-            </span>
-            <span className="text-body-sm text-white/80">
-              All AI engines performing within optimal parameters.
-            </span>
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div>
+            <p className="font-label-caps text-label-caps text-outline uppercase mb-sm">Bank Staff AI Appliance</p>
+            <h1 className="text-h1 font-h1 text-on-background mb-sm">
+              Welcome back, {user.name?.split(' ')[0] || 'Administrator'}
+            </h1>
+            <p className="text-body-lg text-outline max-w-3xl">
+              Secure staff assistance, approved-knowledge answers, queued large-file analysis, and human-reviewed decision support.
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate('/documents')}
+            className="btn-primary inline-flex items-center justify-center gap-2"
+          >
+            <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+            Queue Document Analysis
+          </button>
         </div>
       </section>
 
-      {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter mb-xl">
-        {[
-          { label: 'Documents Indexed',  value: stats?.total_documents  ?? '—', icon: 'description',    accent: 'border-l-secondary' },
-          { label: 'Active Sessions',    value: stats?.active_sessions   ?? '—', icon: 'chat_bubble',    accent: 'border-l-tertiary-fixed-dim' },
-          { label: 'Queries This Week',  value: stats?.queries_this_week ?? '—', icon: 'search',         accent: 'border-l-secondary' },
-          { label: 'Security Events',    value: stats?.security_events   ?? '0', icon: 'gpp_maybe',      accent: 'border-l-error' },
-        ].map(({ label, value, icon, accent }) => (
-          <div key={label} className={`bg-white border border-slate-200 border-l-4 ${accent} rounded-lg p-md flex items-center gap-md`}>
-            <div className="w-10 h-10 bg-surface-container-low rounded flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-secondary text-[20px]">{icon}</span>
-            </div>
-            <div>
-              <p className="font-label-caps text-label-caps text-outline uppercase">{label}</p>
-              <p className="text-2xl font-bold text-on-surface mt-0.5">{value}</p>
-            </div>
-          </div>
-        ))}
+        <MetricCard label="Documents Indexed" value={formatNumber(stats?.total_documents)} icon="description" detail="Approved and searchable knowledge" />
+        <MetricCard label="Active Sessions" value={formatNumber(stats?.active_sessions)} icon="chat_bubble" detail="Staff assistant sessions" />
+        <MetricCard label="Long Jobs Active" value={longDocSummary.active} icon="pending_actions" detail={`${longDocSummary.completed} completed, ${longDocSummary.failed} failed`} />
+        <MetricCard label="Review Queue" value={reviewQueue.length} icon="fact_check" detail="Low-confidence extraction pages" />
       </div>
 
-      {/* Bento grid */}
       <div className="grid grid-cols-12 gap-gutter">
-        {/* Quick-start (col 1–8) */}
-        <div className="col-span-12 lg:col-span-8">
+        <section className="col-span-12 xl:col-span-8">
           <div className="mb-md flex justify-between items-end">
-            <h2 className="text-h2 font-h2 text-on-background">Quick-start Analysis</h2>
+            <div>
+              <h2 className="text-h2 font-h2 text-on-background">Staff Work Modes</h2>
+              <p className="text-sm text-slate-500 mt-1">The product stays inside the bank and keeps final decisions with staff.</p>
+            </div>
             <button
+              type="button"
               onClick={() => navigate('/chat')}
               className="font-label-caps text-label-caps text-secondary font-bold hover:underline uppercase"
             >
-              Open Chat →
+              Open Chat
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-            {QUICK_START.map(({ icon, title, desc, prompt }) => (
+            {QUICK_START.map((item) => (
               <button
-                key={title}
-                onClick={() => startChatWith(prompt)}
-                className="text-left p-lg bg-white border border-slate-200 rounded-lg hover:border-secondary transition-colors group"
+                key={item.title}
+                type="button"
+                onClick={() => runQuickStart(item)}
+                className="text-left p-lg bg-white border border-slate-200 rounded-lg hover:border-secondary transition-colors group min-h-40"
               >
                 <div className="flex items-start justify-between mb-md">
                   <div className="p-sm bg-surface-container rounded">
-                    <span className="material-symbols-outlined text-secondary">{icon}</span>
+                    <span className="material-symbols-outlined text-secondary">{item.icon}</span>
                   </div>
                   <span className="material-symbols-outlined text-outline group-hover:text-secondary transition-colors">
                     arrow_forward
                   </span>
                 </div>
-                <h3 className="font-bold text-body-md text-on-surface mb-xs">{title}</h3>
-                <p className="text-body-sm text-outline leading-relaxed">{desc}</p>
+                <h3 className="font-bold text-body-md text-on-surface mb-xs">{item.title}</h3>
+                <p className="text-body-sm text-outline leading-relaxed">{item.desc}</p>
               </button>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Pinned documents (col 9–12) */}
-        <div className="col-span-12 lg:col-span-4">
+        <aside className="col-span-12 xl:col-span-4 space-y-lg">
+          <section>
+            <div className="mb-md flex justify-between items-end">
+              <h2 className="text-h2 font-h2 text-on-background">Operational Queues</h2>
+              <button
+                type="button"
+                onClick={() => navigate('/document-review')}
+                className="text-sm text-outline hover:text-secondary"
+              >
+                Review pages
+              </button>
+            </div>
+            <div className="grid gap-sm">
+              <button
+                type="button"
+                onClick={() => navigate('/documents')}
+                className="text-left p-md bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Long-document analysis</p>
+                    <p className="text-xs text-slate-500">{longDocSummary.total} recent jobs tracked</p>
+                  </div>
+                  <span className="text-2xl font-bold text-slate-900">{longDocSummary.active}</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/document-review')}
+                className="text-left p-md bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Extraction review</p>
+                    <p className="text-xs text-slate-500">OCR, table, layout, stamp, and signature flags</p>
+                  </div>
+                  <span className="text-2xl font-bold text-slate-900">{reviewQueue.length}</span>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-md flex justify-between items-end">
+              <h2 className="text-h2 font-h2 text-on-background">Model Capacity</h2>
+              <button
+                type="button"
+                onClick={() => navigate('/model-lab')}
+                className="text-sm text-outline hover:text-secondary"
+              >
+                Model Lab
+              </button>
+            </div>
+            <CapacityStrip modelStatus={modelStatus} />
+          </section>
+        </aside>
+
+        <section className="col-span-12 xl:col-span-8">
           <div className="mb-md flex justify-between items-end">
-            <h2 className="text-h2 font-h2 text-on-background">Pinned</h2>
-            <span className="material-symbols-outlined text-outline cursor-pointer hover:text-on-surface">push_pin</span>
+            <h2 className="text-h2 font-h2 text-on-background">Recent Long Analysis</h2>
+            <button
+              type="button"
+              onClick={() => navigate('/documents')}
+              className="text-sm text-outline hover:text-secondary"
+            >
+              Open documents
+            </button>
+          </div>
+          {recentJobs.length > 0 ? (
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-lg py-md">Job</th>
+                    <th className="px-lg py-md">Status</th>
+                    <th className="px-lg py-md">Type</th>
+                    <th className="px-lg py-md text-right">Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recentJobs.map((job) => (
+                    <tr key={job.id} className="hover:bg-slate-50">
+                      <td className="px-lg py-md">
+                        <p className="font-semibold text-sm text-slate-900">Document #{job.document_id}</p>
+                        <p className="text-xs text-slate-500 truncate max-w-md">{job.prompt}</p>
+                      </td>
+                      <td className="px-lg py-md">
+                        <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${statusTone(job.status)}`}>
+                          {formatLabel(job.status)}
+                        </span>
+                      </td>
+                      <td className="px-lg py-md text-sm text-slate-600">{formatLabel(job.analysis_type)}</td>
+                      <td className="px-lg py-md text-right text-sm text-slate-500 whitespace-nowrap">
+                        {job.updated_at ? new Date(job.updated_at).toLocaleString() : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="bg-white border border-dashed border-slate-300 rounded-lg p-8 text-center text-sm text-slate-500">
+              No long-document analysis jobs yet. Open the document library to queue one.
+            </div>
+          )}
+        </section>
+
+        <aside className="col-span-12 xl:col-span-4">
+          <div className="mb-md flex justify-between items-end">
+            <h2 className="text-h2 font-h2 text-on-background">Pinned Documents</h2>
+            <span className="material-symbols-outlined text-outline">push_pin</span>
           </div>
           <div className="space-y-sm">
-            {pinnedDocs.length > 0 ? pinnedDocs.map(doc => (
-              <div
+            {pinnedDocs.length > 0 ? pinnedDocs.map((doc) => (
+              <button
                 key={doc.id}
+                type="button"
                 onClick={() => navigate('/documents')}
-                className="p-md bg-white border border-slate-200 border-l-4 border-l-secondary rounded flex items-center gap-md cursor-pointer hover:bg-slate-50 transition-colors"
+                className="w-full text-left p-md bg-white border border-slate-200 border-l-4 border-l-secondary rounded flex items-center gap-md hover:bg-slate-50 transition-colors"
               >
                 <span className="material-symbols-outlined text-secondary">{docIcon(doc.file_type)}</span>
                 <div className="flex-1 overflow-hidden">
                   <div className="font-bold text-body-sm truncate text-on-surface">{doc.file_name}</div>
-                  <div className="font-label-caps text-[10px] text-outline uppercase tracking-wider mt-0.5">
-                    {doc.status === 'approved' ? 'Verified by AI' : `Status: ${doc.status}`}
+                  <div className="font-label-caps text-[10px] text-outline uppercase mt-0.5">
+                    {doc.status === 'approved' ? 'Approved knowledge' : `Status: ${doc.status}`}
                   </div>
                 </div>
-              </div>
+              </button>
             )) : (
               <div className="p-md bg-white border border-slate-200 rounded text-body-sm text-outline text-center py-8">
                 No documents uploaded yet.
-                <button onClick={() => navigate('/documents')} className="block mx-auto mt-2 text-secondary font-medium hover:underline">
-                  Upload your first document →
+                <button type="button" onClick={() => navigate('/documents')} className="block mx-auto mt-2 text-secondary font-medium hover:underline">
+                  Upload document
                 </button>
               </div>
             )}
           </div>
+        </aside>
 
-          {/* Features discovery card */}
-          <div
-            onClick={() => navigate('/features')}
-            className="mt-lg p-lg bg-secondary-container rounded-lg text-white cursor-pointer hover:opacity-90 transition-opacity"
-          >
-            <div className="flex items-center gap-2 mb-sm">
-              <span className="material-symbols-outlined text-on-secondary-container text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                lightbulb
-              </span>
-              <span className="font-label-caps text-[10px] tracking-widest text-on-secondary-container">Explore Features</span>
-            </div>
-            <div className="font-semibold text-body-md text-on-secondary-container">
-              Discover all BankAi capabilities
-            </div>
-            <p className="text-[11px] text-on-secondary-container opacity-70 mt-xs">
-              View detailed documentation of every feature and integration option.
-            </p>
-          </div>
-
-          {/* Trust score card */}
-          <div className="mt-lg p-lg bg-primary-container rounded-lg text-white">
-            <div className="flex items-center gap-2 mb-sm">
-              <span className="material-symbols-outlined text-tertiary-fixed text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                verified
-              </span>
-              <span className="font-label-caps text-[10px] tracking-widest text-on-primary-container">SYSTEM INTEGRITY</span>
-            </div>
-            <div className="text-4xl font-bold font-public-sans">
-              {stats?.trust_score ? `${stats.trust_score}%` : '—'}
-            </div>
-            <p className="text-[11px] text-on-primary-container opacity-70 mt-xs">
-              AI-verified across all processed documents this month.
-            </p>
-          </div>
-        </div>
-
-        {/* Recent sessions (full-width bottom) */}
-        <div className="col-span-12 mt-lg">
+        <section className="col-span-12 mt-lg">
           <div className="mb-md flex justify-between items-end">
             <h2 className="text-h2 font-h2 text-on-background">Recent Sessions</h2>
             <button
+              type="button"
               onClick={() => navigate('/sessions')}
               className="flex items-center gap-1 text-body-sm text-outline hover:text-secondary transition-colors"
             >
-              View full history
+              View history
               <span className="material-symbols-outlined text-[18px]">history</span>
             </button>
           </div>
@@ -241,24 +411,24 @@ export default function Dashboard() {
               <table className="w-full text-left border-collapse">
                 <thead className="bg-slate-900 text-white">
                   <tr>
-                    {['Session Intent', 'Status', 'Documents', 'Timestamp', ''].map(h => (
-                      <th key={h} className="px-lg py-md font-label-caps text-label-caps">{h}</th>
+                    {['Session', 'Status', 'Documents', 'Timestamp', ''].map((heading) => (
+                      <th key={heading} className="px-lg py-md font-label-caps text-label-caps">{heading}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {sessions.map(sess => {
-                    const activeDocs = JSON.parse(sess.active_document_ids_json || '[]');
+                  {sessions.map((session) => {
+                    const activeDocs = parseJson(session.active_document_ids_json, []);
                     return (
                       <tr
-                        key={sess.id}
-                        onClick={() => navigate(`/chat?session=${sess.id}`)}
+                        key={session.id}
+                        onClick={() => navigate(`/chat?session=${session.id}`)}
                         className="hover:bg-slate-50 transition-colors cursor-pointer"
                       >
                         <td className="px-lg py-md">
                           <div className="flex items-center gap-3">
                             <span className="material-symbols-outlined text-outline text-[18px]">chat_bubble_outline</span>
-                            <span className="font-semibold text-body-sm text-on-surface truncate max-w-xs">{sess.title}</span>
+                            <span className="font-semibold text-body-sm text-on-surface truncate max-w-xs">{session.title}</span>
                           </div>
                         </td>
                         <td className="px-lg py-md">
@@ -271,7 +441,7 @@ export default function Dashboard() {
                           {activeDocs.length} file{activeDocs.length !== 1 ? 's' : ''}
                         </td>
                         <td className="px-lg py-md text-body-sm text-outline whitespace-nowrap">
-                          {new Date(sess.created_at).toLocaleString()}
+                          {session.created_at ? new Date(session.created_at).toLocaleString() : '-'}
                         </td>
                         <td className="px-lg py-md text-right">
                           <span className="material-symbols-outlined text-outline hover:text-on-surface cursor-pointer">chevron_right</span>
@@ -287,15 +457,16 @@ export default function Dashboard() {
               <span className="material-symbols-outlined text-slate-300 text-5xl">chat_bubble_outline</span>
               <p className="text-body-md text-outline mt-4">No sessions yet.</p>
               <button
+                type="button"
                 onClick={() => navigate('/chat')}
                 className="mt-3 btn-primary inline-flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-[18px]">add_comment</span>
-                Start your first analysis
+                Start staff chat
               </button>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

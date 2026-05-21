@@ -1,0 +1,32 @@
+{
+  "name": "branch-operations-rag-seed",
+  "description": "Starter RAG evaluation set for branch and operations policy lookup. Replace titles and terms with the bank's approved documents before using as a gate.",
+  "pass_threshold": 0.9,
+  "user_role": "staff_user",
+  "cases": [
+    {
+      "id": "branch-account-opening-documents",
+      "question": "Which documents must branch staff verify before opening a customer account?",
+      "expected_source_titles": ["Account Opening SOP", "KYC Procedure"],
+      "required_citation_terms": ["account", "KYC", "document"],
+      "required_answer_terms": ["verify", "document"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "branch-cash-threshold-escalation",
+      "question": "What should branch staff do when a cash transaction crosses the escalation threshold?",
+      "expected_source_titles": ["Cash Transaction SOP", "AML SOP"],
+      "required_citation_terms": ["cash", "threshold"],
+      "required_answer_terms": ["escalat", "threshold"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "branch-unsupported-crypto-service",
+      "question": "What is the branch procedure for opening a crypto custody account?",
+      "not_found_required": true,
+      "no_general_policy_advice": true
+    }
+  ]
+}

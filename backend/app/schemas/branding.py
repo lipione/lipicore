@@ -5,7 +5,15 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 
-DEFAULT_ALLOWED_MODES = ["ask_knowledge", "analyze_file", "summarize", "draft", "translate", "compare"]
+DEFAULT_ALLOWED_MODES = [
+    "ask_knowledge",
+    "approved_knowledge",
+    "analyze_file",
+    "summarize",
+    "draft",
+    "translate",
+    "compare",
+]
 
 
 class BrandingBase(BaseModel):

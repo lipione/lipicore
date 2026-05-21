@@ -77,15 +77,25 @@ class Settings(BaseSettings):
     LLM_C_MODEL: str = os.getenv("LLM_C_MODEL", "gemma-4-26b-4bit")
     LLM_C_API_KEY: str = os.getenv("LLM_C_API_KEY", "no-key")
 
+    # Vision model endpoint for scanned PDFs, document images, and OCR fallback
+    LLM_VISION_API_BASE: str = os.getenv("LLM_VISION_API_BASE", "http://localhost:8007")
+    LLM_VISION_MODEL: str = os.getenv("LLM_VISION_MODEL", "Qwen/Qwen3-VL-8B-Instruct")
+    LLM_VISION_API_KEY: str = os.getenv("LLM_VISION_API_KEY", "no-key")
+
     LLM_A_MAX_CONCURRENCY: int = int(os.getenv("LLM_A_MAX_CONCURRENCY", "12"))
     LLM_C_MAX_CONCURRENCY: int = int(os.getenv("LLM_C_MAX_CONCURRENCY", "4"))
+    LLM_VISION_MAX_CONCURRENCY: int = int(os.getenv("LLM_VISION_MAX_CONCURRENCY", "2"))
     LLM_USER_MAX_CONCURRENCY: int = int(os.getenv("LLM_USER_MAX_CONCURRENCY", "1"))
     LLM_ADMIN_MAX_CONCURRENCY: int = int(os.getenv("LLM_ADMIN_MAX_CONCURRENCY", "2"))
     LLM_QUEUE_TIMEOUT_SECONDS: float = float(os.getenv("LLM_QUEUE_TIMEOUT_SECONDS", "120"))
     LLM_QUEUE_STALE_SECONDS: float = float(os.getenv("LLM_QUEUE_STALE_SECONDS", "10"))
     LLM_FAST_MAX_TOKENS: int = int(os.getenv("LLM_FAST_MAX_TOKENS", "512"))
     LLM_DEEP_MAX_TOKENS: int = int(os.getenv("LLM_DEEP_MAX_TOKENS", "768"))
+    LLM_VISION_MAX_TOKENS: int = int(os.getenv("LLM_VISION_MAX_TOKENS", "768"))
     LLM_CONTEXT_WINDOW_TOKENS: int = int(os.getenv("LLM_CONTEXT_WINDOW_TOKENS", "8192"))
+    LLM_FAST_CONTEXT_WINDOW_TOKENS: int = int(os.getenv("LLM_FAST_CONTEXT_WINDOW_TOKENS", os.getenv("LLM_CONTEXT_WINDOW_TOKENS", "8192")))
+    LLM_DEEP_CONTEXT_WINDOW_TOKENS: int = int(os.getenv("LLM_DEEP_CONTEXT_WINDOW_TOKENS", os.getenv("LLM_CONTEXT_WINDOW_TOKENS", "8192")))
+    LLM_VISION_CONTEXT_WINDOW_TOKENS: int = int(os.getenv("LLM_VISION_CONTEXT_WINDOW_TOKENS", os.getenv("LLM_CONTEXT_WINDOW_TOKENS", "8192")))
 
     # LLM_D (vllm-d): Qwen3.6 27B for report generation
     LLM_D_API_BASE: str = os.getenv("LLM_D_API_BASE", "http://localhost:8004")

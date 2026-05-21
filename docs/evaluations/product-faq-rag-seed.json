@@ -1,0 +1,32 @@
+{
+  "name": "product-faq-rag-seed",
+  "description": "Starter RAG evaluation set for product FAQ and staff script retrieval.",
+  "pass_threshold": 0.9,
+  "user_role": "staff_user",
+  "cases": [
+    {
+      "id": "product-savings-minimum-balance",
+      "question": "What minimum balance should staff quote for the savings account product?",
+      "expected_source_titles": ["Savings Account Product FAQ", "Retail Product Manual"],
+      "required_citation_terms": ["minimum", "balance"],
+      "required_answer_terms": ["minimum", "balance"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "product-fee-waiver-eligibility",
+      "question": "Who is eligible for the documented account fee waiver?",
+      "expected_source_titles": ["Fee Schedule", "Retail Product Manual"],
+      "required_citation_terms": ["fee", "waiver"],
+      "required_answer_terms": ["eligible", "fee"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "product-unsupported-offer-not-found",
+      "question": "What is the approved staff script for a product campaign that has not been uploaded?",
+      "not_found_required": true,
+      "no_general_policy_advice": true
+    }
+  ]
+}

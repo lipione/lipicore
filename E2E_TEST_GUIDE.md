@@ -4,6 +4,8 @@
 
 This document describes the end-to-end testing setup for verifying that the BankAi system correctly implements **session-aware Retrieval-Augmented Generation (RAG)** where documents uploaded in a chat session are prioritized in responses and properly attributed as sources.
 
+Queued long-document analysis is a separate workflow and is not yet covered by this E2E guide. It should get its own fixture set for large PDFs, scanned PDFs, and Excel workbooks because it depends on background RQ jobs and longer worker/model timing.
+
 ## Test Objectives
 
 1. **Verify document upload workflow**: Users can upload documents to a chat session
@@ -269,6 +271,7 @@ To run these tests in CI:
 - [ ] Test document deletion and re-upload
 - [ ] Test switching between multiple sessions
 - [ ] Test concurrent document uploads
+- [ ] Test queued long-document analysis create/poll/result flow
 - [ ] Performance benchmarking tests
 - [ ] Add visual regression tests with screenshots
 - [ ] Test multi-language support (English and Nepali)

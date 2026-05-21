@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-05-21
+
+- Added queued long-document analysis for heavy OCR, large PDFs, and detailed Excel/PDF review:
+  - New `long_document_analysis_job` table and Alembic migration.
+  - New `/api/long-document-analysis` create/list/get endpoints.
+  - Redis/RQ worker job that extracts content, packs relevant excerpts, calls the analyst model, and stores the result.
+  - Document Library UI for queueing analysis, polling job status, and viewing completed results.
+  - Staff users see only their own analysis jobs; bank admin/compliance/document reviewer roles can view bank-wide jobs.
+- Updated documentation for product positioning, architecture, deployment, sizing, security, pilot scope, demo flow, and sales-safe large-file claims.
+- Verification:
+  - Backend workflow/document/long-analysis slice: `14 passed`.
+  - Frontend build passed.
+  - Frontend lint passed with 0 errors and existing e2e console warnings only.
+  - `git diff --check` passed.
+
 ## 2026-05-19
 
 - Upgraded BankAi into a stronger airgapped bank AI appliance baseline:

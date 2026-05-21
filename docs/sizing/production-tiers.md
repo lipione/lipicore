@@ -12,6 +12,7 @@ This document defines conservative deployment tiers. These are capacity targets,
 - Model queue timeout: `LLM_QUEUE_TIMEOUT_SECONDS=120`; stale queue tokens are pruned after `LLM_QUEUE_STALE_SECONDS=10`.
 - Upload limits: Document Library `50 MB`, AI Tasks `20 MB`.
 - Chat context: 8192-token model context, with RAG top chunks kept intentionally small.
+- Queued long-document analysis: uses Redis/RQ plus the deep/analyst model; default OCR cap `OCR_MAX_PAGES=200`, job timeout `INGESTION_JOB_TIMEOUT_SECONDS=1800`, and deep context `LLM_DEEP_CONTEXT_WINDOW_TOKENS=8192`.
 
 ## Measured Test-Server Evidence
 
@@ -34,6 +35,7 @@ Use for one department or one controlled bank pilot.
 - Storage: single Postgres, Qdrant, Redis, and object/file storage with daily backups.
 - Availability posture: not HA; planned maintenance acceptable.
 - Proof required: 25-user Locust run with low API error rate and acceptable chat latency.
+- Long-document guidance: allow only a small number of concurrent heavy OCR/PDF/XLS jobs until worker memory and deep-model queue time are measured.
 - Current evidence: 20 separate streaming staff completed with no failures on the test server.
 
 ## Tier 2: Department
@@ -48,6 +50,7 @@ Use for a real department rollout such as customer care, compliance, or credit o
 - Storage: backed-up Postgres, Qdrant snapshots, Redis persistence, monitored disk growth.
 - Operations: uptime monitoring, model health checks, queue-time dashboards, and weekly audit review.
 - Proof required: 50-user Locust run plus representative document ingestion test.
+- Long-document guidance: test a representative queue of clean PDFs, scanned PDFs, and Excel workbooks before promising same-day bulk onboarding.
 - Current evidence: 100 active staff API smoke completed with no failures; 40 simultaneous streaming staff completed but with slow tail latency.
 
 ## Tier 3: Whole Bank
@@ -62,6 +65,7 @@ Use only after department-level measurements prove demand and capacity.
 - Storage: HA Postgres, Qdrant replication/snapshots, Redis HA, backup restore tests, and disaster recovery runbooks.
 - Operations: centralized logs, metrics, alerting, patch process, rollback process, and bank IT runbook.
 - Proof required: 100-user Locust run, ingestion stress test, backup restore test, and model queue timeout evidence.
+- Long-document guidance: use a separate worker pool, queue-depth alerting, and deep-model capacity policy so heavy analysis does not starve interactive staff chat.
 - Deployment reference: `deploy/ha/README.md`.
 - Current gap: whole-bank streaming concurrency has not been proven. More fast-model replicas or stricter queue policy are required before claiming instant AI for 100+ simultaneous staff.
 
@@ -70,6 +74,6 @@ Use only after department-level measurements prove demand and capacity.
 - Large files may upload but extraction, chunking, embedding, and indexing still take time.
 - Uploads now enqueue ingestion work; users should expect queued/processing states instead of instant indexing.
 - Scanned PDFs, complex tables, merged cells, charts, handwriting, seals, and signatures need stronger OCR/table extraction work before strong claims.
-- AI Tasks now shortens oversized extracted content before model calls; it is safer, but it is not a true long-document reasoning pipeline.
+- Heavy OCR, large PDF, and Excel analysis should use queued long-document jobs. The workflow is safer than sending oversized text directly to chat, but it still depends on extraction quality and deep-model capacity.
 - Current architecture is not high availability by default.
 - Capacity numbers must cite the specific `tests/load` run, server profile, and model settings used.

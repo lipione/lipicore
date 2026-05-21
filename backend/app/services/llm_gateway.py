@@ -11,11 +11,15 @@ from ..core.config import settings
 @dataclass(frozen=True)
 class ModelProfile:
     key: str
+    label: str
     api_base: str
     model: str
     api_key: str
     max_tokens: int
+    context_window_tokens: int
     timeout_seconds: float
+    capabilities: tuple[str, ...] = ()
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -172,10 +176,12 @@ async def _redis_client():
 _model_gates = {
     "fast": _AdmissionGate(settings.LLM_A_MAX_CONCURRENCY),
     "deep": _AdmissionGate(settings.LLM_C_MAX_CONCURRENCY),
+    "vision": _AdmissionGate(settings.LLM_VISION_MAX_CONCURRENCY),
 }
 _redis_model_gates = {
     "fast": _RedisAdmissionGate("model:fast", settings.LLM_A_MAX_CONCURRENCY),
     "deep": _RedisAdmissionGate("model:deep", settings.LLM_C_MAX_CONCURRENCY),
+    "vision": _RedisAdmissionGate("model:vision", settings.LLM_VISION_MAX_CONCURRENCY),
 }
 _user_gates: dict[str, _AdmissionGate] = {}
 _redis_user_gates: dict[str, _RedisAdmissionGate] = {}
@@ -209,26 +215,111 @@ async def _redis_user_gate(user_id: int, role: str | None) -> _RedisAdmissionGat
         return gate
 
 
-def resolve_model_profile(model_name: str | None = None) -> ModelProfile:
-    requested = (model_name or "").strip().lower()
-    if requested in {"gemma-4-26b-4bit", "gemma-4-26b", "deep", "analysis"}:
-        return ModelProfile(
+def build_runtime_model_registry() -> dict[str, ModelProfile]:
+    return {
+        "fast": ModelProfile(
+            key="fast",
+            label="Fast Staff Chat",
+            api_base=settings.LLM_A_API_BASE,
+            model=settings.LLM_A_MODEL,
+            api_key=settings.LLM_A_API_KEY,
+            max_tokens=settings.LLM_FAST_MAX_TOKENS,
+            context_window_tokens=settings.LLM_FAST_CONTEXT_WINDOW_TOKENS,
+            timeout_seconds=300.0,
+            capabilities=("fast_chat", "staff_drafting"),
+        ),
+        "deep": ModelProfile(
             key="deep",
+            label="Analyst / Approved Knowledge",
             api_base=settings.LLM_C_API_BASE,
             model=settings.LLM_C_MODEL,
             api_key=settings.LLM_C_API_KEY,
             max_tokens=settings.LLM_DEEP_MAX_TOKENS,
+            context_window_tokens=settings.LLM_DEEP_CONTEXT_WINDOW_TOKENS,
             timeout_seconds=420.0,
-        )
+            capabilities=("analyst", "approved_knowledge", "compliance_review", "loan_support"),
+        ),
+        "vision": ModelProfile(
+            key="vision",
+            label="Vision OCR / Document Images",
+            api_base=settings.LLM_VISION_API_BASE,
+            model=settings.LLM_VISION_MODEL,
+            api_key=settings.LLM_VISION_API_KEY,
+            max_tokens=settings.LLM_VISION_MAX_TOKENS,
+            context_window_tokens=settings.LLM_VISION_CONTEXT_WINDOW_TOKENS,
+            timeout_seconds=420.0,
+            capabilities=("vision", "vision_ocr", "scanned_pdf", "table_image", "stamp_signature_detection"),
+        ),
+    }
 
-    return ModelProfile(
-        key="fast",
-        api_base=settings.LLM_A_API_BASE,
-        model=settings.LLM_A_MODEL,
-        api_key=settings.LLM_A_API_KEY,
-        max_tokens=settings.LLM_FAST_MAX_TOKENS,
-        timeout_seconds=300.0,
-    )
+
+def model_registry_snapshot() -> dict[str, dict]:
+    return {
+        key: {
+            "key": profile.key,
+            "label": profile.label,
+            "api_base": profile.api_base,
+            "model": profile.model,
+            "max_tokens": profile.max_tokens,
+            "context_window_tokens": profile.context_window_tokens,
+            "timeout_seconds": profile.timeout_seconds,
+            "capabilities": list(profile.capabilities),
+            "enabled": profile.enabled,
+        }
+        for key, profile in build_runtime_model_registry().items()
+    }
+
+
+def select_model_key_for_workflow(workflow: str | None) -> str:
+    requested = (workflow or "").strip().lower()
+    if requested in {
+        "approved_knowledge",
+        "analyze_file",
+        "compare",
+        "compliance_review",
+        "loan_support",
+        "lending",
+        "analyst",
+        "vision",
+        "vision_ocr",
+        "scanned_pdf",
+        "document_image",
+        "image_ocr",
+        "ocr",
+    }:
+        return "vision" if requested in {"vision", "vision_ocr", "scanned_pdf", "document_image", "image_ocr", "ocr"} else "deep"
+    return "fast"
+
+
+def resolve_model_profile(model_name: str | None = None) -> ModelProfile:
+    requested = (model_name or "").strip().lower()
+    registry = build_runtime_model_registry()
+    aliases = {
+        "gemma-4": "fast",
+        settings.LLM_A_MODEL.strip().lower(): "fast",
+        "gemma-4-26b-4bit": "deep",
+        "gemma-4-26b": "deep",
+        settings.LLM_C_MODEL.strip().lower(): "deep",
+        "analysis": "deep",
+        "analyst": "deep",
+        "approved_knowledge": "deep",
+        "analyze_file": "deep",
+        "compare": "deep",
+        "compliance_review": "deep",
+        "loan_support": "deep",
+        "vision": "vision",
+        "vision_ocr": "vision",
+        "scanned_pdf": "vision",
+        "document_image": "vision",
+        "image_ocr": "vision",
+        "ocr": "vision",
+        "qwen3-vl": "vision",
+        "qwen3-vl-8b": "vision",
+        "qwen/qwen3-vl-8b-instruct": "vision",
+        settings.LLM_VISION_MODEL.strip().lower(): "vision",
+    }
+    key = requested if requested in registry else aliases.get(requested, "fast")
+    return registry[key]
 
 
 async def model_status() -> dict:

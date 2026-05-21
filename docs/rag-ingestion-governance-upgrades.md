@@ -15,7 +15,12 @@
 - AI Tasks now includes prompt readiness and review metadata so staff understand what context is being used.
 - Scanned PDF fallback now OCRs up to `OCR_MAX_PAGES` instead of only the first 3 pages.
 - PDF table extraction uses `pdfplumber` when available.
-- Excel extraction preserves sheet names, merged ranges, and cell coordinates.
+- Excel extraction preserves sheet names, workbook dimensions, merged ranges, named table ranges, formulas, cached values, and cell coordinates.
+- Ingestion creates page-level extraction review records so low OCR/table/layout confidence can appear in the Document Review queue.
+- File analysis now packs relevant page/section excerpts into the model context instead of truncating to the first few thousand characters.
+- Heavy OCR and very large Excel/PDF analysis now runs as queued long-document jobs with status polling, relevance-based excerpt packing, and stored results for staff review.
+- Detailed workflow reference: `docs/long-document-analysis.md`.
+- Fast and analyst model routes now have separate context-window settings: `LLM_FAST_CONTEXT_WINDOW_TOKENS` and `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
 - HA deployment reference under `deploy/ha`.
 - Docker Compose health checks cover Redis, backend, frontend, and nginx.
 - `deploy/upgrade.sh` provides health-gated upgrades, optional backend tests, internal health checks, and public health checks.
@@ -26,5 +31,7 @@
 - Citation verification is lexical overlap, not a formal natural-language entailment model.
 - OCR still depends on host image/PDF tooling and vision model quality.
 - Complex charts, handwriting, seals, and signatures are still weak.
+- Larger context windows require a deployed model endpoint that actually supports the configured context length.
+- Queued long-document analysis reduces chat blocking, but it still depends on OCR quality, worker capacity, deep-model queue load, and selected-excerpt relevance.
 - Whole-bank HA still requires real external HA data services, not just Compose restart policies.
 - Dependency pinning is still needed before release; current unpinned Python dependencies can pull very large Torch/CUDA wheels.

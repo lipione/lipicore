@@ -10,7 +10,7 @@ const DEFAULT_BRANDING = {
   welcome_message: 'Ask approved bank knowledge, analyze internal files, and draft staff-ready answers.',
   support_contact: null,
   disclaimer: 'Internal staff use only. Verify critical outputs against approved source documents.',
-  allowed_modes: ['ask_knowledge', 'analyze_file', 'summarize', 'draft', 'translate', 'compare'],
+  allowed_modes: ['ask_knowledge', 'approved_knowledge', 'analyze_file', 'summarize', 'draft', 'translate', 'compare'],
 };
 
 const BrandingContext = createContext(DEFAULT_BRANDING);

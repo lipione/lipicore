@@ -66,6 +66,39 @@ def _format_missing_terms(terms: list[str], text: str) -> str:
     return ", ".join(missing)
 
 
+POLICY_ADVICE_TERMS = (
+    "approve",
+    "approval",
+    "reject",
+    "decline",
+    "policy",
+    "required",
+    "must",
+    "should",
+    "compliance",
+    "regulation",
+    "directive",
+    "escalate",
+    "supervisor",
+    "customer",
+    "staff",
+)
+
+
+def _has_verified_citations(sources: list[dict[str, Any]]) -> bool:
+    if not sources:
+        return False
+    statuses = [str(source.get("citation_verification") or "") for source in sources]
+    return bool(statuses) and all(status == "supported" for status in statuses)
+
+
+def _looks_like_policy_advice(answer: str) -> bool:
+    normalized = _normalize(answer)
+    if not normalized or normalized == _normalize(NOT_FOUND_RESPONSE):
+        return False
+    return any(_contains_term(normalized, term) for term in POLICY_ADVICE_TERMS)
+
+
 def evaluate_rag_cases(
     *,
     cases: list[Any],
@@ -84,7 +117,10 @@ def evaluate_rag_cases(
         expected_source_titles = list(_value(case, "expected_source_titles", []) or [])
         citation_terms = list(_value(case, "required_citation_terms", []) or [])
         answer_terms = list(_value(case, "required_answer_terms", []) or [])
-        expect_not_found = bool(_value(case, "expect_not_found", False))
+        expect_not_found = bool(_value(case, "expect_not_found", False) or _value(case, "not_found_required", False))
+        source_required = bool(_value(case, "source_required", False))
+        citation_required = bool(_value(case, "citation_required", False))
+        no_general_policy_advice = bool(_value(case, "no_general_policy_advice", False))
         active_document_ids = _value(case, "active_document_ids", None)
         session_id = _value(case, "session_id", None)
 
@@ -109,6 +145,12 @@ def evaluate_rag_cases(
             for source in sources or []
             if _normalize(source.get("document_title") or source.get("title") or source.get("file_name"))
         }
+
+        if source_required and not sources:
+            failures.append("expected source-backed answer")
+        if citation_required and not _has_verified_citations(sources or []):
+            failures.append("expected verified citations")
+
         id_recall = _recall(source_ids, expected_doc_ids)
         title_recall = _normalized_recall(source_titles, expected_source_titles)
         source_recall = min(id_recall, title_recall)
@@ -131,6 +173,8 @@ def evaluate_rag_cases(
         answer_term_recall = _term_recall(normalized_answer, answer_terms)
         if answer_term_recall < 1:
             failures.append(f"missing answer terms: {_format_missing_terms(answer_terms, normalized_answer)}")
+        if no_general_policy_advice and not sources and _looks_like_policy_advice(answer):
+            failures.append("general policy advice without sources")
 
         not_found_passed = None
         if expect_not_found:

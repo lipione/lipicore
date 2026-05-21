@@ -1,0 +1,146 @@
+{
+  "version": "2026-05-21",
+  "policy": "Curated model matrix for LipiCore bank-appliance testing. Do not download every model blindly; run remote inventory first, confirm GPU memory and disk budget, then test one tier at a time.",
+  "candidates": [
+    {
+      "key": "current-gemma-4-e4b",
+      "model_id": "/data/models/llm/gemma-4-E4B-it",
+      "tier": "fast_chat",
+      "runtime_priority": ["vllm"],
+      "min_vram_gb_estimate": 8,
+      "context_tokens_claim": 8192,
+      "test_reason": "Current fast-tier baseline from docker-compose; needed for regression comparison.",
+      "risk_notes": "Only useful if current server model path exists and vLLM starts cleanly."
+    },
+    {
+      "key": "current-gemma-4-26b-awq",
+      "model_id": "/data/models/llm/gemma-4-26b-a4b-awq-4bit",
+      "tier": "analyst",
+      "runtime_priority": ["vllm"],
+      "min_vram_gb_estimate": 24,
+      "context_tokens_claim": 8192,
+      "test_reason": "Current deep-tier baseline for policy reasoning, document analysis, and citation quality.",
+      "risk_notes": "Queue pressure and first-token latency must be measured under concurrency."
+    },
+    {
+      "key": "qwen3-30b-a3b-instruct-2507",
+      "model_id": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "tier": "long_context",
+      "runtime_priority": ["sglang", "vllm"],
+      "min_vram_gb_estimate": 48,
+      "context_tokens_claim": 262144,
+      "test_reason": "Strong long-context candidate for large policies, circular bundles, and report synthesis.",
+      "risk_notes": "Large context can exhaust KV cache quickly; benchmark 32K, 64K, and 128K before any 262K claim."
+    },
+    {
+      "key": "qwen3-30b-a3b-instruct-2507-fp8",
+      "model_id": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+      "tier": "long_context",
+      "runtime_priority": ["sglang", "vllm"],
+      "min_vram_gb_estimate": 32,
+      "context_tokens_claim": 262144,
+      "test_reason": "Lower-memory long-context variant to test if the remote GPU cannot serve full precision comfortably.",
+      "risk_notes": "FP8 runtime support and quality must be validated on the exact GPU and driver."
+    },
+    {
+      "key": "gemma-3-27b-it",
+      "model_id": "google/gemma-3-27b-it",
+      "tier": "analyst",
+      "runtime_priority": ["vllm"],
+      "min_vram_gb_estimate": 32,
+      "context_tokens_claim": 131072,
+      "test_reason": "Google official docs list Gemma 3 27B with 128K input; useful analyst comparison against current Gemma tier.",
+      "risk_notes": "License, model availability, and exact runtime support must be checked before bank packaging."
+    },
+    {
+      "key": "gemma-3-12b-it",
+      "model_id": "google/gemma-3-12b-it",
+      "tier": "fast_chat",
+      "runtime_priority": ["vllm"],
+      "min_vram_gb_estimate": 16,
+      "context_tokens_claim": 131072,
+      "test_reason": "Potential higher-quality fast tier for staff chat if latency remains acceptable.",
+      "risk_notes": "Needs Nepali and not-found discipline tests before replacing current fast tier."
+    },
+    {
+      "key": "mistral-small-4",
+      "model_id": "mistralai/Mistral-Small-4",
+      "tier": "analyst",
+      "runtime_priority": ["vllm", "sglang"],
+      "min_vram_gb_estimate": 24,
+      "context_tokens_claim": 32768,
+      "test_reason": "Candidate for concise policy reasoning and drafting; include only after license/runtime validation.",
+      "risk_notes": "Exact public model identifier and deployment terms must be verified before download."
+    },
+    {
+      "key": "qwen3-vl-8b-instruct",
+      "model_id": "Qwen/Qwen3-VL-8B-Instruct",
+      "tier": "vision",
+      "runtime_priority": ["vllm"],
+      "min_vram_gb_estimate": 16,
+      "context_tokens_claim": 8192,
+      "test_reason": "Primary LipiCore vision/OCR route for scanned PDFs, document images, table screenshots, and stamp/signature-like detection.",
+      "risk_notes": "Must pass OCR/table/Nepali document image benchmarks before bank-facing scanned-document claims."
+    },
+    {
+      "key": "qwen2-5-vl-7b-instruct",
+      "model_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "tier": "vision",
+      "runtime_priority": ["vllm"],
+      "min_vram_gb_estimate": 16,
+      "context_tokens_claim": 8192,
+      "test_reason": "Fallback vision/OCR route if Qwen3-VL 8B has runtime or quality issues on the target server.",
+      "risk_notes": "Older model; benchmark against Qwen3-VL before selecting for bank deployment."
+    },
+    {
+      "key": "llama-4-scout",
+      "model_id": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+      "tier": "vision",
+      "runtime_priority": ["vllm", "sglang"],
+      "min_vram_gb_estimate": 48,
+      "context_tokens_claim": 1000000,
+      "test_reason": "Vision and long-context candidate for scanned PDFs and document images.",
+      "risk_notes": "License gating, very large context memory, and local runtime behavior must be validated first."
+    },
+    {
+      "key": "bge-m3",
+      "model_id": "BAAI/bge-m3",
+      "tier": "embedding",
+      "runtime_priority": ["sentence-transformers"],
+      "min_vram_gb_estimate": 2,
+      "context_tokens_claim": 8192,
+      "test_reason": "Multilingual embedding baseline with long input context for English/Nepali retrieval experiments.",
+      "risk_notes": "Embedding dimension changes require Qdrant collection migration or a parallel collection."
+    },
+    {
+      "key": "jina-embeddings-v3",
+      "model_id": "jinaai/jina-embeddings-v3",
+      "tier": "embedding",
+      "runtime_priority": ["sentence-transformers"],
+      "min_vram_gb_estimate": 2,
+      "context_tokens_claim": 8192,
+      "test_reason": "Multilingual long-context embedding comparison for bank policy and Nepali retrieval.",
+      "risk_notes": "Requires trust_remote_code in some setups; validate security posture before airgapped packaging."
+    },
+    {
+      "key": "qwen3-embedding-0.6b",
+      "model_id": "Qwen/Qwen3-Embedding-0.6B",
+      "tier": "embedding",
+      "runtime_priority": ["sentence-transformers"],
+      "min_vram_gb_estimate": 2,
+      "context_tokens_claim": 8192,
+      "test_reason": "Small retrieval candidate for constrained bank appliances.",
+      "risk_notes": "Must compare recall@5 and Nepali exact-term retrieval against bge-m3."
+    },
+    {
+      "key": "qwen3-reranker-0.6b",
+      "model_id": "Qwen/Qwen3-Reranker-0.6B",
+      "tier": "reranker",
+      "runtime_priority": ["transformers"],
+      "min_vram_gb_estimate": 2,
+      "context_tokens_claim": 8192,
+      "test_reason": "Reranking candidate to improve citation precision without changing generation model.",
+      "risk_notes": "Reranker latency must be measured under RAG concurrency."
+    }
+  ]
+}

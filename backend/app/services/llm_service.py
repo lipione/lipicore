@@ -1,15 +1,16 @@
 """
-LLM service — two vLLM endpoints (OpenAI-compatible /v1/chat/completions).
+LLM service — OpenAI-compatible vLLM endpoints.
 
-LLM A: primary — RAG answers, complex reasoning, long-form generation
-LLM B: secondary — fast tasks: summarize, translate, draft, classify
+LLM A: fast staff chat and general tasks
+LLM C: analyst / approved-knowledge work through the gateway
+LLM Vision: scanned PDFs, document images, and OCR fallback
 
-Both are called via the same OpenAI-compatible interface so swapping models
+All are called via the same OpenAI-compatible interface so swapping models
 requires only .env changes.
 """
 import httpx
 from ..core.config import settings
-from .llm_gateway import reserve_model
+from .llm_gateway import reserve_model, resolve_model_profile
 
 
 # ── Shared HTTP helper ────────────────────────────────────────────────────────
@@ -63,16 +64,21 @@ def call_llm(prompt: str, system: str | None = None) -> str:
 
 
 def call_vision_llm(prompt: str, image_b64: str) -> str:
-    """Vision call via LLM A (expects a vision-capable model)."""
-    url = f"{settings.LLM_A_API_BASE}/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {settings.LLM_A_API_KEY}"}
+    """Vision call via the configured vision model endpoint."""
+    profile = resolve_model_profile("vision")
+    url = f"{profile.api_base}/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {profile.api_key}"}
     messages = [{"role": "user", "content": [
         {"type": "text", "text": prompt},
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
     ]}]
     try:
-        r = httpx.post(url, json={"model": settings.LLM_A_MODEL, "messages": messages},
-                       headers=headers, timeout=300.0)
+        r = httpx.post(
+            url,
+            json={"model": profile.model, "messages": messages, "max_tokens": profile.max_tokens},
+            headers=headers,
+            timeout=profile.timeout_seconds,
+        )
         r.raise_for_status()
         return _parse_response(r.json())
     except Exception as e:
@@ -86,9 +92,10 @@ async def async_call_llm_a(
     system: str | None = None,
     user_id: int | None = None,
     role: str | None = None,
+    model_name: str | None = None,
 ) -> str:
     try:
-        async with reserve_model(user_id=user_id or 0, role=role, model_name=settings.LLM_A_MODEL) as lease:
+        async with reserve_model(user_id=user_id or 0, role=role, model_name=model_name or settings.LLM_A_MODEL) as lease:
             profile = lease.profile
             url = f"{profile.api_base}/v1/chat/completions"
             headers = {"Authorization": f"Bearer {profile.api_key}"}
@@ -128,23 +135,30 @@ async def async_call_llm(
     system: str | None = None,
     user_id: int | None = None,
     role: str | None = None,
+    model_name: str | None = None,
 ) -> str:
     """Default async — routes to LLM A. Kept for backward compat."""
-    return await async_call_llm_a(prompt, system, user_id=user_id, role=role)
+    return await async_call_llm_a(prompt, system, user_id=user_id, role=role, model_name=model_name)
 
 
 async def async_call_vision_llm(prompt: str, image_b64: str) -> str:
-    url = f"{settings.LLM_A_API_BASE}/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {settings.LLM_A_API_KEY}"}
     messages = [{"role": "user", "content": [
         {"type": "text", "text": prompt},
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
     ]}]
     try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(url, json={"model": settings.LLM_A_MODEL, "messages": messages},
-                                  headers=headers, timeout=300.0)
-            r.raise_for_status()
-            return _parse_response(r.json())
+        async with reserve_model(user_id=0, role=None, model_name="vision") as lease:
+            profile = lease.profile
+            url = f"{profile.api_base}/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {profile.api_key}"}
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    url,
+                    json={"model": profile.model, "messages": messages, "max_tokens": profile.max_tokens},
+                    headers=headers,
+                    timeout=profile.timeout_seconds,
+                )
+                r.raise_for_status()
+                return _parse_response(r.json())
     except Exception as e:
         return f"Failed to analyze image. ({e})"

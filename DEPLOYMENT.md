@@ -24,6 +24,10 @@ cp .env.example .env
 | `LLM_A_API_BASE` | Fast vLLM OpenAI-compatible endpoint base URL | `http://vllm-b:8000` |
 | `LLM_C_API_BASE` | Deep vLLM OpenAI-compatible endpoint base URL | `http://vllm-c:8000` |
 | `REDIS_URL` | Model admission-control Redis URL | `redis://redis:6379/0` |
+| `INGESTION_JOB_TIMEOUT_SECONDS` | Timeout for ingestion and queued long-document jobs | `1800` |
+| `INGESTION_WORKER_CONCURRENCY` | Worker concurrency for ingestion and long-document analysis | `1` for pilots |
+| `OCR_MAX_PAGES` | Max pages for scanned-PDF OCR fallback | `200` |
+| `LLM_DEEP_CONTEXT_WINDOW_TOKENS` | Context budget for queued long-document analysis | Match deployed deep model |
 
 ---
 
@@ -89,4 +93,5 @@ server {
 2.  **Firewall:** Only allow traffic on port 443 (HTTPS) and port 22 (SSH).
 3.  **MinIO:** Configure MinIO with a private bucket and rotate access keys regularly.
 4.  **RAG Evaluation:** Run `/evaluations` before customer demos and after changes to ingestion, prompts, embeddings, retrieval, or models.
-5.  **HA Reality:** Single-host Docker Compose is not a high-availability architecture. Use `deploy/ha/README.md` for whole-bank planning.
+5.  **Long-Document Analysis:** Queue heavy OCR/PDF/XLS jobs through Document Library and monitor Redis/worker/deep-model load. Do not promise instant large-file turnaround without evidence.
+6.  **HA Reality:** Single-host Docker Compose is not a high-availability architecture. Use `deploy/ha/README.md` for whole-bank planning.

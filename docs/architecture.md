@@ -11,7 +11,8 @@ The Bank's Own LLM architecture is designed around isolation, security, and the 
 6. **Redis:** Admission-control state for local model concurrency and RQ-backed document ingestion.
 7. **LLM Engine:** Local vLLM model servers exposed through OpenAI-compatible endpoints.
 8. **Ingestion Worker:** Extracts text/tables/OCR output, chunks content, embeds chunks, and indexes PostgreSQL/Qdrant outside the API process.
-9. **Evaluation Center:** Frontend and API workflow for running bank-specific RAG quality tests.
+9. **Long-Document Analysis Jobs:** Redis/RQ-backed background jobs for heavy OCR, large PDFs, and detailed Excel/PDF review.
+10. **Evaluation Center:** Frontend and API workflow for running bank-specific RAG quality tests.
 
 ## Data Flow (Chat)
 1. User submits query.
@@ -34,6 +35,19 @@ The Bank's Own LLM architecture is designed around isolation, security, and the 
 6. Chunks are written to PostgreSQL and Qdrant with `bank_id`, document lifecycle, document scope, and permission metadata.
 7. The UI shows queued, extracting, embedding, indexing, ready, or failed status.
 
+## Data Flow (Queued Long-Document Analysis)
+
+1. User opens a ready/indexed/approved document in the Document Library and chooses `Queue analysis`.
+2. Backend validates bank, role, document scope, document lifecycle, and job ownership.
+3. Backend stores a `long_document_analysis_job` row and enqueues work on Redis/RQ.
+4. The worker extracts PDF text/tables, OCR output, spreadsheet sheet/cell metadata, or presentation text using the same ingestion extraction layer.
+5. `build_large_file_prompt` selects relevant page/sheet excerpts within the configured deep-model context budget.
+6. The analyst model generates a staff-reviewable result using only selected excerpts.
+7. PostgreSQL stores progress, result text, errors, and excerpt-packing metadata.
+8. The UI polls `GET /api/long-document-analysis` and shows queued, processing, packing context, generating, completed, or failed status.
+
+See `docs/long-document-analysis.md` for API details, access rules, and operating limits.
+
 ## Trust And Evaluation
 
 - Sources are shown only when they pass relevance and access filters.
@@ -45,6 +59,6 @@ The Bank's Own LLM architecture is designed around isolation, security, and the 
 ## Current Limits
 
 - Citation verification is lexical overlap, not a formal entailment model.
-- Long, broad multi-document answers still need map-reduce or multi-step retrieval improvements.
+- Long, broad multi-document answers should use the queued long-document workflow; true cross-document map-reduce synthesis still needs more work.
 - Scanned, handwritten, chart-heavy, seal-heavy, and signature-heavy files remain weak.
 - Single-host Compose is a pilot architecture. Whole-bank deployment needs HA PostgreSQL, object storage, vector storage, Redis, backend replicas, and inference redundancy.

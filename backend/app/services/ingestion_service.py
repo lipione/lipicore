@@ -1,6 +1,7 @@
 import os
 import uuid
 import re
+import json
 from pypdf import PdfReader
 from docx import Document as DocxDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -27,6 +28,74 @@ def _extract_section_label(text: str | None) -> str | None:
     if not match:
         return None
     return " ".join(match.group(0).strip().split())[:80]
+
+
+def _page_payload(
+    *,
+    page_number: int | None,
+    text: str,
+    extraction_confidence: float | None = None,
+    ocr_confidence: float | None = None,
+    table_confidence: float | None = None,
+    page_bbox_json: str | None = None,
+) -> dict:
+    return {
+        "page_number": page_number,
+        "text": text,
+        "extraction_confidence": extraction_confidence,
+        "ocr_confidence": ocr_confidence,
+        "table_confidence": table_confidence,
+        "page_bbox_json": page_bbox_json,
+    }
+
+
+def _extract_xlsx_pages(file_path: str) -> list[dict]:
+    from openpyxl import load_workbook
+
+    formula_wb = load_workbook(file_path, read_only=False, data_only=False)
+    value_wb = load_workbook(file_path, read_only=False, data_only=True)
+    pages = []
+    try:
+        for sheet in formula_wb.worksheets:
+            value_sheet = value_wb[sheet.title]
+            sheet_lines = [f"\n--- Sheet: {sheet.title} ---"]
+            sheet_lines.append(f"Dimension: {sheet.calculate_dimension()}")
+            if sheet.merged_cells.ranges:
+                merged_ranges = ", ".join(str(cell_range) for cell_range in sheet.merged_cells.ranges)
+                sheet_lines.append(f"Merged ranges: {merged_ranges}")
+            if sheet.tables:
+                table_parts = []
+                for name, table in sheet.tables.items():
+                    ref = getattr(table, "ref", table)
+                    table_parts.append(f"{name}={ref}")
+                tables = ", ".join(table_parts)
+                sheet_lines.append(f"Tables: {tables}")
+            formula_lines = []
+            for row in sheet.iter_rows():
+                cells = []
+                for cell in row:
+                    if cell.value is None:
+                        continue
+                    value = value_sheet[cell.coordinate].value
+                    if isinstance(cell.value, str) and cell.value.startswith("="):
+                        formula_lines.append(f"{cell.coordinate} formula={cell.value} cached={value}")
+                    cells.append(f"{cell.coordinate}={value if value is not None else cell.value}")
+                if cells:
+                    sheet_lines.append(" | ".join(cells))
+            if formula_lines:
+                sheet_lines.append("Formulas:")
+                sheet_lines.extend(formula_lines)
+            sheet_text = "\n".join(sheet_lines) + "\n"
+            pages.append(_page_payload(
+                page_number=None,
+                text=sheet_text,
+                extraction_confidence=0.98,
+                table_confidence=0.9,
+            ))
+        return pages
+    finally:
+        formula_wb.close()
+        value_wb.close()
 
 
 def extract_pages(file_path: str, file_type: str) -> list[dict]:
@@ -56,7 +125,12 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
                             page_parts.append(f"Row {row_index}: " + " | ".join(values))
                     combined = "\n".join(part for part in page_parts if part.strip())
                     if combined.strip():
-                        pages.append({"page_number": index, "text": combined})
+                        pages.append(_page_payload(
+                            page_number=index,
+                            text=combined,
+                            extraction_confidence=0.94 if page_text.strip() else 0.86,
+                            table_confidence=0.84 if tables else None,
+                        ))
                         text += combined + "\n"
         except Exception:
             pass
@@ -72,7 +146,11 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
                 for index, page in enumerate(reader.pages, start=1):
                     page_text = page.extract_text()
                     if page_text:
-                        pages.append({"page_number": index, "text": page_text})
+                        pages.append(_page_payload(
+                            page_number=index,
+                            text=page_text,
+                            extraction_confidence=0.78,
+                        ))
                         text += page_text + "\n"
 
             # If PDF has no extractable text (scanned/image-based), fall back to vision OCR
@@ -89,7 +167,12 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
                             "Extract all text from this document image. Be thorough and preserve formatting.",
                             img_b64
                         )
-                        pages.append({"page_number": index, "text": desc})
+                        pages.append(_page_payload(
+                            page_number=index,
+                            text=desc,
+                            extraction_confidence=0.62,
+                            ocr_confidence=0.55,
+                        ))
                         text += desc + "\n"
                 except Exception:
                     pass  # Vision OCR also failed, will be caught by empty text check
@@ -99,31 +182,14 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
         doc = DocxDocument(file_path)
         for para in doc.paragraphs:
             text += para.text + "\n"
-        pages.append({"page_number": None, "text": text})
+        pages.append(_page_payload(page_number=None, text=text, extraction_confidence=1.0))
     elif ft == 'txt':
         with open(file_path, 'r', encoding='utf-8') as f:
             text = f.read()
-        pages.append({"page_number": None, "text": text})
+        pages.append(_page_payload(page_number=None, text=text, extraction_confidence=1.0))
     elif ft in ['xlsx', 'xls']:
-        from openpyxl import load_workbook
-        wb = load_workbook(file_path, read_only=False, data_only=True)
-        for sheet in wb.worksheets:
-            sheet_lines = [f"\n--- Sheet: {sheet.title} ---"]
-            if sheet.merged_cells.ranges:
-                merged_ranges = ", ".join(str(cell_range) for cell_range in sheet.merged_cells.ranges)
-                sheet_lines.append(f"Merged ranges: {merged_ranges}")
-            for row in sheet.iter_rows():
-                cells = []
-                for cell in row:
-                    if cell.value is None:
-                        continue
-                    cells.append(f"{cell.coordinate}={cell.value}")
-                if cells:
-                    sheet_lines.append(" | ".join(cells))
-            sheet_text = "\n".join(sheet_lines) + "\n"
-            pages.append({"page_number": None, "text": sheet_text})
-            text += sheet_text
-        wb.close()
+        pages.extend(_extract_xlsx_pages(file_path))
+        text += "\n".join(page["text"] for page in pages)
     elif ft in ['pptx', 'ppt']:
         from pptx import Presentation
         prs = Presentation(file_path)
@@ -132,7 +198,11 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
             for shape in slide.shapes:
                 if hasattr(shape, "text"):
                     slide_text += shape.text + "\n"
-            pages.append({"page_number": i + 1, "text": slide_text})
+            pages.append(_page_payload(
+                page_number=i + 1,
+                text=slide_text,
+                extraction_confidence=0.95,
+            ))
             text += slide_text
     elif ft in ['jpg', 'jpeg', 'png']:
         import base64
@@ -145,9 +215,14 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
             image_b64
         )
         text = f"Image/Photo Description:\n{description}"
-        pages.append({"page_number": 1, "text": text})
+        pages.append(_page_payload(
+            page_number=1,
+            text=text,
+            extraction_confidence=0.62,
+            ocr_confidence=0.55,
+        ))
     if not pages and text.strip():
-        pages.append({"page_number": None, "text": text})
+        pages.append(_page_payload(page_number=None, text=text, extraction_confidence=0.7))
     return pages
 
 
@@ -171,8 +246,54 @@ def build_indexable_chunks(pages: list[dict], chunk_size: int = 1000, chunk_over
                 "text": chunk_text,
                 "page_number": page.get("page_number"),
                 "section_label": _extract_section_label(chunk_text),
+                "extraction_confidence": page.get("extraction_confidence"),
+                "ocr_confidence": page.get("ocr_confidence"),
+                "table_confidence": page.get("table_confidence"),
+                "page_bbox_json": page.get("page_bbox_json"),
             })
     return indexable_chunks
+
+
+def create_extraction_review_records(
+    db: Session,
+    *,
+    bank_id: int,
+    document_id: int,
+    pages: list[dict],
+) -> list:
+    from ..models.document_intelligence import DocumentExtractionPage
+    from .document_intelligence_service import build_extraction_flags
+
+    records = []
+    for page in pages:
+        flags = build_extraction_flags(
+            ocr_confidence=page.get("ocr_confidence"),
+            table_confidence=page.get("table_confidence"),
+            layout_confidence=page.get("layout_confidence"),
+            has_handwriting=bool(page.get("has_handwriting")),
+            has_signature_like_region=bool(page.get("has_signature_like_region")),
+            has_stamp_like_region=bool(page.get("has_stamp_like_region")),
+        )
+        record = DocumentExtractionPage(
+            bank_id=bank_id,
+            document_id=document_id,
+            page_number=page.get("page_number") or 0,
+            extracted_text=page.get("text") or "",
+            parser=page.get("parser") or "ingestion",
+            ocr_confidence=page.get("ocr_confidence"),
+            table_confidence=page.get("table_confidence"),
+            layout_confidence=page.get("layout_confidence"),
+            page_image_path=page.get("page_image_path"),
+            bbox_json=page.get("page_bbox_json"),
+            flags_json=json.dumps(flags),
+            review_status="pending",
+        )
+        db.add(record)
+        records.append(record)
+    db.commit()
+    for record in records:
+        db.refresh(record)
+    return records
 
 
 def auto_catalog(text: str, filename: str) -> dict:
@@ -245,6 +366,10 @@ def process_document(document_id: int):
             # 1. Extract text
             pages = extract_pages(doc.file_path, doc.file_type)
             text = "\n".join(page["text"] for page in pages)
+            try:
+                create_extraction_review_records(db, bank_id=doc.bank_id, document_id=doc.id, pages=pages)
+            except Exception:
+                pass
 
             doc.status = "chunking"
             doc.processing_progress = 30
@@ -285,6 +410,10 @@ def process_document(document_id: int):
                     chunk_index=i,
                     chunk_text=chunk["text"],
                     page_number=chunk["page_number"],
+                    extraction_confidence=chunk.get("extraction_confidence"),
+                    ocr_confidence=chunk.get("ocr_confidence"),
+                    table_confidence=chunk.get("table_confidence"),
+                    page_bbox_json=chunk.get("page_bbox_json"),
                     department=doc.department,
                     access_level=doc.access_level or 0,
                     document_scope=doc.document_scope,
@@ -303,6 +432,10 @@ def process_document(document_id: int):
                         "text": chunk["text"],
                         "page_number": chunk["page_number"],
                         "section_label": chunk["section_label"],
+                        "extraction_confidence": chunk.get("extraction_confidence"),
+                        "ocr_confidence": chunk.get("ocr_confidence"),
+                        "table_confidence": chunk.get("table_confidence"),
+                        "page_bbox_json": chunk.get("page_bbox_json"),
                         "department": doc.department,
                         "access_level": doc.access_level or 0,
                         "document_status": doc.status,

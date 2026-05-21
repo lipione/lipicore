@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +10,7 @@ from app.models.bank import Bank
 from app.models.chat import ChatSession
 from app.models.document import Document, DocumentChunk
 from app.models.user import User
+from app.schemas.chat import ChatRequest
 from app.core.security import get_password_hash
 from app.services import rag_service
 from test_main import client, engine, get_token
@@ -281,6 +283,90 @@ def test_global_rag_returns_cited_sources(monkeypatch):
     assert sources[0]["snippet"] == "Section 4.2 requires branch staff to verify KYC documents before account opening."
     assert sources[0]["passage"] == "Section 4.2 requires branch staff to verify KYC documents before account opening."
     assert sources[0]["relevance_score"] >= rag_service.MIN_SOURCE_RELEVANCE_SCORE
+
+
+def test_global_rag_sources_include_freshness_warnings_and_confidence(monkeypatch):
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 30,
+                    "text": "Section 9 says expired circulars require compliance review before use.",
+                    "page_number": 3,
+                    "chunk_index": 2,
+                    "extraction_confidence": 0.72,
+                    "ocr_confidence": 0.61,
+                    "table_confidence": 0.88,
+                    "page_bbox_json": "{\"x\": 1, \"y\": 2, \"width\": 3, \"height\": 4}",
+                },
+                score=0.95,
+            )
+        ]
+
+    def fake_call_llm(prompt):
+        assert "expired circulars require compliance review" in prompt
+        return "Expired circulars require compliance review before use."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Freshness Bank", code="FRESH01")
+        user = User(
+            email="freshness@test.local",
+            password_hash="x",
+            name="Freshness User",
+            role="staff_user",
+            bank_id=1,
+            is_active=True,
+        )
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user.bank_id = bank.id
+        session.add(user)
+        session.commit()
+
+        global_doc = Document(
+            id=30,
+            bank_id=bank.id,
+            uploaded_by=user.id,
+            title="Expired Circular",
+            file_name="expired-circular.pdf",
+            file_type="pdf",
+            file_path="expired-circular.pdf",
+            document_type="circular",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+            effective_to=datetime.utcnow() - timedelta(days=1),
+            review_due_at=datetime.utcnow() - timedelta(days=1),
+        )
+        session.add(global_doc)
+        session.commit()
+
+        _answer, sources = rag_service.generate_rag_response(
+            "Can staff use the expired circular?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert sources[0]["source_warnings"] == ["expired_source", "review_due"]
+    assert sources[0]["extraction_confidence"] == 0.72
+    assert sources[0]["ocr_confidence"] == 0.61
+    assert sources[0]["table_confidence"] == 0.88
+    assert sources[0]["page_bbox_json"] == "{\"x\": 1, \"y\": 2, \"width\": 3, \"height\": 4}"
+
+
+def test_chat_request_accepts_approved_knowledge_mode():
+    request = ChatRequest(message="What does approved policy say?", mode="approved_knowledge")
+
+    assert request.mode == "approved_knowledge"
 
 
 def test_global_rag_returns_not_found_when_relevance_is_too_low(monkeypatch):

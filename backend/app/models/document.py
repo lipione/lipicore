@@ -26,6 +26,13 @@ class Document(SQLModel, table=True):
     version: str = "1.0"
     supersedes_document_id: Optional[int] = Field(default=None, foreign_key="document.id")
     approved_at: Optional[datetime] = None
+    approved_by: Optional[int] = Field(default=None, foreign_key="user.id")
+    effective_from: Optional[datetime] = None
+    effective_to: Optional[datetime] = None
+    review_due_at: Optional[datetime] = None
+    regulator: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    superseded_reason: Optional[str] = None
     processing_progress: int = Field(default=0)
     processing_message: Optional[str] = None
 
@@ -46,6 +53,10 @@ class DocumentChunk(SQLModel, table=True):
     chunk_text: str
     page_number: Optional[int] = None
     qdrant_point_id: str
+    extraction_confidence: Optional[float] = None
+    ocr_confidence: Optional[float] = None
+    table_confidence: Optional[float] = None
+    page_bbox_json: Optional[str] = None
     department: Optional[str] = None
     access_level: int = 0
     document_scope: Optional[str] = "global_knowledge"

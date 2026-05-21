@@ -3,12 +3,14 @@ from pydantic import ValidationError
 
 from app.api.chat import (
     MODEL_CONTEXT_LIMIT_TOKENS,
+    _model_supports_vision,
     derive_answer_metadata,
     general_fallback_system_identity,
     mode_instruction,
     prepare_vllm_payload_messages,
     should_show_document_search_status,
 )
+from app.services.rag_service import RAG_PROMPT_TEMPLATE, get_system_identity
 from app.schemas.chat import ChatRequest
 
 
@@ -21,6 +23,12 @@ def test_chat_request_defaults_to_bank_knowledge_mode():
 def test_chat_request_rejects_unknown_mode():
     with pytest.raises(ValidationError):
         ChatRequest(message="Draft a memo", mode="department_bot")
+
+
+def test_qwen3_vl_is_recognized_as_vision_capable():
+    assert _model_supports_vision("Qwen/Qwen3-VL-8B-Instruct") is True
+    assert _model_supports_vision("vision") is True
+    assert _model_supports_vision("gemma-4-26b-4bit") is False
 
 
 def test_chat_context_window_defaults_to_8k():
@@ -101,6 +109,25 @@ def test_general_fallback_warns_not_official_policy():
 
     assert "general knowledge only" in instruction
     assert "official bank policy" in instruction
+
+
+def test_general_fallback_requires_one_direct_staff_ready_answer():
+    instruction = general_fallback_system_identity("en", "ask_knowledge")
+
+    assert "one direct staff-ready answer" in instruction.lower()
+    assert "do not provide multiple alternative answers" in instruction.lower()
+
+
+def test_rag_prompt_requires_staff_ready_answer_not_options():
+    prompt = RAG_PROMPT_TEMPLATE.format(
+        system=get_system_identity("en"),
+        context="[Source: Account SOP; Section: 4.2]\nStaff must verify KYC before account opening.",
+        question="What should branch staff do before opening an account?",
+    )
+
+    assert "one staff-ready answer" in prompt.lower()
+    assert "start with the answer" in prompt.lower()
+    assert "do not offer multiple alternative answers" in prompt.lower()
 
 
 def test_document_search_status_only_shows_when_document_search_is_expected():

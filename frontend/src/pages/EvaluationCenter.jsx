@@ -8,11 +8,20 @@ const SAMPLE_CASES = [
     expected_source_titles: ['Customer Complaint Policy'],
     required_citation_terms: ['complaint'],
     required_answer_terms: ['escalation'],
+    source_required: true,
+    citation_required: true,
   },
   {
     id: 'not-found-check',
     question: 'What is the bank policy for a topic that is not in the approved library?',
-    expect_not_found: true,
+    not_found_required: true,
+    no_general_policy_advice: true,
+  },
+  {
+    id: 'unsupported-advice-check',
+    question: 'Can staff approve this customer request?',
+    source_required: true,
+    no_general_policy_advice: true,
   },
 ];
 
@@ -90,7 +99,19 @@ function CaseResult({ item }) {
               <p className="text-xs text-slate-500 border border-slate-200 rounded p-3">No sources returned.</p>
             ) : item.sources.map((source, index) => (
               <div key={`${source.document_id || index}`} className="border border-slate-200 rounded p-3 text-xs">
-                <p className="font-bold text-slate-900">{source.document_title || source.title || 'Source'}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="font-bold text-slate-900">{source.document_title || source.title || 'Source'}</p>
+                  {source.citation_verification && (
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold uppercase text-[9px]">
+                      {source.citation_verification}
+                    </span>
+                  )}
+                  {(source.source_warnings || []).map(warning => (
+                    <span key={warning} className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 font-bold uppercase text-[9px]">
+                      {warning.replaceAll('_', ' ')}
+                    </span>
+                  ))}
+                </div>
                 <p className="text-slate-500 mt-1">
                   {source.section_label || source.section_number || 'Section unknown'}
                   {source.page_number ? ` · p.${source.page_number}` : ''}
@@ -179,7 +200,7 @@ export default function EvaluationCenter() {
             <div>
               <h2 className="text-sm font-bold text-slate-900">Evaluation cases</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Use expected sources and required terms to catch weak retrieval or unsupported answers.
+                Use expected sources, citation terms, and gate flags such as source_required, citation_required, and no_general_policy_advice.
               </p>
             </div>
             <label className="space-y-1.5 block">

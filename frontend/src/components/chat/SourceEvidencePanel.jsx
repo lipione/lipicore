@@ -29,6 +29,29 @@ const VERIFICATION_STYLES = {
   },
 };
 
+const WARNING_STYLES = {
+  expired_source: {
+    label: 'Expired',
+    icon: 'event_busy',
+    className: 'bg-rose-50 text-rose-800 border-rose-200',
+  },
+  review_due: {
+    label: 'Review due',
+    icon: 'pending_actions',
+    className: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  superseded_source: {
+    label: 'Superseded',
+    icon: 'history',
+    className: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+  not_yet_effective: {
+    label: 'Not effective yet',
+    icon: 'event_upcoming',
+    className: 'bg-sky-50 text-sky-800 border-sky-200',
+  },
+};
+
 function VerificationPill({ status }) {
   const state = VERIFICATION_STYLES[status] || VERIFICATION_STYLES.no_sources;
   return (
@@ -39,11 +62,42 @@ function VerificationPill({ status }) {
   );
 }
 
+function WarningPills({ warnings = [] }) {
+  if (!warnings.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {warnings.map((warning) => {
+        const state = WARNING_STYLES[warning] || {
+          label: warning,
+          icon: 'warning',
+          className: 'bg-amber-50 text-amber-800 border-amber-200',
+        };
+        return (
+          <span key={warning} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${state.className}`}>
+            <span className="material-symbols-outlined text-[12px]">{state.icon}</span>
+            {state.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function confidenceLabel(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return `${Math.round(Math.max(0, Math.min(numeric, 1)) * 100)}%`;
+}
+
 function SourceCard({ source, index }) {
   const passage = source.passage || source.snippet || '';
   const preview = source.snippet || passage.slice(0, 180);
   const canExpand = passage && passage.length > preview.length;
   const relevance = Number(source.relevance_score || 0);
+  const extractionConfidence = confidenceLabel(source.extraction_confidence);
+  const ocrConfidence = confidenceLabel(source.ocr_confidence);
+  const tableConfidence = confidenceLabel(source.table_confidence);
 
   return (
     <article key={`${source.document_id || source.title || 'source'}-${index}`} className="bg-white border border-slate-200 rounded p-3">
@@ -61,6 +115,7 @@ function SourceCard({ source, index }) {
         </div>
         <VerificationPill status={source.citation_verification} />
       </div>
+      <WarningPills warnings={source.source_warnings || []} />
       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-slate-500">
         <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1">
           <span className="font-bold text-slate-700">Doc ID:</span> {source.document_id || '—'}
@@ -68,6 +123,21 @@ function SourceCard({ source, index }) {
         <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1">
           <span className="font-bold text-slate-700">Score:</span> {relevance ? relevance.toFixed(2) : '—'}
         </div>
+        {(source.regulator || source.jurisdiction) && (
+          <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1 col-span-2">
+            <span className="font-bold text-slate-700">Scope:</span> {[source.regulator, source.jurisdiction].filter(Boolean).join(' · ')}
+          </div>
+        )}
+        {(extractionConfidence || ocrConfidence || tableConfidence) && (
+          <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1 col-span-2">
+            <span className="font-bold text-slate-700">Confidence:</span>{' '}
+            {[
+              extractionConfidence && `extract ${extractionConfidence}`,
+              ocrConfidence && `ocr ${ocrConfidence}`,
+              tableConfidence && `table ${tableConfidence}`,
+            ].filter(Boolean).join(' · ')}
+          </div>
+        )}
       </div>
       {passage && (
         <details className="mt-3 group">

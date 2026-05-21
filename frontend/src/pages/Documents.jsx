@@ -10,10 +10,17 @@ export default function Documents() {
   const [loading, setLoading] = useState(true);
   const [uploadQueue, setUploadQueue] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [analysisJobs, setAnalysisJobs] = useState([]);
+  const [analysisModalDoc, setAnalysisModalDoc] = useState(null);
+  const [analysisPrompt, setAnalysisPrompt] = useState('');
+  const [analysisSubmitting, setAnalysisSubmitting] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
+  const [analysisResultJob, setAnalysisResultJob] = useState(null);
   const fileInputRef = useRef(null);
   const mainRef = useRef(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const canApprove = ['super_admin', 'bank_admin', 'compliance_user', 'compliance_officer', 'document_reviewer'].includes(user.role);
+  const canReviewBankDocs = canApprove;
 
   // Fetch documents
   const fetchDocs = useCallback(async () => {
@@ -25,9 +32,28 @@ export default function Documents() {
     setLoading(false);
   }, []);
 
+  const fetchAnalysisJobs = useCallback(async () => {
+    try {
+      const r = await api.get('/long-document-analysis?limit=100');
+      setAnalysisJobs(r.data || []);
+    } catch (_) {}
+  }, []);
+
   useEffect(() => {
     fetchDocs();
-  }, [fetchDocs]);
+    fetchAnalysisJobs();
+  }, [fetchDocs, fetchAnalysisJobs]);
+
+  const activeAnalysisCount = useMemo(
+    () => analysisJobs.filter(job => !['completed', 'failed'].includes(job.status)).length,
+    [analysisJobs]
+  );
+
+  useEffect(() => {
+    if (activeAnalysisCount === 0) return;
+    const poll = setInterval(fetchAnalysisJobs, 3000);
+    return () => clearInterval(poll);
+  }, [activeAnalysisCount, fetchAnalysisJobs]);
 
   // Handle file drops and selections (parallel with concurrency limit)
   const handleFiles = useCallback(async (files) => {
@@ -140,6 +166,61 @@ export default function Documents() {
     } catch (_) {}
   };
 
+  const defaultAnalysisPrompt = (doc) => {
+    const ext = (doc?.file_type || '').toLowerCase();
+    if (['xlsx', 'xls'].includes(ext)) {
+      return 'Summarize the workbook, identify important sheets, totals, exceptions, missing values, formulas, and staff action points. Cite sheet names and cell ranges where possible.';
+    }
+    return 'Summarize the document, extract key rules, dates, exceptions, tables, risks, and staff action points. Cite page or section labels where possible.';
+  };
+
+  const canQueueLongAnalysis = (doc) => {
+    if (!doc || ['disabled', 'archived', 'superseded', 'failed'].includes(doc.status)) return false;
+    if (['disabled', 'archived', 'superseded'].includes(doc.version_state)) return false;
+    if (canReviewBankDocs) return true;
+    if (doc.document_scope === 'session_upload') {
+      return ['ready', 'indexed', 'approved'].includes(doc.status) && doc.uploaded_by === user.id;
+    }
+    return doc.document_scope === 'global_knowledge' && doc.status === 'approved' && doc.version_state === 'approved';
+  };
+
+  const openAnalysisModal = (doc) => {
+    setAnalysisModalDoc(doc);
+    setAnalysisPrompt(defaultAnalysisPrompt(doc));
+    setAnalysisError('');
+  };
+
+  const closeAnalysisModal = () => {
+    setAnalysisModalDoc(null);
+    setAnalysisPrompt('');
+    setAnalysisError('');
+  };
+
+  const submitLongAnalysis = async () => {
+    const prompt = analysisPrompt.trim();
+    if (!analysisModalDoc || prompt.length < 3) {
+      setAnalysisError('Enter a prompt before queueing.');
+      return;
+    }
+    try {
+      setAnalysisSubmitting(true);
+      setAnalysisError('');
+      await api.post('/long-document-analysis', {
+        document_id: analysisModalDoc.id,
+        prompt,
+        analysis_type: ['xlsx', 'xls'].includes((analysisModalDoc.file_type || '').toLowerCase())
+          ? 'spreadsheet_analysis'
+          : 'long_document_analysis',
+      });
+      closeAnalysisModal();
+      fetchAnalysisJobs();
+    } catch (err) {
+      setAnalysisError(err?.response?.data?.detail || 'Failed to queue analysis.');
+    } finally {
+      setAnalysisSubmitting(false);
+    }
+  };
+
   // Toggle selection
   const toggleSelect = (docId) => {
     setSelectedIds(prev => {
@@ -217,6 +298,26 @@ export default function Documents() {
     return map[status] || { label: status, detail: doc.processing_message || 'Status pending', icon: 'description', pct: doc.processing_progress || 0 };
   };
 
+  const latestAnalysisByDoc = useMemo(() => {
+    const byDoc = new Map();
+    analysisJobs.forEach(job => {
+      if (!byDoc.has(job.document_id)) byDoc.set(job.document_id, job);
+    });
+    return byDoc;
+  }, [analysisJobs]);
+
+  const analysisJobMeta = (job) => {
+    const map = {
+      queued: { label: 'Queued', icon: 'pending_actions', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+      processing: { label: 'Processing', icon: 'sync', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+      packing_context: { label: 'Packing context', icon: 'inventory_2', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+      generating: { label: 'Generating', icon: 'auto_awesome', className: 'bg-violet-50 text-violet-700 border-violet-200' },
+      completed: { label: 'Analysis ready', icon: 'task_alt', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+      failed: { label: 'Analysis failed', icon: 'error', className: 'bg-rose-50 text-rose-700 border-rose-200' },
+    };
+    return map[job?.status] || { label: job?.status || 'Analysis', icon: 'manage_search', className: 'bg-slate-50 text-slate-600 border-slate-200' };
+  };
+
   const versionBadgeClass = (state) => {
     const map = {
       approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -227,6 +328,32 @@ export default function Documents() {
     };
     return map[state] || 'bg-slate-50 text-slate-600 border-slate-200';
   };
+
+  const isPastDate = (value) => {
+    if (!value) return false;
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) && parsed < new Date();
+  };
+
+  const isFutureDate = (value) => {
+    if (!value) return false;
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) && parsed > new Date();
+  };
+
+  const freshnessWarnings = (doc) => {
+    const warnings = [];
+    if (doc.version_state === 'superseded') warnings.push({ key: 'superseded', label: 'Superseded', icon: 'history', className: 'bg-slate-100 text-slate-700 border-slate-200' });
+    if (isFutureDate(doc.effective_from)) warnings.push({ key: 'not-effective', label: 'Not effective yet', icon: 'event_upcoming', className: 'bg-sky-50 text-sky-800 border-sky-200' });
+    if (isPastDate(doc.effective_to)) warnings.push({ key: 'expired', label: 'Expired', icon: 'event_busy', className: 'bg-rose-50 text-rose-800 border-rose-200' });
+    if (isPastDate(doc.review_due_at)) warnings.push({ key: 'review-due', label: 'Review due', icon: 'pending_actions', className: 'bg-amber-50 text-amber-800 border-amber-200' });
+    return warnings;
+  };
+
+  const analysisResultDoc = useMemo(
+    () => docs.find(doc => doc.id === analysisResultJob?.document_id),
+    [docs, analysisResultJob]
+  );
 
   return (
     <div ref={mainRef} {...dropHandlers} className="flex h-full overflow-hidden bg-slate-50">
@@ -350,6 +477,10 @@ export default function Documents() {
                 const meta = statusMeta(doc);
                 const isProcessing = ['uploaded', 'queued', 'processing', 'extracting_text', 'chunking', 'embedding', 'indexing'].includes(doc.status);
                 const isReadyForChat = ['indexed', 'approved'].includes(doc.status);
+                const warnings = freshnessWarnings(doc);
+                const latestAnalysis = latestAnalysisByDoc.get(doc.id);
+                const analysisMeta = analysisJobMeta(latestAnalysis);
+                const analysisActive = latestAnalysis && !['completed', 'failed'].includes(latestAnalysis.status);
                 return (
                 <div
                   key={doc.id}
@@ -387,6 +518,18 @@ export default function Documents() {
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${versionBadgeClass(doc.version_state)}`}>
                         {doc.version_state || 'draft'}
                       </span>
+                      {warnings.map(warning => (
+                        <span key={warning.key} className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${warning.className}`}>
+                          <span className="material-symbols-outlined text-[12px]">{warning.icon}</span>
+                          {warning.label}
+                        </span>
+                      ))}
+                      {latestAnalysis && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${analysisMeta.className}`}>
+                          <span className="material-symbols-outlined text-[12px]">{analysisMeta.icon}</span>
+                          {analysisMeta.label}
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
                       <span className={`inline-flex items-center gap-1 font-semibold ${statusColor(doc.status)}`}>
@@ -403,12 +546,30 @@ export default function Documents() {
                       <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-semibold">
                         {doc.document_scope === 'session_upload' ? 'Chat upload' : 'Knowledge library'}
                       </span>
+                      {(doc.regulator || doc.jurisdiction) && (
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-semibold">
+                          {[doc.regulator, doc.jurisdiction].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
                       <span className="text-slate-400">
                         {new Date(doc.created_at).toLocaleDateString()}
                       </span>
                     </div>
                     {doc.summary && (
                       <p className="text-xs text-slate-500 mt-2 line-clamp-2">{doc.summary}</p>
+                    )}
+                    {latestAnalysis?.status === 'completed' && latestAnalysis.result_text && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setAnalysisResultJob(latestAnalysis); }}
+                        className="mt-2 block w-full text-left border-l-2 border-emerald-300 pl-3 py-1 hover:bg-emerald-50 transition-colors"
+                      >
+                        <span className="block text-[10px] font-bold uppercase text-emerald-700">Long analysis ready</span>
+                        <span className="block text-xs text-slate-600 line-clamp-2">{latestAnalysis.result_text}</span>
+                      </button>
+                    )}
+                    {latestAnalysis?.status === 'failed' && latestAnalysis.error_message && (
+                      <p className="text-xs text-rose-600 mt-2 line-clamp-2">{latestAnalysis.error_message}</p>
                     )}
                   </div>
 
@@ -431,6 +592,29 @@ export default function Documents() {
                   {/* Actions */}
                   {selectedIds.size === 0 && (
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {latestAnalysis?.status === 'completed' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setAnalysisResultJob(latestAnalysis); }}
+                          className="px-3 py-1 bg-emerald-50 text-emerald-700 font-semibold text-xs rounded hover:bg-emerald-100 transition-colors flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">visibility</span>
+                          View
+                        </button>
+                      )}
+                      {canQueueLongAnalysis(doc) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openAnalysisModal(doc); }}
+                          disabled={analysisActive}
+                          className={`px-3 py-1 font-semibold text-xs rounded transition-colors flex items-center gap-1 ${
+                            analysisActive
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[14px]">{analysisActive ? 'hourglass_top' : 'manage_search'}</span>
+                          {analysisActive ? 'Queued' : 'Queue analysis'}
+                        </button>
+                      )}
                       {doc.status === 'ready' && canApprove && !doc.approved_by && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleApprove(doc.id); }}
@@ -461,6 +645,85 @@ export default function Documents() {
           )}
         </div>
       </section>
+
+      {analysisModalDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 px-4">
+          <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-lg shadow-xl">
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-200">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-900 truncate">Queue long analysis</p>
+                <p className="text-xs text-slate-500 truncate">{analysisModalDoc.file_name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAnalysisModal}
+                disabled={analysisSubmitting}
+                className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                title="Close"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <textarea
+                value={analysisPrompt}
+                onChange={(e) => setAnalysisPrompt(e.target.value)}
+                rows={7}
+                className="w-full resize-none rounded-lg border border-slate-200 p-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Enter analysis prompt"
+              />
+              {analysisError && (
+                <p className="text-xs font-semibold text-rose-600">{analysisError}</p>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 p-5 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={closeAnalysisModal}
+                disabled={analysisSubmitting}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitLongAnalysis}
+                disabled={analysisSubmitting}
+                className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {analysisSubmitting && <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                Queue analysis
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {analysisResultJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 px-4">
+          <div className="w-full max-w-3xl max-h-[82vh] bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col">
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-200 flex-shrink-0">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-900 truncate">Long analysis result</p>
+                <p className="text-xs text-slate-500 truncate">{analysisResultDoc?.file_name || `Document ${analysisResultJob.document_id}`}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnalysisResultJob(null)}
+                className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                title="Close"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 font-sans">
+                {analysisResultJob.result_text || analysisResultJob.error_message || ''}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload queue toast */}
       {uploadQueue.filter(u => ['uploading', 'uploaded'].includes(u.status)).length > 0 && (

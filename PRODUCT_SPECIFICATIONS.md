@@ -3,7 +3,7 @@
 **Product:** Airgapped white-label bank AI appliance
 **Delivery:** Bank-controlled infrastructure plus enterprise software
 **Version:** 1.2
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-21
 
 ---
 
@@ -26,6 +26,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 - Chunk-level permission metadata copied into PostgreSQL and Qdrant.
 - Redis/RQ ingestion queue with a separate worker process.
 - OCR fallback and table-aware extraction for PDFs and spreadsheets.
+- Queued long-document analysis for heavy OCR, large PDFs, and detailed Excel/PDF review.
 - RAG Evaluation Center for bank-specific test cases.
 - Audit logs, RBAC, bank partitioning, and white-label branding.
 - Health-gated upgrade script for remote deployments.
@@ -39,7 +40,8 @@ The current product is strongest as an internal knowledge, document analysis, cu
 | Internal policy Q&A | Strong | Works when policies are uploaded, approved, and kept current. |
 | Drafting emails/replies | Good | Should be reviewed by staff before use. |
 | Document summarization | Good | Best for normal PDFs, Word files, spreadsheets, and PowerPoints. |
-| Multi-document comparison | Good but bounded | Long, broad answers need multi-step retrieval/map-reduce improvements. |
+| Large document analysis | Good but queue-based | Heavy OCR, large PDFs, and detailed Excel workbooks run as background jobs with stored results. |
+| Multi-document comparison | Good but bounded | Long, broad answers need queued analysis, multi-step retrieval, or map-reduce improvements. |
 | Credit/risk decisioning | Not ready | Requires workflow controls, validation, supervisor review, and integrations. |
 | Regulatory reporting automation | Not ready | Needs structured workflows, source validation, and formal sign-off. |
 
@@ -54,6 +56,20 @@ The current product is strongest as an internal knowledge, document analysis, cu
 | TXT/CSV | Supported | Good fit for policy, FAQ, and tabular text imports. |
 | Images | Partial | OCR/vision fallback exists, but should not be treated as high-accuracy for bank-critical evidence. |
 
+## Queued Long-Document Analysis
+
+Large PDFs, OCR-heavy documents, and detailed Excel workbooks should use queued long-document analysis instead of normal chat. The workflow creates a background job, extracts document content, selects relevant page/sheet excerpts within the deep-model context budget, generates a staff-reviewable result, and stores progress/result metadata in PostgreSQL.
+
+Current defaults:
+
+- Document Library upload limit: 50 MB.
+- OCR fallback cap: `OCR_MAX_PAGES=200`.
+- Job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.
+- Worker concurrency: `INGESTION_WORKER_CONCURRENCY=1`.
+- Deep context budget: `LLM_DEEP_CONTEXT_WINDOW_TOKENS`, default 8192 tokens.
+
+This is a controlled analysis workflow, not a guarantee of perfect OCR, perfect table interpretation, or autonomous compliance/lending decisions. See `docs/long-document-analysis.md`.
+
 ## RAG System
 
 BankAi uses a defensive RAG pipeline rather than sending entire files to the model.
@@ -67,7 +83,7 @@ BankAi uses a defensive RAG pipeline rather than sending entire files to the mod
 7. Answers include source metadata and citation verification results.
 8. Admins/auditors can run RAG evaluation cases against expected sources and required citation terms.
 
-This is stronger than a basic vector-only chatbot because it adds document governance, role filters, reranking, citation evidence, and measurable evaluation. It is still not perfect: citation verification is lexical overlap, not formal entailment, and long-document reasoning needs further work.
+This is stronger than a basic vector-only chatbot because it adds document governance, role filters, reranking, citation evidence, queued long-document analysis, and measurable evaluation. It is still not perfect: citation verification is lexical overlap, not formal entailment, and broad multi-document synthesis still needs stronger map-reduce and evaluation coverage.
 
 ## Measured Test Baseline
 
@@ -103,6 +119,7 @@ Single-host Docker Compose is acceptable for pilots and controlled internal tria
 - Bank-controlled identity lifecycle and role assignment.
 - Approved document governance before staff-wide release.
 - Regular RAG evaluations using the bank's real policies and expected answers.
+- Representative long-document tests using clean PDFs, scanned PDFs, Excel workbooks, and bilingual documents before making large-file claims.
 - Backup and restore drills for PostgreSQL, MinIO, and Qdrant.
 - Firewall isolation for PostgreSQL, Qdrant, Redis, MinIO, backend debug ports, and model debug ports.
 - Operational runbooks for upgrade, rollback, model restart, queue saturation, and disk pressure.
@@ -125,7 +142,8 @@ Do not use these claims in sales material until independently validated for the 
 - 500+ simultaneous LLM users.
 - Fixed ROI percentages.
 - Perfect hallucination prevention.
-- Full understanding of scanned, handwritten, chart-heavy, or image-heavy documents.
+- Full understanding of scanned, handwritten, chart-heavy, signed, sealed, or image-heavy documents.
+- Instant large-file analysis under unlimited concurrent OCR/PDF/XLS load.
 
 ## Current Product Decision
 

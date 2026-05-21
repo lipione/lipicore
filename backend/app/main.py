@@ -7,7 +7,25 @@ from .core.config import settings
 from .core.limiter import limiter
 from .core.context import request_ip
 from .db.session import init_db
-from .api import auth, banks, users, documents, chat, audit, analytics, tasks, export, configuration, evaluations
+from .api import (
+    analytics,
+    audit,
+    auth,
+    banks,
+    chat,
+    compliance_reviews,
+    configuration,
+    document_review,
+    documents,
+    evaluations,
+    export,
+    loan_support,
+    long_document_analysis,
+    model_lab,
+    support_cases,
+    tasks,
+    users,
+)
 
 
 @asynccontextmanager
@@ -70,3 +88,9 @@ app.include_router(tasks.router,    prefix=f"{settings.API_V1_STR}/tasks",    ta
 app.include_router(export.router,   prefix=f"{settings.API_V1_STR}/export",   tags=["export"])
 app.include_router(configuration.router, prefix=f"{settings.API_V1_STR}/config", tags=["config"])
 app.include_router(evaluations.router, prefix=f"{settings.API_V1_STR}/evaluations", tags=["evaluations"])
+app.include_router(support_cases.router, prefix=f"{settings.API_V1_STR}/support-cases", tags=["support-cases"])
+app.include_router(compliance_reviews.router, prefix=f"{settings.API_V1_STR}/compliance-reviews", tags=["compliance-reviews"])
+app.include_router(loan_support.router, prefix=f"{settings.API_V1_STR}/loan-support", tags=["loan-support"])
+app.include_router(long_document_analysis.router, prefix=f"{settings.API_V1_STR}/long-document-analysis", tags=["long-document-analysis"])
+app.include_router(model_lab.router, prefix=f"{settings.API_V1_STR}/model-lab", tags=["model-lab"])
+app.include_router(document_review.router, prefix=f"{settings.API_V1_STR}/document-review", tags=["document-review"])

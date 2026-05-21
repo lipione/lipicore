@@ -207,6 +207,94 @@ def test_evaluate_rag_cases_scores_expected_not_found_answers():
     assert result["cases"][0]["not_found_passed"] is True
 
 
+def test_evaluate_rag_cases_fails_when_source_required_but_no_sources_returned():
+    def fake_generator(*_args, **_kwargs):
+        return "Use the complaint escalation process.", []
+
+    cases = [
+        {
+            "id": "source-required",
+            "question": "What is the complaint escalation process?",
+            "source_required": True,
+        }
+    ]
+
+    with Session(engine) as session:
+        result = evaluate_rag_cases(
+            cases=cases,
+            db=session,
+            bank_id=1,
+            user_role="staff_user",
+            answer_generator=fake_generator,
+        )
+
+    case = result["cases"][0]
+    assert case["passed"] is False
+    assert "expected source-backed answer" in case["failures"]
+
+
+def test_evaluate_rag_cases_fails_when_verified_citation_required_but_partial():
+    def fake_generator(*_args, **_kwargs):
+        return (
+            "Staff must escalate complaints to a supervisor.",
+            [
+                {
+                    "document_id": 10,
+                    "document_title": "Complaint SOP",
+                    "snippet": "Complaint escalation policy.",
+                    "citation_verification": "partially_supported",
+                }
+            ],
+        )
+
+    cases = [
+        {
+            "id": "citation-required",
+            "question": "How should complaints be escalated?",
+            "citation_required": True,
+        }
+    ]
+
+    with Session(engine) as session:
+        result = evaluate_rag_cases(
+            cases=cases,
+            db=session,
+            bank_id=1,
+            user_role="staff_user",
+            answer_generator=fake_generator,
+        )
+
+    case = result["cases"][0]
+    assert case["passed"] is False
+    assert "expected verified citations" in case["failures"]
+
+
+def test_evaluate_rag_cases_fails_general_policy_advice_without_sources():
+    def fake_generator(*_args, **_kwargs):
+        return "Bank staff should approve the request after checking the policy.", []
+
+    cases = [
+        {
+            "id": "general-policy-advice",
+            "question": "Can staff approve this request?",
+            "no_general_policy_advice": True,
+        }
+    ]
+
+    with Session(engine) as session:
+        result = evaluate_rag_cases(
+            cases=cases,
+            db=session,
+            bank_id=1,
+            user_role="staff_user",
+            answer_generator=fake_generator,
+        )
+
+    case = result["cases"][0]
+    assert case["passed"] is False
+    assert "general policy advice without sources" in case["failures"]
+
+
 def test_bank_admin_can_run_rag_evaluation(monkeypatch):
     def fake_evaluate_rag_cases(**kwargs):
         assert kwargs["bank_id"] == 1

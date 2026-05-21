@@ -2,6 +2,8 @@
 
 These Locust scenarios measure staff-facing capacity for normal navigation plus low-frequency LLM chat. They are intended to produce evidence for 25, 50, and 100 active-staff claims.
 
+Queued long-document analysis needs separate evidence because it uses ingestion workers, OCR/table extraction, and the deep model. Do not use normal navigation/chat Locust runs as proof of heavy PDF/OCR/XLS capacity.
+
 ## Setup
 
 ```bash
@@ -50,6 +52,8 @@ BANKAI_DISABLE_STREAM=1 locust -f tests/load/locustfile.py --host https://ai.sil
 - Streamed general chat pressure against the LLM gateway.
 - Basic backend worker saturation and queue behavior.
 
+It does not measure large-file OCR, Excel extraction, or queued long-document analysis turnaround unless a separate scenario uploads representative files and polls `/api/long-document-analysis`.
+
 ## Stream-Only Smoke
 
 Run this inside the backend container or any environment that can import the backend app:
@@ -77,3 +81,4 @@ Latest measured results on the remote test server:
 - Redis/model queue timeouts below 1% of chat requests.
 - No backend worker restarts, OOM kills, or database connection exhaustion.
 - For 40+ simultaneous streaming users, report full-response p50/p95/max separately from API latency; do not hide slow tail latency inside aggregate API numbers.
+- For long-document claims, report job duration, failure rate, Redis queue depth, ingestion-worker memory, deep-model queue time, and sample document types separately from interactive chat results.

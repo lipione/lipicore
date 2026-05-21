@@ -1,7 +1,7 @@
 # BankAi Enterprise Deployment Guide
 
-**Version:** 1.2
-**Date:** May 19, 2026
+**Version:** 1.3
+**Date:** May 21, 2026
 **For:** On-premises or private data center deployment
 
 ## System Requirements
@@ -103,10 +103,14 @@ docker compose logs --tail=100 vllm-c
 ## Redis Admission Control
 
 Redis is used by the backend to coordinate model concurrency across requests.
-The important settings are:
+Redis is also used by RQ for ingestion and queued long-document analysis. The important settings are:
 
 ```text
 REDIS_URL=redis://redis:6379/0
+INGESTION_QUEUE_NAME=document-ingestion
+INGESTION_JOB_TIMEOUT_SECONDS=1800
+INGESTION_WORKER_CONCURRENCY=1
+OCR_MAX_PAGES=200
 LLM_A_MAX_CONCURRENCY=12
 LLM_C_MAX_CONCURRENCY=4
 LLM_USER_MAX_CONCURRENCY=1
@@ -114,6 +118,7 @@ LLM_ADMIN_MAX_CONCURRENCY=2
 LLM_QUEUE_TIMEOUT_SECONDS=120
 LLM_FAST_MAX_TOKENS=512
 LLM_DEEP_MAX_TOKENS=768
+LLM_DEEP_CONTEXT_WINDOW_TOKENS=8192
 ```
 
 Authenticated operators can check queue state through:
@@ -124,6 +129,26 @@ GET /api/chat/models/status
 
 If Redis is temporarily unavailable, the backend falls back to in-process
 admission control. That fallback is only suitable for a single backend replica.
+
+## Queued Long-Document Analysis
+
+Large PDFs, OCR-heavy documents, and detailed Excel workbook review run as background jobs instead of blocking staff chat.
+
+Operator checks:
+
+```bash
+docker compose logs --tail=100 ingestion-worker
+docker compose logs --tail=100 redis
+docker compose logs --tail=100 backend
+```
+
+Before enabling this for a bank pilot, run migrations and test one clean PDF, one scanned PDF, and one Excel workbook:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Monitor worker memory, Redis queue depth, job age, deep-model queue time, and GPU memory before raising `INGESTION_WORKER_CONCURRENCY`.
 
 ## HTTPS Setup
 
@@ -281,6 +306,23 @@ Check `/api/chat/models/status` with an authenticated session. If `waiting`
 stays high, reduce per-request token caps, lower UI concurrency, or add more GPU
 capacity.
 
+### Long-Document Job Stuck Or Failed
+
+```bash
+docker compose logs --tail=200 ingestion-worker
+docker compose logs --tail=100 redis
+docker compose logs --tail=100 backend
+```
+
+Common causes:
+
+- Worker is not running or cannot reach Redis.
+- `long_document_analysis_job` table is missing because migrations were not run.
+- File extraction failed or produced no text.
+- OCR dependencies or the vision endpoint are unavailable.
+- Deep model queue timed out under load.
+- File is too complex for current OCR/table extraction quality.
+
 ### File Upload Failures
 
 ```bash
@@ -341,6 +383,7 @@ docker compose ps
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3 | 2026-05-21 | Queued long-document analysis for heavy OCR/PDF/XLS jobs, stored results, role-scoped job access, and worker/deep-model operating guidance |
 | 1.2 | 2026-05-19 | Redis/RQ ingestion worker, document lifecycle and chunk permissions, reranking, citation verification, Evaluation Center, source evidence UI, health-gated upgrades |
 | 1.1 | 2026-05-07 | vLLM two-GPU runtime, Redis admission control, Let's Encrypt HTTPS |
 | 1.0 | 2026-04-28 | Initial enterprise deployment guide |

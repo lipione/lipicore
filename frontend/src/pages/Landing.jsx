@@ -9,7 +9,7 @@ export default function Landing() {
       <header className="fixed top-0 w-full z-50 border-b bg-white/90 backdrop-blur-md border-slate-200 font-public-sans">
         <div className="flex justify-between items-center h-16 px-8 max-w-7xl mx-auto w-full">
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold tracking-tight text-slate-900">LipiCore</span>
+            <span className="text-xl font-bold text-slate-900">LipiCore</span>
             <span className="text-xs font-semibold text-slate-400 border border-slate-200 px-2 py-0.5 rounded">Enterprise Server</span>
           </div>
           <nav className="hidden md:flex gap-8">
@@ -95,17 +95,17 @@ export default function Landing() {
               <div className="bg-white p-8 rounded border border-slate-200 border-l-4 border-l-tertiary-fixed-dim shadow-sm">
                 <span className="material-symbols-outlined text-tertiary-fixed-dim mb-4 text-2xl">terminal</span>
                 <h4 className="font-h2 text-lg mb-3">Private LLM Runtime</h4>
-                <p className="text-on-surface-variant text-body-sm">LipiLLM — the bank's own fine-tuned model — runs locally with hardware-accelerated inference on your private server.</p>
+                <p className="text-on-surface-variant text-body-sm">Private model runtimes run locally with hardware-accelerated inference on bank-controlled infrastructure.</p>
               </div>
               <div className="bg-white p-8 rounded border border-slate-200 border-l-4 border-l-secondary shadow-sm">
                 <span className="material-symbols-outlined text-secondary mb-4 text-2xl">psychology</span>
                 <h4 className="font-h2 text-lg mb-3">Secure Intelligence</h4>
-                <p className="text-on-surface-variant text-body-sm">AI extraction tailored for financial terminologies, ledgers, and compliance docs.</p>
+                <p className="text-on-surface-variant text-body-sm">AI-assisted extraction and summarization tuned for financial terminology, ledgers, and compliance documents.</p>
               </div>
               <div className="bg-white p-8 rounded border border-slate-200 md:col-span-2 border-l-4 border-l-on-background shadow-sm">
                 <span className="material-symbols-outlined text-on-background mb-4 text-2xl">history_edu</span>
                 <h4 className="font-h2 text-lg mb-3">Audit-Ready AI</h4>
-                <p className="text-on-surface-variant text-body-sm">Every extraction is traceable back to the source document with exact page coordinates and confidence scores for absolute transparency.</p>
+                <p className="text-on-surface-variant text-body-sm">Answers and extractions are linked back to source documents with page, section, passage, and confidence metadata where available.</p>
               </div>
               <div className="bg-white p-8 rounded border border-slate-200 border-l-4 border-l-tertiary-fixed-dim shadow-sm">
                 <span className="material-symbols-outlined text-tertiary-fixed-dim mb-4 text-2xl">verified_user</span>
@@ -138,7 +138,7 @@ export default function Landing() {
                       'Conversational queries',
                       'Instant context finding',
                       'Summaries & extractions',
-                      'Verify every single claim'
+                      'Review source evidence'
                     ][i]}
                   </p>
                 </div>
@@ -204,7 +204,7 @@ export default function Landing() {
                   { step: '02', dept: 'Credit Department', label: 'Credit Score & Eligibility Assessment', done: true },
                   { step: '03', dept: 'Legal & Compliance', label: 'Document Verification & KYC', done: false },
                   { step: '04', dept: 'Risk Management', label: 'Collateral Valuation', done: false },
-                  { step: '05', dept: 'Credit Committee', label: 'Final Approval', done: false },
+                  { step: '05', dept: 'Credit Committee', label: 'Committee Review', done: false },
                 ].map((item) => (
                   <div key={item.step} className={`flex items-center gap-4 p-3 rounded-lg border ${item.done ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100'}`}>
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${item.done ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
@@ -285,16 +285,16 @@ export default function Landing() {
             </div>
             <div>
               <span className="font-label-caps text-label-caps text-secondary mb-4 block">CONVERSATIONAL INTELLIGENCE</span>
-              <h2 className="font-h2 text-h2 mb-6">Ask Anything. Get Verified Answers.</h2>
-              <p className="text-on-surface-variant mb-6">Transform complex PDF tables and multi-page legal documents into instant conversational insights. LipiCore understands financial context, not just keywords.</p>
+              <h2 className="font-h2 text-h2 mb-6">Ask Staff Questions. Review Source-Backed Answers.</h2>
+              <p className="text-on-surface-variant mb-6">Turn policies, circulars, reports, and uploaded files into conversational staff support with source evidence, confidence signals, and human review for high-risk work.</p>
               <ul className="space-y-4">
                 <li className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-tertiary-fixed-dim">check_circle</span>
-                  <span className="text-body-md font-medium">Automatic Table Reconstruction</span>
+                  <span className="text-body-md font-medium">Table Extraction Review</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-tertiary-fixed-dim">check_circle</span>
-                  <span className="text-body-md font-medium">Cross-Document Synthesis</span>
+                  <span className="text-body-md font-medium">Cited Cross-Document Synthesis</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-tertiary-fixed-dim">check_circle</span>
@@ -311,9 +311,9 @@ export default function Landing() {
             <h2 className="font-h2 text-h2 mb-8">Vision-Enabled Intelligence</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
-                { icon: 'visibility', title: 'Hybrid OCR Engine', desc: '99.9% accuracy on handwritten notes, blurry scans, and complex layouts.' },
+                { icon: 'visibility', title: 'Hybrid OCR Engine', desc: 'OCR and layout extraction with confidence signals and review queues for complex pages.' },
                 { icon: 'draft', title: 'Multi-Format Native', desc: 'Direct ingestion of PDF, DOCX, XLSX, TXT, and scanned images.' },
-                { icon: 'architecture', title: 'Layout Awareness', desc: 'Understands headers, footers, charts, and nested tables for accurate extractions.' }
+                { icon: 'architecture', title: 'Layout Awareness', desc: 'Detects headers, footers, charts, and nested tables so staff can verify extracted evidence.' }
               ].map((item) => (
                 <div key={item.title} className="p-6 bg-white/5 rounded border border-white/10">
                   <span className="material-symbols-outlined text-3xl mb-3">{item.icon}</span>
@@ -368,14 +368,14 @@ export default function Landing() {
           <div className="max-w-7xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="font-h2 text-h2">Hardware &amp; Model Specs</h2>
-              <p className="text-on-surface-variant">Enterprise-grade performance without compromise.</p>
+              <p className="text-on-surface-variant">Performance and availability are sized by deployment tier and measured during pilot testing.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               {[
                 { label: 'COMPUTE', value: 'NVIDIA L40S', desc: 'Next-gen AI processing unit' },
                 { label: 'MEMORY', value: '128GB DDR5', desc: 'High-speed system RAM' },
                 { label: 'STORAGE', value: '4TB NVMe Gen5', desc: 'Enterprise-grade SSD arrays' },
-                { label: 'MODEL', value: 'LipiLLM', desc: "Bank's own fine-tuned language model" }
+                { label: 'MODEL', value: 'Private LLM', desc: 'Local model runtime selected by workload' }
               ].map((spec) => (
                 <div key={spec.label} className="bg-slate-50 p-6 rounded-lg border border-slate-200">
                   <p className="font-label-caps text-secondary mb-2">{spec.label}</p>
@@ -395,7 +395,7 @@ export default function Landing() {
               {[
                 { num: '01', title: 'Physical Provisioning', desc: 'LipiCore Server is delivered as a pre-configured rack-mount appliance to your data center — ready to operate in an air-gapped environment.' },
                 { num: '02', title: 'Network Isolation', desc: 'Your IT team configures a secure air-gapped or restricted intranet segment for the server. No outbound internet access required.' },
-                { num: '03', title: 'Library Mapping', desc: 'Ingest historical document repositories to build your institution\'s private AI knowledge base. LipiLLM learns from your own documents.' }
+                { num: '03', title: 'Library Mapping', desc: 'Ingest approved document repositories to build your institution\'s private AI knowledge base with source-controlled retrieval.' }
               ].map((step) => (
                 <div key={step.num} className="flex gap-8 items-start">
                   <div className="w-16 h-16 shrink-0 flex items-center justify-center bg-secondary text-on-secondary rounded-full font-bold text-xl">
@@ -414,9 +414,9 @@ export default function Landing() {
         {/* Final CTA */}
         <section id="contact" className="py-16 px-6 relative overflow-hidden bg-primary-container text-white">
           <div className="max-w-7xl mx-auto text-center relative z-10">
-            <h2 className="font-h1 text-h1 mb-6">Give Your Bank Its Own AI Document Intelligence Server</h2>
+            <h2 className="font-h1 text-h1 mb-6">Give Your Bank Its Own Secure Staff AI Appliance</h2>
             <p className="text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
-              Empower your analysts with secure, private, and audit-ready intelligence. Schedule a consultation with our enterprise architects.
+              Help staff find, summarize, and draft from approved bank knowledge while keeping final decisions with authorized bank teams.
             </p>
             <div className="flex flex-wrap justify-center gap-6">
               <button

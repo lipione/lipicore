@@ -11,6 +11,10 @@ class RagEvaluationCase(BaseModel):
     required_citation_terms: list[str] = Field(default_factory=list)
     required_answer_terms: list[str] = Field(default_factory=list)
     expect_not_found: bool = False
+    not_found_required: bool = False
+    source_required: bool = False
+    citation_required: bool = False
+    no_general_policy_advice: bool = False
     active_document_ids: list[int] | None = None
     session_id: int | None = None
 

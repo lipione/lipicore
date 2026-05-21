@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChatAssistant from './pages/ChatAssistant';
 import Documents from './pages/Documents';
+import DocumentReview from './pages/DocumentReview';
 import Features from './pages/Features';
 import Tasks from './pages/Tasks';
 import Users from './pages/Users';
@@ -14,8 +15,12 @@ import Analytics from './pages/Analytics';
 import Reports from './pages/Reports';
 import HelpCenter from './pages/HelpCenter';
 import EvaluationCenter from './pages/EvaluationCenter';
+import ModelLab from './pages/ModelLab';
 import AdminSecurity from './pages/AdminSecurity';
 import ComplianceRisk from './pages/ComplianceRisk';
+import ComplianceWorkspace from './pages/ComplianceWorkspace';
+import LoanSupport from './pages/LoanSupport';
+import SupportDesk from './pages/SupportDesk';
 import LipiCoreProcessNavigator from './pages/LipiCoreProcessNavigator';
 import MainLayout from './layouts/MainLayout';
 
@@ -42,11 +47,15 @@ function App() {
           <Route path="dashboard"      element={<Dashboard />} />
           <Route path="chat"           element={<ChatAssistant />} />
           <Route path="documents"      element={<Documents />} />
+          <Route path="document-review" element={<DocumentReview />} />
           <Route path="features"       element={<Features />} />
           <Route path="tasks"          element={<Tasks />} />
+          <Route path="support-desk"   element={<SupportDesk />} />
+          <Route path="loan-support"   element={<LoanSupport />} />
           <Route path="sessions"       element={<SessionHistory />} />
           <Route path="analytics"      element={<Analytics />} />
           <Route path="evaluations"    element={<EvaluationCenter />} />
+          <Route path="model-lab"      element={<ModelLab />} />
           <Route path="users"          element={<Users />} />
           <Route path="audit-logs"     element={<AuditLogs />} />
           <Route path="settings"       element={<Settings />} />
@@ -55,6 +64,7 @@ function App() {
           <Route path="admin/users"       element={<Users />} />
           <Route path="admin/settings"    element={<Settings />} />
           <Route path="compliance"        element={<ComplianceRisk />} />
+          <Route path="compliance-workspace" element={<ComplianceWorkspace />} />
           <Route path="regulatory"        element={<ComplianceRisk />} />
           <Route path="reports"           element={<Reports />} />
           <Route path="audit"             element={<AuditLogs />} />

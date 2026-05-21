@@ -7,6 +7,13 @@ export const CHAT_MODES = [
     prompt: 'Tell me about ',
   },
   {
+    value: 'approved_knowledge',
+    label: 'Approved Knowledge',
+    icon: 'verified',
+    description: 'Strict answers only from approved bank documents.',
+    prompt: 'What do approved documents say about ',
+  },
+  {
     value: 'analyze_file',
     label: 'Analyze File',
     icon: 'plagiarism',

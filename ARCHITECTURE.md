@@ -15,6 +15,7 @@ graph TD
     REDIS[(Redis Queue + Admission Control)]
     VLLM[vLLM Local Model Servers]
     BW[RQ Ingestion Worker]
+    LDJ[Long-Document Analysis Jobs]
     EVAL[RAG Evaluation Center]
 
     User <--> FB
@@ -25,8 +26,11 @@ graph TD
     API <--> REDIS
     API <--> VLLM
     API -- enqueues --> BW
+    API -- queues --> LDJ
     BW -- updates --> DB
     BW -- indexes --> QDR
+    LDJ -- stores results --> DB
+    LDJ --> VLLM
     FB -- SSE Status --> DB
     FB <--> EVAL
     EVAL <--> API
@@ -46,6 +50,7 @@ graph TD
 ### 2.2 Backend (FastAPI + SQLModel)
 *   **API Design:** RESTful API for session management and file handling; SSE for long-running notifications.
 *   **Asynchronous Tasks:** Uses Redis/RQ for durable document ingestion outside the API process.
+*   **Long-Document Jobs:** Uses the same queue infrastructure for large PDF/OCR/XLS analysis, status polling, and persisted results.
 *   **Guardrails:** Integrated PII detection and prompt injection protection layers.
 
 ### 2.3 RAG Pipeline (PostgreSQL FTS + Qdrant)
@@ -87,10 +92,25 @@ Chat session documents are tagged with `document_scope = "session_upload"`. The 
 
 ---
 
-## 5. Deployment Infrastructure
+## 5. Long-Document Analysis Lifecycle
+
+1.  **Selection:** User opens a ready/indexed/approved document in Document Library.
+2.  **Queue:** Frontend POSTs to `/api/long-document-analysis`.
+3.  **Access Check:** Backend validates bank scope, role, document lifecycle, and user/job ownership.
+4.  **Extraction:** Worker reuses the document extraction layer for PDF text/tables, OCR fallback, and Excel sheet/cell metadata.
+5.  **Packing:** Relevant excerpts are selected within `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
+6.  **Generation:** The analyst model produces a staff-reviewable result from selected excerpts only.
+7.  **Review:** UI polls job status and displays completed results from PostgreSQL.
+
+This path is for heavy files that should not block normal chat. It does not guarantee perfect OCR, table understanding, handwriting recognition, signature verification, or final business decisions.
+
+---
+
+## 6. Deployment Infrastructure
 
 *   **Orchestration:** Docker Compose.
 *   **Upgrade Safety:** `deploy/upgrade.sh` runs build/recreate/migrate/health gates and optional backend tests.
 *   **Runtime Health:** Compose health checks cover Redis, backend, frontend, and nginx.
 *   **Scaling:** The backend is stateless and can be scaled horizontally if Redis admission control is shared. Qdrant, PostgreSQL, MinIO, and Redis require real HA services for whole-bank deployments.
 *   **LLM Performance:** Local inference runs through vLLM model servers with Redis-backed admission control. The deployed compose profile uses a fast model tier and a deeper analyst/report tier with prefix caching and fp8 KV cache where supported.
+*   **Worker Sizing:** Heavy OCR/PDF/XLS jobs consume ingestion-worker and deep-model capacity. Monitor Redis queue depth, job age, and GPU memory before raising concurrency.

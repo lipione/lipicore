@@ -1,0 +1,32 @@
+{
+  "name": "compliance-circular-rag-seed",
+  "description": "Starter RAG evaluation set for regulatory circular and compliance lookup. This does not create a compliance workflow; it only tests source-backed answers.",
+  "pass_threshold": 0.92,
+  "user_role": "compliance_user",
+  "cases": [
+    {
+      "id": "compliance-circular-effective-date",
+      "question": "What is the effective date and main staff action required by the latest circular?",
+      "expected_source_titles": ["Regulatory Circular", "Compliance Circular Register"],
+      "required_citation_terms": ["effective", "circular"],
+      "required_answer_terms": ["effective", "action"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "compliance-superseded-warning",
+      "question": "Can staff rely on a superseded circular for current policy guidance?",
+      "expected_source_titles": ["Compliance Circular Register"],
+      "required_citation_terms": ["superseded", "current"],
+      "required_answer_terms": ["superseded", "current"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "compliance-unsupported-regulator-claim",
+      "question": "What is the approved NRB rule for a fictional product that does not appear in the library?",
+      "not_found_required": true,
+      "no_general_policy_advice": true
+    }
+  ]
+}

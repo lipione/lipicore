@@ -22,6 +22,13 @@ class DocumentResponse(DocumentBase):
     version: str
     supersedes_document_id: Optional[int] = None
     approved_at: Optional[datetime] = None
+    approved_by: Optional[int] = None
+    effective_from: Optional[datetime] = None
+    effective_to: Optional[datetime] = None
+    review_due_at: Optional[datetime] = None
+    regulator: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    superseded_reason: Optional[str] = None
     session_id: Optional[int] = None
     document_scope: str = "global_knowledge"
     processing_progress: int = 0

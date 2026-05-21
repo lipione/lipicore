@@ -22,6 +22,7 @@ const NOTIFICATIONS = [
 
 const MODE_OPTIONS = [
   { value: 'ask_knowledge', label: 'Ask Bank Knowledge' },
+  { value: 'approved_knowledge', label: 'Ask Approved Knowledge' },
   { value: 'analyze_file', label: 'Analyze Uploaded File' },
   { value: 'summarize', label: 'Summarize' },
   { value: 'draft', label: 'Draft' },

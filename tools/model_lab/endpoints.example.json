@@ -1,0 +1,28 @@
+{
+  "endpoints": [
+    {
+      "key": "current-fast-vllm",
+      "api_base": "http://127.0.0.1:8002",
+      "model": "gemma-4",
+      "api_key": "no-key"
+    },
+    {
+      "key": "current-deep-vllm",
+      "api_base": "http://127.0.0.1:8003",
+      "model": "gemma-4-26b-4bit",
+      "api_key": "no-key"
+    },
+    {
+      "key": "current-vision-qwen3-vl",
+      "api_base": "http://127.0.0.1:8007",
+      "model": "qwen3-vl-8b",
+      "api_key": "no-key"
+    },
+    {
+      "key": "candidate-long-context",
+      "api_base": "http://127.0.0.1:8004",
+      "model": "candidate-model-name",
+      "api_key": "no-key"
+    }
+  ]
+}

@@ -141,7 +141,7 @@ export default function Login() {
               type="submit"
               disabled={isLoading}
               className="w-full bg-primary text-white font-bold py-3 rounded shadow-sm hover:opacity-90 active:scale-95 transition-all
-                         disabled:opacity-60 disabled:cursor-not-allowed mt-2 text-sm tracking-tight"
+                         disabled:opacity-60 disabled:cursor-not-allowed mt-2 text-sm"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">

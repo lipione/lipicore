@@ -2,6 +2,8 @@
 
 End-to-end tests for the BankAi session-aware Retrieval-Augmented Generation (RAG) system.
 
+These tests do not yet cover queued long-document analysis. Large PDF/OCR/XLS workflows need a separate E2E fixture because they rely on background jobs and longer worker/model timing.
+
 ## Quick Start
 
 ```bash
@@ -108,6 +110,12 @@ See `../../E2E_TEST_GUIDE.md` for comprehensive testing guide including:
 ✓ Multi-turn question answering  
 ✓ Context persistence across questions  
 ✓ Document status tracking (Uploading → Processing → Ready)  
+
+Not yet covered:
+
+- Queueing `/api/long-document-analysis`.
+- Polling long-document job status.
+- Viewing stored large-file analysis results.
 
 ## Performance Notes
 

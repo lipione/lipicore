@@ -4,37 +4,56 @@ BankAi is an airgapped, white-label internal AI assistant for banks. It is deplo
 
 This is not a generic SaaS chatbot. The product direction is a dedicated bank appliance: one deployment per institution, bank-controlled data, bank-branded UI, local model runtime, auditable usage, and source-backed answers from approved documents.
 
+## Product Boundary
+
+BankAi/LipiCore is a secure staff-assistance and decision-support system. It is not an autonomous decision engine. Final lending, compliance, regulatory, operational, and customer-impact decisions remain with authorized bank staff.
+
+The first product use case is a **Bank Staff AI Helpdesk** for customer-care, branch, operations, compliance/helpdesk, and product/policy teams. It helps staff search approved knowledge, analyze internal files, summarize, draft, compare, and translate inside bank-controlled infrastructure.
+
 ## Key Features
 
 ### Enterprise Chat Experience
 *   **White-label branding:** Product name, bank name, colors, welcome text, support contact, disclaimer, and allowed assistant modes are configurable per bank.
 *   **Asynchronous Document Ingestion:** Upload PDF, DOCX, XLSX, PPTX, CSV, TXT, and image-heavy files without blocking chat. Processing runs through a Redis/RQ worker.
+*   **Queued Long-Document Analysis:** Large PDFs, OCR-heavy documents, and detailed Excel/PDF reviews can be queued as background jobs, packed into relevant excerpts, and reviewed later from the Document Library.
 *   **Real-time Progress Tracking:** Document Library cards show queued, extracting, embedding, indexing, and ready states.
 *   **Conversational Memory:** 10-message sliding window memory ensuring contextual follow-up awareness.
 *   **Stop & Regenerate:** Full control over generation with the ability to stop long-running streams or regenerate previous responses.
 
-### Advanced RAG & Compliance
+### Advanced RAG & Governance
 *   **Session-Bound Isolation:** Secure context routing ensuring that documents uploaded in one chat session are never leaked to another.
 *   **Source Evidence:** Assistant answers show source documents, snippets, full passages, page/section/chunk metadata, relevance, and citation-verification status.
 *   **RAG Evaluation Center:** Admin and audit roles can run JSON evaluation sets to test source recall, citation term recall, answer term recall, and not-found behavior.
 *   **Document Governance:** Knowledge documents support draft, approved, superseded, archived, and disabled lifecycle states.
 *   **Predictive Follow-ups:** Dynamically generated follow-up questions at the end of every response to guide user investigation.
-*   **Audit Logging:** Comprehensive logging of all queries, file uploads, and AI responses for regulatory compliance.
+*   **Audit Logging:** Comprehensive logging of queries, file uploads, and AI responses for bank review and governance.
+*   **Large File Governance:** Long-document jobs keep staff analysis separate from normal chat, store result metadata, and keep final interpretation with bank staff.
 
 ### Security & Privacy
 *   **Data Sovereignty:** Fully air-gapped capable; runs with local vLLM model servers and self-hosted vector databases (Qdrant).
 *   **PII Masking:** Automatic detection and masking of sensitive Personally Identifiable Information (PII) before LLM processing.
 *   **RBAC:** Role-Based Access Control for staff, admin, audit, data audit, bank admin, and super admin users with bank-level partitioning.
 
+### Explicit Non-Claims
+BankAi/LipiCore does not currently claim to:
+
+*   Make lending decisions or approve/reject credit.
+*   Replace compliance officers, supervisors, or authorized bank reviewers.
+*   Guarantee regulatory correctness independent of the bank's approved and current documents.
+*   Fully understand every scanned PDF, complex table, seal, signature, or handwritten note.
+*   Provide a blanket production HA/SLA guarantee without the corresponding HA deployment architecture.
+*   Be generally better than GPT-4, GPT-5, Claude, Gemini, or other public frontier models.
+
 ---
 
 ## Tech Stack
 
 *   **Frontend:** React (Vite), Tailwind CSS, Material Symbols.
-*   **Backend:** FastAPI (Python 3.11), SQLModel, PostgreSQL 15.
+*   **Backend:** FastAPI (Python 3.12), SQLModel, PostgreSQL 15.
 *   **Vector Engine:** Qdrant (Semantic Search & Session Filtering).
 *   **LLM Orchestration:** vLLM with Redis-backed admission control for private local inference.
 *   **Ingestion Queue:** Redis/RQ worker for extraction, OCR/table parsing, embeddings, and indexing.
+*   **Long-Document Queue:** Reuses Redis/RQ for large-file extraction, context packing, analyst-model generation, and persisted results.
 *   **Storage:** MinIO (S3-compatible persistent storage).
 *   **Streaming:** Server-Sent Events (SSE) for both generation and document status tracking.
 
@@ -50,6 +69,8 @@ BankAi uses a decoupled **Worker-Observer** architecture for document processing
 5.  **Admission Control:** Redis coordinates per-model and per-user concurrency so GPU memory is protected under load.
 6.  **Generation:** Response is streamed token-by-token from the local vLLM runtime.
 
+For heavy files, users should use the queued long-document workflow instead of normal chat. The workflow creates a background job, extracts PDF/OCR/Excel content, packs relevant excerpts into the deep model context, and stores the result for staff review. See [Queued Long-Document Analysis](docs/long-document-analysis.md).
+
 ---
 
 ## Deployment
@@ -58,7 +79,7 @@ BankAi uses a decoupled **Worker-Observer** architecture for document processing
 *   Docker and Docker Compose.
 *   NVIDIA container runtime for GPU-backed vLLM services.
 *   Local Gemma model files mounted on the inference host.
-*   Python 3.11 for local backend development and tests.
+*   Python 3.12 for local backend development and tests.
 *   Node.js 20+ for local frontend development.
 
 ### Quick Start
@@ -97,7 +118,7 @@ For a health-only server check:
 Backend:
 ```bash
 cd backend
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
 JWT_SECRET=test-secret SUPER_ADMIN_PASSWORD=test-password pytest -q

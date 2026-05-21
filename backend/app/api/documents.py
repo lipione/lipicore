@@ -205,6 +205,7 @@ def approve_document(
     doc.status = "approved"
     doc.version_state = "approved"
     doc.approved_at = datetime.utcnow()
+    doc.approved_by = current_user.id
     db.add(doc)
     from ..models.document import DocumentChunk
     chunks = db.exec(select(DocumentChunk).where(DocumentChunk.document_id == doc.id)).all()

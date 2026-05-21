@@ -1,0 +1,28 @@
+{
+  "prompts": [
+    {
+      "id": "strict_source_refusal",
+      "prompt": "A staff member asks for an internal policy that is not present in approved documents. Write the safest answer in one paragraph."
+    },
+    {
+      "id": "customer_reply_draft",
+      "prompt": "Draft a short staff-reviewed customer reply explaining that an account update request needs identity verification first."
+    },
+    {
+      "id": "nepali_staff_instruction",
+      "prompt": "Translate into Nepali: Please verify customer identity and check the approved SOP before giving a final answer."
+    },
+    {
+      "id": "policy_summary",
+      "prompt": "Summarize this policy excerpt into five staff-ready bullets and one escalation note.\n\nSection 1: Staff must use approved bank procedures when answering customer requests. Section 2: If approved documents are missing or expired, staff must escalate to a supervisor. Section 3: Draft responses require human review before sending to customers."
+    },
+    {
+      "id": "long_context_noise",
+      "prompt": "Find the staff action required in the final paragraph. Ignore unrelated sections.\n\nUnrelated background: branch operations require queue discipline. Customer support requires courtesy. Product teams maintain FAQs. Operations teams maintain logs. Compliance teams review policy updates. Branch teams follow approved SOPs. This background repeats to create retrieval noise. Unrelated background: branch operations require queue discipline. Customer support requires courtesy. Product teams maintain FAQs. Operations teams maintain logs. Compliance teams review policy updates. Branch teams follow approved SOPs. This background repeats to create retrieval noise. Unrelated background: branch operations require queue discipline. Customer support requires courtesy. Product teams maintain FAQs. Operations teams maintain logs. Compliance teams review policy updates. Branch teams follow approved SOPs. This background repeats to create retrieval noise.\n\nFinal paragraph: If a source is expired or superseded, staff must not treat the AI answer as final policy and must escalate to the document owner."
+    },
+    {
+      "id": "vision_ocr_instruction",
+      "prompt": "You are testing a document-vision OCR route. For a scanned bank form image, extract visible text, preserve table rows, flag handwriting/stamp/signature-like regions, and return confidence notes for staff review."
+    }
+  ]
+}

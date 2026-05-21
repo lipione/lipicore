@@ -34,6 +34,7 @@ from ..services.rag_service import (
     MIN_SOURCE_RELEVANCE_SCORE,
     NOT_FOUND_RESPONSE,
     SESSION_RETRIEVAL_STATUSES,
+    _build_source,
     _document_visible_to_user,
     _rerank_results,
     generate_rag_response,
@@ -45,7 +46,7 @@ from ..services.audit_service import log_audit_event
 from ..services.guardrail_service import detect_prompt_injection, detect_and_mask_pii
 from ..services.query_rewrite_service import rewrite_query_for_retrieval
 from ..services.llm_service import async_call_llm
-from ..services.llm_gateway import model_status, reserve_model, resolve_model_profile
+from ..services.llm_gateway import model_status, reserve_model, resolve_model_profile, select_model_key_for_workflow
 from ..services.ingestion_queue import enqueue_document_ingestion
 from ..services.citation_verifier import attach_source_verification, verify_answer_against_sources
 from ..core.config import settings
@@ -67,19 +68,18 @@ def _resolve_model_endpoint(model_name: Optional[str]) -> tuple[str, str, str]:
 
 
 def _model_supports_vision(model_name: Optional[str]) -> bool:
-    """
-    Check if a model supports vision/image analysis.
-    For now, none of the vLLM text models support vision — fallback to general prompt.
-    """
-    # All current models are text-only; would need multimodal models to support vision
-    return False
+    requested = (model_name or "").strip().lower()
+    if not requested:
+        return False
+    vision_terms = ("vision", "vl", "qwen3-vl", "qwen2.5-vl", "qwen2-vl")
+    return requested == "vision" or any(term in requested for term in vision_terms)
 
 router = APIRouter()
 
 CHAT_UPLOAD_DIR = settings.CHAT_UPLOAD_DIR
 
-KNOWLEDGE_SEARCH_MODES = {"ask_knowledge", "analyze_file", "compare"}
-SOURCE_REQUIRED_MODES = {"analyze_file", "compare"}
+KNOWLEDGE_SEARCH_MODES = {"ask_knowledge", "approved_knowledge", "analyze_file", "compare"}
+SOURCE_REQUIRED_MODES = {"approved_knowledge", "analyze_file", "compare"}
 MODEL_CONTEXT_LIMIT_TOKENS = settings.LLM_CONTEXT_WINDOW_TOKENS
 MODEL_TOKEN_HEADROOM = 96
 MIN_GENERATION_TOKENS = 128
@@ -89,6 +89,10 @@ MODE_INSTRUCTIONS = {
     "ask_knowledge": (
         "Mode: Ask BankAi. Use approved bank knowledge with citations when relevant sources are available. "
         "If no approved source matches, answer as general knowledge and clearly avoid presenting it as approved bank policy."
+    ),
+    "approved_knowledge": (
+        "Mode: Ask Approved Knowledge. Answer only when approved bank documents support the response. "
+        "If approved sources do not support the answer, say that the answer was not found in approved documents."
     ),
     "analyze_file": (
         "Mode: Analyze Uploaded File. Focus on the user's selected session files. "
@@ -121,6 +125,7 @@ def general_fallback_system_identity(language: str, mode: str) -> str:
     return (
         f"{get_system_identity(language)}\n\n{mode_instruction(mode)}\n\n"
         "No approved document source matched this question. Answer using general knowledge only. "
+        "Give one direct staff-ready answer. Do not provide multiple alternative answers unless the user explicitly asks for alternatives. "
         "Do not claim this is official bank policy, an approved circular, or a bank-specific rule. "
         "For internal bank policy, tell the user to verify against approved documents or a supervisor."
     )
@@ -205,6 +210,9 @@ def derive_answer_metadata(
         answer_type = "not_found"
     else:
         answer_type = "general_answer"
+
+    if source_count > 0 and citation_verification and citation_verification.get("status") == "partially_supported":
+        answer_type = "unsupported_source"
 
     if answer and requires_sources and source_count == 0:
         if any(term in answer.lower() for term in ("escalate", "supervisor", "compliance team")):
@@ -451,6 +459,7 @@ async def create_chat_message(
             session_id=session_id,
             user_id=current_user.id,
             user_department=current_user.department,
+            model_name=chat_request.model_override or select_model_key_for_workflow(mode),
         )
         if answer == NOT_FOUND_RESPONSE and mode not in SOURCE_REQUIRED_MODES:
             answer = await async_call_llm(
@@ -652,22 +661,9 @@ async def stream_chat_message(
                             source_key = (doc_id, r.payload.get("page_number"), section_label, r.payload.get("chunk_index"))
                             if doc_id and source_key not in seen_src:
                                 doc = db.get(Document, doc_id)
-                                passage = r.payload.get("text", "")
-                                sources_list.append({
-                                    "document_id":    doc_id,
-                                    "document_title": (doc.title or doc.file_name) if doc else "Database Source",
-                                    "title":          (doc.title or doc.file_name) if doc else "Database Source",
-                                    "document_type":  doc.document_type if doc else None,
-                                    "department":     doc.department if doc else None,
-                                    "snippet":        passage[:180],
-                                    "passage":        passage,
-                                    "page_number":    r.payload.get("page_number"),
-                                    "section_label":  section_label,
-                                    "section_number": section_label,
-                                    "chunk_index":    r.payload.get("chunk_index"),
-                                    "relevance_score": r.score,
-                                })
-                                seen_src.add(source_key)
+                                if doc:
+                                    sources_list.append(_build_source(doc, r.score, r))
+                                    seen_src.add(source_key)
             except Exception as e:
                 logger.error(f"RAG failed in stream: {e}")
 
@@ -727,11 +723,13 @@ async def stream_chat_message(
         if not has_image and not sources_list and mode not in SOURCE_REQUIRED_MODES:
             sys_identity = general_fallback_system_identity(chat_request.language, mode)
 
-        selected_profile = resolve_model_profile(chat_request.model_override)
+        selected_model = chat_request.model_override or select_model_key_for_workflow(mode)
+        selected_profile = resolve_model_profile(selected_model)
         vllm_messages, response_max_tokens, trimmed_history = prepare_vllm_payload_messages(
             system=sys_identity,
             history=history[-10:],
             desired_max_tokens=selected_profile.max_tokens,
+            context_limit=selected_profile.context_window_tokens,
         )
         if trimmed_history:
             yield f"data: {json.dumps({'type': 'status', 'message': 'Older chat context was shortened to fit the local model.'})}\n\n"
@@ -745,7 +743,7 @@ async def stream_chat_message(
             async with reserve_model(
                 user_id=current_user.id,
                 role=current_user.role,
-                model_name=chat_request.model_override,
+                model_name=selected_model,
             ) as lease:
                 profile = lease.profile
                 if lease.queued_ahead > 0:
@@ -1032,16 +1030,18 @@ async def stream_chat_with_file(
             ]
         })
     else:
-        from ..services.ingestion_service import extract_text
-        extracted = extract_text(file_path, file_ext)
-        if not extracted.strip():
-            extracted = "(No text could be extracted from this file)"
-        if len(extracted) > 8000:
-            extracted = extracted[:8000] + "\n\n... (truncated)"
-        vllm_messages.append({
-            "role": "user",
-            "content": f"I have uploaded \"{file.filename}\".\n\n--- FILE CONTENT ---\n{extracted}\n--- END FILE CONTENT ---\n\nMy request: {message}"
-        })
+        from ..services.ingestion_service import extract_pages
+        from ..services.large_document_context_service import build_large_file_prompt
+
+        extracted_pages = extract_pages(file_path, file_ext)
+        file_prompt, file_prompt_metadata = build_large_file_prompt(
+            file_name=file.filename,
+            user_request=message,
+            pages=extracted_pages or [{"page_number": None, "text": "(No text could be extracted from this file)"}],
+            context_window_tokens=settings.LLM_DEEP_CONTEXT_WINDOW_TOKENS,
+            output_tokens=settings.LLM_DEEP_MAX_TOKENS,
+        )
+        vllm_messages.append({"role": "user", "content": file_prompt})
 
     try:
         enqueue_document_ingestion(doc.id, db)
@@ -1058,7 +1058,7 @@ async def stream_chat_with_file(
             async with reserve_model(
                 user_id=current_user.id,
                 role=current_user.role,
-                model_name=None,
+                model_name=select_model_key_for_workflow("analyze_file"),
             ) as lease:
                 profile = lease.profile
                 if lease.queued_ahead > 0:
@@ -1115,6 +1115,7 @@ async def stream_chat_with_file(
                     "document_title": doc.title or doc.file_name,
                     "title": doc.title or doc.file_name,
                     "file_name": doc.file_name,
+                    "analysis_metadata": file_prompt_metadata if not is_image else {},
                 }])
             )
             db.add(ai_msg)
