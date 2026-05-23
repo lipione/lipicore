@@ -8,6 +8,11 @@
 
 **Tech Stack:** FastAPI, SQLModel, Alembic, PostgreSQL, Qdrant, Redis/RQ, MinIO, React/Vite, Tailwind, vLLM, optional SGLang/TensorRT-LLM lab runtimes, pytest, Playwright, Locust.
 
+**Status as of 2026-05-23:** deployed to `/data/bankai` at commit `615d299`.
+Migrations through `012` are applied. Current production routes all text lanes
+to Gemma 4 26B 4-bit on `lipicore-vllm-c`, routes vision/OCR work to Qwen3-VL
+8B on `lipicore-vllm-vision`, and keeps the optional fast 4B endpoint disabled.
+
 ---
 
 ## Current Baseline
@@ -15,15 +20,16 @@
 LipiCore already has the right base for a bank staff appliance:
 
 - Staff chat modes and model mode selector.
-- vLLM fast/deep model routes with Redis admission control.
+- vLLM route registry with Redis admission control; current production routes all text lanes to the 26B endpoint and vision/OCR to Qwen3-VL.
 - Document upload, async ingestion, OCR/table extraction hooks, chunking, embeddings, Qdrant indexing.
 - Approved document lifecycle and chunk-level permission metadata.
 - RAG source evidence panel, citation verifier, and Evaluation Center.
-- Load tests for 25/50/100 active-staff claims.
+- Load tests for API smoke, 20/40 streaming staff bursts, and 25/50/100 active-staff claims.
+- Support Desk, Compliance Workspace, Loan Support, Document Review, Model Lab, and queued long-document analysis foundations.
 - Pilot, department, and whole-bank sizing docs.
 - HA reference compose under `deploy/ha`.
 
-Main gap: the product still needs deeper domain workflows, stronger evaluation evidence, long-document benchmark evidence, OCR confidence/review maturity, model benchmark harnesses, and deployment-tier proof before we can safely answer aggressive bank requests.
+Main gap: the product still needs stronger bank-specific evaluation evidence, long-document benchmark evidence, OCR confidence/review maturity, workflow audit/export polish, priority queues, and deployment-tier drills before stronger bank claims are safe.
 
 ## Sales Positioning To Use Now
 
@@ -33,10 +39,10 @@ Use this wording in bank replies:
 
 Use this capability ladder:
 
-- Today: staff AI helpdesk, approved-knowledge Q&A, document analysis, drafting, summarization, audit trail.
-- Pilot: customer care, branch support, compliance lookup, controlled internal file analysis.
-- Next phase: lending support, compliance review, OCR confidence workflow, supervisor approval.
-- Later: HA whole-bank deployment, model benchmark evidence, specialized extraction and long-document reasoning.
+- Today: staff AI helpdesk, approved-knowledge Q&A, document analysis, drafting, summarization, audit trail, Support Desk, Compliance Workspace, Loan Support, Document Review, Model Lab, and queued long-document analysis.
+- Pilot: customer care, branch support, compliance lookup, controlled internal file analysis, and limited loan/compliance decision-support notes with human review.
+- Next phase: workflow audit/export polish, priority queues, stronger OCR confidence review, evaluation packs, and model benchmark evidence.
+- Later: HA whole-bank deployment, failover drills, specialized extraction, and stronger long-document reasoning.
 
 ## Claims Matrix
 
@@ -78,7 +84,7 @@ Do not standardize on a model by reputation. Standardize by bank evaluation scor
 
 Goal: high concurrency, short answers, customer-care drafts, branch staff Q&A, translation, simple summaries.
 
-- Current baseline: Gemma 4 E4B/4B-style fast tier already configured in compose.
+- Current baseline: optional Gemma 4 E4B/4B-style fast tier exists in compose but is not active on the production two-GPU profile.
 - Test next: Gemma 4 E4B-it, Ministral 3 8B or 14B, Qwen3.5 9B/4B if available in approved model registry, Qwen3-4B-Instruct-2507.
 - Required metrics: first token latency, full answer latency, tokens/sec, GPU memory, 20/40/75 concurrent streams, Nepali/English answer quality, not-found discipline.
 
@@ -86,7 +92,7 @@ Goal: high concurrency, short answers, customer-care drafts, branch staff Q&A, t
 
 Goal: compliance explanation, policy comparison, risk factors, credit memo draft, complex customer cases.
 
-- Current baseline: Gemma 4 26B 4-bit-style deep tier.
+- Current baseline: Gemma 4 26B 4-bit-style text/analyst tier is active on production and currently handles all text lanes.
 - Test next: Qwen3.6-27B, Qwen3.6-35B-A3B, Qwen3-30B-A3B-Instruct-2507, Gemma 4 26B-A4B-it, Gemma 4 31B-it, Mistral Small 4.
 - Required metrics: citation usefulness, answer correctness, reasoning stability, bilingual terminology, output structure, tail latency under queue pressure.
 
@@ -102,7 +108,8 @@ Goal: large policies, circular bundles, loan files, audit reports, multi-documen
 
 Goal: scanned PDFs, tables, forms, stamps/seals/signature detection, image-based source evidence.
 
-- Test: Gemma 4 E4B/26B/31B multimodal, Llama 4 Scout, Qwen3-VL and Qwen3-VL-Reranker where runtime support is stable.
+- Current baseline: Qwen3-VL 8B is active on production for vision/OCR-capable analysis.
+- Test: Gemma 4 E4B/26B/31B multimodal, Llama 4 Scout, Qwen3-VL variants, and Qwen3-VL-Reranker where runtime support is stable.
 - Keep handwriting and signature verification as detection/flagging, not legal authentication.
 - Required metrics: OCR character error rate, table cell accuracy, page-level confidence, false positive/negative rate for stamp/signature/handwriting flags.
 
@@ -169,6 +176,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [ ] Verification: run backend pytest for RAG and session documents, frontend build, Playwright session RAG flow.
   - 2026-05-21: backend RAG/session pytest passed, frontend build passed, frontend lint passed with existing e2e console warnings. Playwright session RAG flow is blocked until `PLAYWRIGHT_ADMIN_PASSWORD` is available.
   - 2026-05-21: citation verifier, model-lab tools, seed packs, RAG evaluation, and session document tests passed locally. Remote model inventory and baseline model smoke/concurrency benchmarks completed through SSH tunnels.
+  - 2026-05-23: production deployed with migrations through `012`; protected routes verified unauthenticated and app health checks passed.
 
 ## Phase 2: Customer Care And Branch Support Workflow
 
@@ -198,6 +206,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [ ] Add dashboard metrics: answer accepted, edited, escalated, no-source, response time.
 - [ ] Verification: 25-case pilot eval with approved customer-care SOPs and 10 no-source traps.
   - 2026-05-21: Support case API/service/frontend foundation added. Pilot eval, guided task generation, and export/audit workflow remain release gates.
+  - 2026-05-23: Support Desk deployed on production as controlled decision-support foundation; supervisor/export/audit polish remains before stronger claims.
 
 ## Phase 3: Compliance Workspace
 
@@ -227,6 +236,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [ ] Add "not legal/regulatory guarantee" disclaimer in metadata and export footer.
 - [ ] Verification: compliance eval pack must pass source recall, citation recall, not-found traps, and stale-source warning tests.
   - 2026-05-21: Compliance review API/service/frontend foundation added with officer-review status and non-guarantee disclaimer. Gap detection and audit export remain release gates.
+  - 2026-05-23: Compliance Workspace deployed on production as human-reviewed support; policy gap detection, audit export, and eval pack remain release gates.
 
 ## Phase 4: Lending Decision-Support Workspace
 
@@ -257,6 +267,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [x] Ensure system never emits final approve/reject as an automated decision.
 - [ ] Verification: loan eval pack with at least 50 cases, including missing-doc, conflicting-info, unsupported-policy, and no-source scenarios.
   - 2026-05-21: Loan support API/service/frontend foundation added. It stores missing documents, risk factors, memo drafts, and keeps `automated_decision` unset.
+  - 2026-05-23: Loan Support deployed on production as decision support only; eligibility citations, maker-checker, and 50-case eval pack remain release gates.
 
 ## Phase 5: Document Intelligence And Extraction Confidence
 
@@ -288,6 +299,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [ ] Add visual-document retrieval experiment using Qwen3-VL-Reranker or ColPali-style page embeddings for scanned PDFs.
 - [ ] Verification: build a document extraction benchmark with clean PDFs, scanned PDFs, tables, merged Excel cells, forms, and Nepali PDFs.
   - 2026-05-21: Document extraction page model/API/service/frontend queue added. Queued long-document analysis API/service/UI added. Full table structure preservation and visual retrieval experiments remain release gates.
+  - 2026-05-23: Document Review and queued long-document analysis deployed on production; Qwen3-VL vision/OCR endpoint active, but scanned-document claims still require bank-specific benchmarks.
 
 ## Phase 6: Model Lab, Routing, And Benchmark Harness
 
@@ -323,6 +335,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [x] Add side-by-side model comparison UI with red/yellow/green claim readiness.
 - [ ] Verification: run benchmark matrix before and after each model change; fail release if not-found or source recall regresses.
   - 2026-05-21: Runtime registry, route policy, Model Lab API/page, candidate matrix, and report summarizer added. Full priority queues and automated release gates remain.
+  - 2026-05-23: Model Lab route is deployed and protected; current production profile is 26B text plus Qwen3-VL vision, with fast 4B endpoint disabled.
 
 ## Phase 7: Load Handling And Concurrency
 
@@ -351,6 +364,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [x] Update docs with measured hardware profile, exact model, quantization, context, max sequences, max batched tokens, and queue settings.
 - [ ] Verification: keep HTML Locust reports and JSON summaries as release evidence.
   - 2026-05-21: Model capacity runbook added with remote L40S baseline and model-swap gates. Full 25/50/75/100 active-staff runs remain release evidence.
+  - 2026-05-23: Capacity runbook updated with current GPU memory, disk, route consolidation, and model restart guardrails. A full 500-staff realistic workload still requires scheduled testing evidence.
 
 ## Phase 8: HA/SLA Deployment Tiers
 
@@ -379,6 +393,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [x] Add model rollback procedure: previous weights, previous compose config, benchmark rerun.
 - [ ] Verification: run failover drill, restore drill, model restart drill, and upgrade rollback drill before any SLA claim.
   - 2026-05-21: SLA tier matrix and HA runbooks added. Real failover/restore drills remain required before bank SLA claims.
+  - 2026-05-23: Production app-only deploy process documented. GPU services should not be restarted outside a maintenance window.
 
 ## Implementation Order
 

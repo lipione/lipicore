@@ -1,8 +1,8 @@
 # LipiCore Bank Demo Script
 
-**Prepared:** May 21, 2026  
-**Demo theme:** Bank Staff AI Helpdesk  
-**Audience:** Customer care, branch operations, compliance/helpdesk, product/policy, IT, risk, procurement
+- **Prepared:** May 23, 2026
+- **Demo theme:** Bank Staff AI Helpdesk
+- **Audience:** Customer care, branch operations, compliance/helpdesk, product/policy, IT, risk, procurement
 
 ## Demo Opening
 
@@ -57,6 +57,17 @@ Use this opening:
 5. Open the stored result and explain that staff review remains required for high-risk use.
 
 **Buyer message:** Heavy documents do not block normal chat. LipiCore queues the work, uses extracted source excerpts, stores the result, and keeps final decisions with staff.
+
+## Optional Flow 5: Controlled Decision Support
+
+**Purpose:** Show that lending and compliance are handled as staff workflows, not autonomous decisions.
+
+1. Open Support Desk, Compliance Workspace, or Loan Support.
+2. Create a case or review record using approved source documents.
+3. Generate or paste a staff draft, summary, checklist, risk note, or credit memo draft.
+4. Point out the human review language and the absence of auto-approve/auto-reject behavior.
+
+**Buyer message:** LipiCore can support regulated workflows with notes, drafts, and review records while final authority remains with bank officers.
 
 ## Close
 

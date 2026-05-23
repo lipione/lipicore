@@ -20,7 +20,9 @@
 - File analysis now packs relevant page/section excerpts into the model context instead of truncating to the first few thousand characters.
 - Heavy OCR and very large Excel/PDF analysis now runs as queued long-document jobs with status polling, relevance-based excerpt packing, and stored results for staff review.
 - Detailed workflow reference: `docs/long-document-analysis.md`.
+- Staff decision-support workspaces now exist for Support Desk, Compliance Workspace, Loan Support, Document Review, and Model Lab.
 - Fast and analyst model routes now have separate context-window settings: `LLM_FAST_CONTEXT_WINDOW_TOKENS` and `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
+- Current production routes all text lanes to the Gemma 4 26B endpoint and uses Qwen3-VL for vision/OCR; the optional fast text endpoint is disabled until GPU capacity is rebalanced.
 - HA deployment reference under `deploy/ha`.
 - Docker Compose health checks cover Redis, backend, frontend, and nginx.
 - `deploy/upgrade.sh` provides health-gated upgrades, optional backend tests, internal health checks, and public health checks.

@@ -2,8 +2,8 @@
 
 **Product:** Airgapped white-label bank AI appliance
 **Delivery:** Bank-controlled infrastructure plus enterprise software
-**Version:** 1.2
-**Last updated:** 2026-05-21
+**Version:** 1.3
+**Last updated:** 2026-05-23
 
 ---
 
@@ -16,7 +16,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 ## Core Capabilities
 
 - Staff chat with streaming responses, conversation history, and selected-document context.
-- Local fast/deep model tiers served through vLLM.
+- Local vLLM model routes for text/analyst work and vision/OCR work. The current production server routes all text lanes to Gemma 4 26B 4-bit and keeps the fast 4B lane disabled until GPU capacity is rebalanced.
 - Retrieval-augmented generation over uploaded and approved documents.
 - Hybrid retrieval using Qdrant vector search plus PostgreSQL full-text search.
 - Reranking before context construction.
@@ -27,6 +27,11 @@ The current product is strongest as an internal knowledge, document analysis, cu
 - Redis/RQ ingestion queue with a separate worker process.
 - OCR fallback and table-aware extraction for PDFs and spreadsheets.
 - Queued long-document analysis for heavy OCR, large PDFs, and detailed Excel/PDF review.
+- Support Desk for customer-care and branch cases with source-backed draft assistance.
+- Compliance Workspace for circular/review notes with human sign-off.
+- Loan Support workspace for missing-document tracking, risk-factor notes, and credit memo drafts without automated approval.
+- Document Review queue for low-confidence extraction pages.
+- Model Lab for model inventory, route visibility, and benchmark evidence.
 - RAG Evaluation Center for bank-specific test cases.
 - Audit logs, RBAC, bank partitioning, and white-label branding.
 - Health-gated upgrade script for remote deployments.
@@ -42,7 +47,9 @@ The current product is strongest as an internal knowledge, document analysis, cu
 | Document summarization | Good | Best for normal PDFs, Word files, spreadsheets, and PowerPoints. |
 | Large document analysis | Good but queue-based | Heavy OCR, large PDFs, and detailed Excel workbooks run as background jobs with stored results. |
 | Multi-document comparison | Good but bounded | Long, broad answers need queued analysis, multi-step retrieval, or map-reduce improvements. |
-| Credit/risk decisioning | Not ready | Requires workflow controls, validation, supervisor review, and integrations. |
+| Loan support notes | Controlled support | Can track required/missing documents, risk-factor notes, and credit memo drafts. It does not approve or reject loans. |
+| Compliance review notes | Controlled support | Can summarize circular impact and review notes. Officers remain responsible for interpretation and sign-off. |
+| Credit/risk decisioning | Not ready | Requires validated workflow controls, integrations, supervisor review, and a bank-approved governance model. |
 | Regulatory reporting automation | Not ready | Needs structured workflows, source validation, and formal sign-off. |
 
 ## File Support
@@ -58,7 +65,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 
 ## Queued Long-Document Analysis
 
-Large PDFs, OCR-heavy documents, and detailed Excel workbooks should use queued long-document analysis instead of normal chat. The workflow creates a background job, extracts document content, selects relevant page/sheet excerpts within the deep-model context budget, generates a staff-reviewable result, and stores progress/result metadata in PostgreSQL.
+Large PDFs, OCR-heavy documents, and detailed Excel workbooks should use queued long-document analysis instead of normal chat. The workflow creates a background job, extracts document content, selects relevant page/sheet excerpts within the analyst-model context budget, generates a staff-reviewable result, and stores progress/result metadata in PostgreSQL.
 
 Current defaults:
 
@@ -94,20 +101,22 @@ These are test-server results, not contractual SLAs.
 | Backend test suite | 37 tests passed on remote test server |
 | Frontend build | `npm run build` passed |
 | Frontend lint | `npm run lint` passed with zero errors and existing e2e console warnings only |
+| Production deployment | `/data/bankai` deployed at commit `615d299`; migrations applied through `012` |
+| Production route checks | Backend and frontend health checks passed; protected Model Lab and long-document endpoints return `401` unauthenticated |
 | 25 active staff token smoke | 442 requests, 0 failures, p95 stream around 17s |
 | 50 active staff API smoke | 752 requests, 0 failures |
 | 100 active staff API-only smoke | 2,357 requests, 0 failures, p95 around 57ms |
 | 20 staff real streaming answers | 20/20 answers, p50 8.41s, p95 29.95s |
 | 40 staff real streaming answers | 40/40 answers, p50 30.61s, p95 80.19s |
 
-Interpretation: the system can support normal internal usage patterns, but deep-model streaming latency rises sharply under heavier simultaneous load. Whole-bank rollout requires capacity planning, queue limits, and pilot measurements on the bank's actual hardware and documents.
+Interpretation: the system can support normal internal usage patterns, but analyst-model streaming latency rises sharply under heavier simultaneous load. Whole-bank rollout requires capacity planning, queue limits, and pilot measurements on the bank's actual hardware and documents.
 
 ## Recommended Deployment Tiers
 
 | Tier | Intended Use | Indicative Configuration |
 |------|--------------|--------------------------|
 | Pilot | 20-50 staff, one department | Single host, 1-2 GPUs, conservative queue limits, daily backups. |
-| Department | 50-200 staff, customer care/compliance | Separate fast/deep GPU tiers, monitored Redis queue, scheduled RAG evaluations, stronger backup/restore testing. |
+| Department | 50-200 staff, customer care/compliance | Dedicated text/analyst capacity, optional separate fast route, monitored Redis queue, scheduled RAG evaluations, stronger backup/restore testing. |
 | Whole-bank | 200+ staff across departments | HA PostgreSQL, HA object storage, Qdrant persistence/replication plan, multiple backend workers, redundant inference capacity, observability, runbooks. |
 
 Single-host Docker Compose is acceptable for pilots and controlled internal trials. It is not by itself a 99.95% HA architecture.
@@ -147,6 +156,6 @@ Do not use these claims in sales material until independently validated for the 
 
 ## Current Product Decision
 
-**Status:** Needs disciplined pilot validation.
+**Status:** Pilot-ready with disciplined validation.
 
-BankAi is technically credible as an airgapped staff AI appliance, but it becomes commercially viable only if the pilot proves three things: staff save time, answers cite correct approved sources, and bank operators can maintain the system without heroic support.
+BankAi is technically credible as an airgapped staff AI appliance, but it should still be expanded only after the pilot proves three things: staff save time, answers cite correct approved sources, and bank operators can maintain the system without heroic support.

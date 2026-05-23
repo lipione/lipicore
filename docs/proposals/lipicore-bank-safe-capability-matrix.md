@@ -1,7 +1,7 @@
 # LipiCore Bank Safe Capability Matrix
 
-**Prepared:** May 21, 2026  
-**Use for:** Bank replies, procurement discussions, demos, and pilot scoping
+- **Prepared:** May 23, 2026
+- **Use for:** Bank replies, procurement discussions, demos, and pilot scoping
 
 ## One-Line Product Definition
 
@@ -22,6 +22,7 @@ LipiCore is a decision-support and staff-productivity system. It is not an auton
 | Approved knowledge Q&A | Answers from approved policies, circulars, SOPs, manuals, product documents, and uploaded files. | Source-backed answers from approved bank knowledge where matching sources exist. |
 | Staff chat | General banking and customer-service assistance with source-backed answers when available. | Staff assistant for routine lookup, drafting, summarization, and internal guidance. |
 | Document analysis | Upload supported files, summarize, ask questions, compare, and extract points. Heavy PDF/OCR/XLS review can be queued as a background long-document job. | Internal file analysis with citations where extracted text supports the answer; large files are processed asynchronously for staff review. |
+| Decision-support workspaces | Support Desk, Compliance Workspace, Loan Support, Document Review, Model Lab, and Evaluation Center are available as controlled staff workflows. | Workflow support, notes, drafts, review queues, and benchmark evidence without autonomous business decisions. |
 | Drafting | Customer replies, internal memos, notices, scripts, FAQs, and escalation notes. | Staff-ready drafts for human review. |
 | Bilingual usage | English and Nepali staff usage. | Bilingual support for staff workflows, subject to evaluation on the bank's documents. |
 | Data control | Local deployment with private model runtime and self-hosted storage/vector database. | Bank data stays inside bank-controlled infrastructure. |

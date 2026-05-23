@@ -112,5 +112,5 @@ This path is for heavy files that should not block normal chat. It does not guar
 *   **Upgrade Safety:** `deploy/upgrade.sh` runs build/recreate/migrate/health gates and optional backend tests.
 *   **Runtime Health:** Compose health checks cover Redis, backend, frontend, and nginx.
 *   **Scaling:** The backend is stateless and can be scaled horizontally if Redis admission control is shared. Qdrant, PostgreSQL, MinIO, and Redis require real HA services for whole-bank deployments.
-*   **LLM Performance:** Local inference runs through vLLM model servers with Redis-backed admission control. The deployed compose profile uses a fast model tier and a deeper analyst/report tier with prefix caching and fp8 KV cache where supported.
+*   **LLM Performance:** Local inference runs through vLLM model servers with Redis-backed admission control. The repository supports separate fast, analyst, and vision/OCR routes; the current production profile routes all text lanes to the Gemma 4 26B endpoint and uses a separate Qwen3-VL endpoint for vision/OCR work.
 *   **Worker Sizing:** Heavy OCR/PDF/XLS jobs consume ingestion-worker and deep-model capacity. Monitor Redis queue depth, job age, and GPU memory before raising concurrency.

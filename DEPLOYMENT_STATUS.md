@@ -1,7 +1,7 @@
 # BankAi Public Deployment - Live
 
-**Date:** May 21, 2026
-**Status:** Production stack deployed; queued long-document analysis documented for rollout
+**Date:** May 23, 2026
+**Status:** Production stack deployed at commit `615d299`; staff helpdesk, document governance, decision-support workspaces, Model Lab, and queued long-document analysis are live
 
 ## Public Access
 
@@ -28,10 +28,10 @@ nginx reverse proxy
         +-- PostgreSQL
         +-- Qdrant vector database
         +-- MinIO object storage
-        +-- Redis admission control
+        +-- Redis admission control and RQ queue
         +-- RQ ingestion and long-document analysis queue
-        +-- vLLM fast model on GPU 0
-        +-- vLLM deep model on GPU 1
+        +-- vLLM text/analyst model on GPU 1
+        +-- vLLM vision/OCR model on GPU 0
 ```
 
 ## Running Services
@@ -45,28 +45,35 @@ nginx reverse proxy
 | Qdrant | `lipicore-qdrant` | vector search | internal |
 | MinIO | `lipicore-minio` | document storage | internal |
 | Redis | `lipicore-redis` | LLM request admission control | internal |
-| ingestion worker | `ingestion-worker` | document ingestion and queued long-document analysis | internal |
-| vLLM fast | `lipicore-vllm-b` | clean Gemma 4 4B on GPU 0 | 8002 |
-| vLLM deep | `lipicore-vllm-c` | clean Gemma 4 26B 4-bit on GPU 1 | 8003 |
+| ingestion worker | `lipicore-ingestion-worker` | document ingestion and queued long-document analysis | internal |
+| vLLM text/analyst | `lipicore-vllm-c` | Gemma 4 26B 4-bit on GPU 1 | 8003 |
+| vLLM vision/OCR | `lipicore-vllm-vision` | Qwen3-VL 8B on GPU 0 | 8007 |
+
+`lipicore-vllm-b` is not running in the current production profile. Do not
+start it unless a GPU capacity decision is made first.
 
 ## Model Runtime
 
 The deployment uses vLLM only. Ollama and LoRA adapters are not part of the
 current stack.
 
-| Tier | Served model name | Model path | GPU | Capacity target |
-|------|-------------------|------------|-----|-----------------|
-| Fast | `gemma-4` | `/data/models/llm/gemma-4-E4B-it` | 0 | 12 concurrent generations |
-| Deep | `gemma-4-26b-4bit` | `/data/models/llm/gemma-4-26b-a4b-awq-4bit` | 1 | 4 concurrent generations |
+| Route | Container | Served model name | GPU | Current role |
+|------|-----------|-------------------|-----|--------------|
+| Text A/B/C | `lipicore-vllm-c` | `gemma-4-26b-4bit` | 1 | All interactive text, analyst, support, compliance, loan, and long-document generation |
+| Vision | `lipicore-vllm-vision` | `qwen3-vl-8b` | 0 | Vision/OCR file analysis route |
 
-The backend routes normal chat work to the fast tier and deep/file-analysis work
-to the 26B tier. Redis coordinates distributed queueing so the backend can reject
-or wait on requests instead of overloading GPU memory.
+The production `docker-compose.yml` and `.env` on `/data/bankai` intentionally
+route `LLM_A`, `LLM_B`, and `LLM_C` to `lipicore-vllm-c`. This differs from the
+repository default two-text-tier profile. Preserve the production files during
+deployments.
+
+Redis coordinates distributed queueing so the backend can reject or wait on
+requests instead of overloading GPU memory.
 
 Heavy OCR, large PDF, and Excel workbook analysis should be queued from Document
-Library. The job uses the ingestion worker plus the deep model, stores progress
-and results in PostgreSQL, and should be monitored separately from interactive
-chat latency.
+Library. The job uses the ingestion worker plus the text/analyst model, stores
+progress and results in PostgreSQL, and should be monitored separately from
+interactive chat latency.
 
 ## TLS Status
 
@@ -92,14 +99,17 @@ Run these on the remote server from `/data/bankai`:
 
 ```bash
 docker compose ps
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep 'lipicore-vllm'
 curl -I http://ai.silverlining.com.np
 curl -I https://ai.silverlining.com.np
-curl -s http://localhost:8002/v1/models
 curl -s http://localhost:8003/v1/models
+curl -s http://localhost:8007/v1/models
+curl -fsS http://127.0.0.1:8000/health
+curl -I http://127.0.0.1:3000/
+nvidia-smi
 docker compose logs --tail=100 backend
 docker compose logs --tail=100 ingestion-worker
 docker compose logs --tail=100 redis
-docker compose logs --tail=100 vllm-b
 docker compose logs --tail=100 vllm-c
 ```
 
@@ -115,14 +125,23 @@ Long-document job status is available through authenticated API calls:
 GET /api/long-document-analysis
 ```
 
+Protected routes such as `/api/model-lab/status` and
+`/api/long-document-analysis` should return `401` without an authenticated
+session.
+
 ## Operator Notes
 
 - Do not publish admin passwords or JWT secrets in documentation.
 - Manage credentials through the remote `.env` file or a secret manager.
 - Use `https://ai.silverlining.com.np` for browser testing.
-- Chat UI now supports a mobile drawer layout, corrected model labels for clean
-  Gemma 4 vLLM tiers, safer uploaded-document source selection, real message
+- Chat UI now supports a mobile drawer layout, corrected model labels for the
+  current vLLM routes, safer uploaded-document source selection, real message
   timestamps, and env-driven Playwright checks.
+- Current deployed workflows include Support Desk, Compliance Workspace, Loan
+  Support, Document Review, Model Lab, and queued long-document analysis.
+- App-only deploys should rebuild/recreate backend, frontend, messenger backend,
+  ingestion worker, and nginx with `--no-deps`. Do not restart GPU model
+  containers without a maintenance window and capacity check.
 - If Chrome still labels the site "Not secure" while the certificate is valid,
   clear site data/HSTS state or retest in a fresh Incognito window. Public TLS
   verification and headless browser checks passed for the current certificate.
@@ -134,4 +153,6 @@ IP: 202.51.2.50
 SSH port: 41447
 Deployment path: /data/bankai
 User: ekduiteen
+Deployed commit: 615d299
+Pre-deploy backup: /data/bankai-backups/20260521-151613-pre-615d299
 ```

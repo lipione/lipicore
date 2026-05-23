@@ -1,12 +1,12 @@
 # Proposal for Managed Hosted LipiCore Enterprise Document Intelligence Platform
 
-**Prepared for:** Sanima Bank  
-**Prepared by:** Lipi One Pvt. Ltd.  
-**Hosting and server:** Silver Lining  
-**Product:** LipiCore Enterprise Document Intelligence Platform  
-**Proposal date:** May 21, 2026  
-**Validity:** 30 days from proposal date  
-**Commercial model:** One-time setup fee + monthly managed server charge + monthly software subscription
+- **Prepared for:** Sanima Bank
+- **Prepared by:** Lipi One Pvt. Ltd.
+- **Hosting and server:** Silver Lining
+- **Product:** LipiCore Enterprise Document Intelligence Platform
+- **Proposal date:** May 23, 2026
+- **Validity:** 30 days from proposal date
+- **Commercial model:** One-time setup fee + monthly managed server charge + monthly software subscription
 
 ---
 
@@ -71,7 +71,7 @@ AI output is positioned as staff assistance and does not replace authorized Sani
 - Dashboard, document library, analytics, and activity views.
 - Private model execution on LipiCore-hosted infrastructure.
 - English and Nepali document support where document quality permits.
-- Configurable fast and deep AI model modes.
+- Configurable AI model modes, sized to the selected hosted capacity profile.
 
 ---
 

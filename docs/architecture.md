@@ -9,7 +9,7 @@ The Bank's Own LLM architecture is designed around isolation, security, and the 
 4. **MinIO:** S3-compatible object storage for storing raw uploaded documents securely.
 5. **Qdrant:** Vector database storing text chunk embeddings with payload metadata (bank_id, document_id) for precise, isolated retrieval.
 6. **Redis:** Admission-control state for local model concurrency and RQ-backed document ingestion.
-7. **LLM Engine:** Local vLLM model servers exposed through OpenAI-compatible endpoints.
+7. **LLM Engine:** Local vLLM model servers exposed through OpenAI-compatible endpoints. The repository supports separate text and vision routes; the current production server routes all text lanes to Gemma 4 26B and uses Qwen3-VL for vision/OCR.
 8. **Ingestion Worker:** Extracts text/tables/OCR output, chunks content, embeds chunks, and indexes PostgreSQL/Qdrant outside the API process.
 9. **Long-Document Analysis Jobs:** Redis/RQ-backed background jobs for heavy OCR, large PDFs, and detailed Excel/PDF review.
 10. **Evaluation Center:** Frontend and API workflow for running bank-specific RAG quality tests.
@@ -61,4 +61,5 @@ See `docs/long-document-analysis.md` for API details, access rules, and operatin
 - Citation verification is lexical overlap, not a formal entailment model.
 - Long, broad multi-document answers should use the queued long-document workflow; true cross-document map-reduce synthesis still needs more work.
 - Scanned, handwritten, chart-heavy, seal-heavy, and signature-heavy files remain weak.
+- The current production server does not run the optional fast 4B text endpoint; all text lanes share the 26B endpoint, so concurrency limits must be sized against that single GPU.
 - Single-host Compose is a pilot architecture. Whole-bank deployment needs HA PostgreSQL, object storage, vector storage, Redis, backend replicas, and inference redundancy.

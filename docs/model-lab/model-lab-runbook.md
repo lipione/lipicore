@@ -7,18 +7,29 @@ This runbook is for finding the best local model stack for the bank staff AI app
 From this Codex workspace:
 
 - Public health endpoint is reachable: `https://ai.silverlining.com.np/health`.
-- No local SSH config is present.
-- No SSH identity is loaded in the local agent.
-- Remote filesystem/model inventory is blocked until SSH access is available.
+- Remote production path is `/data/bankai`.
+- The latest deployed commit is `615d299`.
+- The active production model containers are `lipicore-vllm-c` and
+  `lipicore-vllm-vision`.
+- Do not include passwords or private keys in this file. Use the approved
+  operator access path for inventory and model-swap windows.
 
-Required access to run remote inventory:
+Inventory command shape:
 
 ```bash
 ssh-add /path/to/server_key
 python tools/model_lab/remote_inventory.py \
   --host 202.51.2.50 \
+  --port <ssh-port> \
   --user <ssh-user> \
   --output reports/model-lab/remote_inventory.txt
+```
+
+After inventory, confirm the current production vision endpoint separately on
+the remote server if the inventory output does not include port `8007`:
+
+```bash
+curl -s http://127.0.0.1:8007/v1/models
 ```
 
 ## Step 1: Remote Inventory
@@ -52,15 +63,16 @@ tools/model_lab/model_candidate_matrix.json
 
 Start with three lanes:
 
-- Fast staff chat: current Gemma fast tier, Gemma 3 12B if GPU allows.
+- Fast staff chat: no active fast endpoint on the current production profile; test Gemma 4 4B, Gemma 3 12B, or another small candidate only in a controlled swap window.
 - Analyst/long-doc: current Gemma 26B baseline, Qwen3-30B-A3B 2507 or FP8 variant. Test through queued long-document jobs for realistic extraction, context-packing, and queue pressure.
+- Vision/OCR: current Qwen3-VL 8B baseline, tested through scanned PDF/image workflows rather than simple image prompts only.
 - Retrieval: BGE-M3, Jina embeddings v3, Qwen3 embedding/reranker.
 
 Do not change embeddings in production without creating a parallel Qdrant collection or migration plan.
 
 ## Step 3: Serve One Candidate At A Time
 
-Keep the current fast and deep services as baseline. Add a candidate endpoint on a separate port, for example `8004`, then benchmark it before replacing anything.
+Keep the current text and vision services as baseline. Add a candidate endpoint on a separate port, for example `8004`, only if GPU memory allows; otherwise pause one model inside a maintenance window and benchmark before replacing anything.
 
 Example endpoint file:
 
@@ -114,10 +126,12 @@ A candidate can replace baseline only if it improves the target lane without bre
 
 ## Recommended First Test Matrix
 
-1. Current Gemma fast vs current Gemma deep.
-2. Current deep vs Qwen3-30B-A3B-Instruct-2507 FP8 if GPU memory is tight.
-3. Current embedding model vs BGE-M3 in a parallel retrieval collection.
-4. Add Qwen3 reranker only if source recall is good but citation precision is weak.
+1. Current Gemma 26B text baseline at realistic staff concurrency.
+2. Current Qwen3-VL 8B baseline on scanned PDF/image-heavy document tasks.
+3. Candidate fast endpoint only after freeing GPU memory.
+4. Current deep vs Qwen3-30B-A3B-Instruct-2507 FP8 if GPU memory is tight.
+5. Current embedding model vs BGE-M3 in a parallel retrieval collection.
+6. Add Qwen3 reranker only if source recall is good but citation precision is weak.
 
 ## Final Report Shape
 

@@ -1,11 +1,11 @@
 # Sanima Bank LipiCore Commercial Summary
 
-**Prepared for:** Sanima Bank  
-**Prepared by:** Lipi One Pvt. Ltd.  
-**Hosting and server:** Silver Lining  
-**Product:** LipiCore Enterprise Document Intelligence Platform  
-**Date:** May 21, 2026  
-**Commercial model:** One-time setup fee + monthly server/infrastructure fee + monthly software subscription
+- **Prepared for:** Sanima Bank
+- **Prepared by:** Lipi One Pvt. Ltd.
+- **Hosting and server:** Silver Lining
+- **Product:** LipiCore Enterprise Document Intelligence Platform
+- **Date:** May 23, 2026
+- **Commercial model:** One-time setup fee + monthly server/infrastructure fee + monthly software subscription
 
 ---
 

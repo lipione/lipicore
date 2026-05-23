@@ -14,8 +14,8 @@
   - `compliance_user`, `compliance_officer`, `document_reviewer`: Review-oriented access to approved bank workflows where enabled.
 
 ## RAG Security
-- **Prompt Guardrails:** The system prompt strictly instructs the LLM to only use provided context.
-- **Source Verification:** Every answer is tied to a specific chunk and document in the Qdrant DB.
+- **Prompt Guardrails:** Source-backed modes instruct the LLM to use approved context and refuse unsupported policy answers.
+- **Source Verification:** Answers expose retrieved source passages, chunk metadata, and citation-verification status where sources are used. Verification is evidence for staff review, not a guarantee of regulatory correctness.
 
 ## Long-Document Analysis Security
 - Long-document jobs are bank-scoped in PostgreSQL with `bank_id`, `document_id`, and `requested_by`.

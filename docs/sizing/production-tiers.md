@@ -6,8 +6,8 @@ This document defines conservative deployment tiers. These are capacity targets,
 
 - Backend API: uvicorn with `WEB_CONCURRENCY`, default `2` workers.
 - Ingestion worker: Redis/RQ queue with `INGESTION_WORKER_CONCURRENCY`, default `1`.
-- Fast model route: `LLM_A_MAX_CONCURRENCY=12`.
-- Deep model route: `LLM_C_MAX_CONCURRENCY=4`.
+- Current production text route: `LLM_A`, `LLM_B`, and `LLM_C` all share the Gemma 4 26B endpoint, so effective capacity is bounded by one text GPU.
+- Repository capacity profile: fast model route `LLM_A_MAX_CONCURRENCY=12` and deep model route `LLM_C_MAX_CONCURRENCY=4` may be used only when separate endpoints are actually running.
 - Per-user model limit: staff `1`, admin `2`.
 - Model queue timeout: `LLM_QUEUE_TIMEOUT_SECONDS=120`; stale queue tokens are pruned after `LLM_QUEUE_STALE_SECONDS=10`.
 - Upload limits: Document Library `50 MB`, AI Tasks `20 MB`.
@@ -31,11 +31,11 @@ Use for one department or one controlled bank pilot.
 - Expected active users: 10-25.
 - Backend workers: `WEB_CONCURRENCY=2`.
 - Ingestion workers: `INGESTION_WORKER_CONCURRENCY=1`.
-- Model serving: one fast vLLM GPU; optional deep-model GPU.
+- Model serving: one text vLLM GPU; optional separate fast route only after capacity testing.
 - Storage: single Postgres, Qdrant, Redis, and object/file storage with daily backups.
 - Availability posture: not HA; planned maintenance acceptable.
 - Proof required: 25-user Locust run with low API error rate and acceptable chat latency.
-- Long-document guidance: allow only a small number of concurrent heavy OCR/PDF/XLS jobs until worker memory and deep-model queue time are measured.
+- Long-document guidance: allow only a small number of concurrent heavy OCR/PDF/XLS jobs until worker memory and analyst-model queue time are measured.
 - Current evidence: 20 separate streaming staff completed with no failures on the test server.
 
 ## Tier 2: Department
@@ -46,7 +46,7 @@ Use for a real department rollout such as customer care, compliance, or credit o
 - Expected active users: 25-75.
 - Backend workers: `WEB_CONCURRENCY=4`, sized after CPU and memory checks.
 - Ingestion workers: start at `INGESTION_WORKER_CONCURRENCY=1`; raise to `2` only after upload/indexing tests show stable memory and embedding latency.
-- Model serving: at least one fast-model replica and one deep-model replica; add second fast route if p95 latency is high.
+- Model serving: at least one text/analyst endpoint and, when capacity requires it, a separate fast-model replica. Add another text route if p95 latency or queue timeout is high.
 - Storage: backed-up Postgres, Qdrant snapshots, Redis persistence, monitored disk growth.
 - Operations: uptime monitoring, model health checks, queue-time dashboards, and weekly audit review.
 - Proof required: 50-user Locust run plus representative document ingestion test.
@@ -61,11 +61,11 @@ Use only after department-level measurements prove demand and capacity.
 - Expected active users: 100+.
 - Backend workers: horizontally scaled backend containers behind nginx or a load balancer.
 - Ingestion workers: separate worker pool with queue-depth alerts, failed-job review, and controlled concurrency per host.
-- Model serving: multiple fast-model replicas, deep-model replicas separated by queue policy, and GPU-level monitoring.
+- Model serving: multiple fast-model replicas where enabled, analyst-model replicas separated by queue policy, and GPU-level monitoring.
 - Storage: HA Postgres, Qdrant replication/snapshots, Redis HA, backup restore tests, and disaster recovery runbooks.
 - Operations: centralized logs, metrics, alerting, patch process, rollback process, and bank IT runbook.
 - Proof required: 100-user Locust run, ingestion stress test, backup restore test, and model queue timeout evidence.
-- Long-document guidance: use a separate worker pool, queue-depth alerting, and deep-model capacity policy so heavy analysis does not starve interactive staff chat.
+- Long-document guidance: use a separate worker pool, queue-depth alerting, and analyst-model capacity policy so heavy analysis does not starve interactive staff chat.
 - Deployment reference: `deploy/ha/README.md`.
 - Current gap: whole-bank streaming concurrency has not been proven. More fast-model replicas or stricter queue policy are required before claiming instant AI for 100+ simultaneous staff.
 
@@ -74,6 +74,6 @@ Use only after department-level measurements prove demand and capacity.
 - Large files may upload but extraction, chunking, embedding, and indexing still take time.
 - Uploads now enqueue ingestion work; users should expect queued/processing states instead of instant indexing.
 - Scanned PDFs, complex tables, merged cells, charts, handwriting, seals, and signatures need stronger OCR/table extraction work before strong claims.
-- Heavy OCR, large PDF, and Excel analysis should use queued long-document jobs. The workflow is safer than sending oversized text directly to chat, but it still depends on extraction quality and deep-model capacity.
+- Heavy OCR, large PDF, and Excel analysis should use queued long-document jobs. The workflow is safer than sending oversized text directly to chat, but it still depends on extraction quality and analyst-model capacity.
 - Current architecture is not high availability by default.
 - Capacity numbers must cite the specific `tests/load` run, server profile, and model settings used.

@@ -22,8 +22,21 @@ The current deployment runs as a private Docker Compose stack with FastAPI, Reac
 - `qdrant`: Vector search.
 - `redis`: Model admission control and document ingestion queue.
 - `minio`: Object storage for uploaded documents.
-- `vllm-b` / `vllm-c`: Local OpenAI-compatible model servers for fast and deeper responses.
-- `vllm-vision`: Optional profile-gated OpenAI-compatible vision/OCR endpoint for Qwen3-VL. Start with `docker compose --profile vision up -d vllm-vision` only after reserving enough GPU memory.
+- `vllm-c`: Local OpenAI-compatible text/analyst model server. The current production server routes all text lanes to this endpoint.
+- `vllm-vision`: OpenAI-compatible vision/OCR endpoint for Qwen3-VL on the current production server.
+- `vllm-b`: Optional fast text endpoint in the repository compose profile, not active on the current production server.
+
+## Current Remote Production Profile
+
+The live `/data/bankai` deployment preserves production-specific compose and
+environment files:
+
+- `LLM_A`, `LLM_B`, and `LLM_C` route to `lipicore-vllm-c` /
+  `gemma-4-26b-4bit`.
+- Vision/OCR routes to `lipicore-vllm-vision` / `qwen3-vl-8b`.
+- `lipicore-vllm-b` is not running.
+- App upgrades should recreate only app services with `--no-deps` unless a
+  maintenance window explicitly includes GPU model restarts.
 
 ## Production Considerations
 
@@ -32,10 +45,13 @@ The current deployment runs as a private Docker Compose stack with FastAPI, Reac
 - Run `POST /api/evaluations/rag` against bank-specific eval sets before claiming RAG quality.
 - Back up PostgreSQL, MinIO, and Qdrant together so document metadata and vector payloads stay consistent.
 - Keep `INGESTION_WORKER_CONCURRENCY=1` for pilot servers unless ingestion tests prove spare CPU/RAM/GPU capacity. Increase worker concurrency before increasing upload limits.
-- Treat queued long-document analysis as worker and deep-model load. Monitor Redis queue depth, failed RQ jobs, deep-model queue time, and GPU memory before allowing large batches of OCR/PDF/XLS work.
+- Treat queued long-document analysis as worker and analyst-model load. Monitor Redis queue depth, failed RQ jobs, analyst-model queue time, and GPU memory before allowing large batches of OCR/PDF/XLS work.
 - Use Compose health status during upgrades. `backend`, `frontend`, `redis`, and `nginx` should report healthy before handing the system back to bank staff.
 - Use `./deploy/upgrade.sh --check-only` for health-only checks and `./deploy/upgrade.sh --run-tests` on the test server before shipping changes. The script defaults to the internal backend health URL because some data centers do not allow the server to curl its own public domain.
 - For whole-bank HA planning, use `deploy/ha/README.md` and treat single-host Docker Compose as non-HA regardless of restart policies.
+- Before touching model services, capture `nvidia-smi`, `docker ps` for
+  `lipicore-vllm-*`, and `/v1/models` output for the active endpoints. Do not
+  start `vllm-b` on the live two-GPU server without first freeing GPU memory.
 
 ## Long-Document Analysis Operations
 

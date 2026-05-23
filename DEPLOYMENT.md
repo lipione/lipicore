@@ -21,8 +21,10 @@ cp .env.example .env
 | :--- | :--- | :--- |
 | `JWT_SECRET` | Secret key for auth tokens | Generate a random 64-char string |
 | `POSTGRES_PASSWORD` | Database password | Secure random string |
-| `LLM_A_API_BASE` | Fast vLLM OpenAI-compatible endpoint base URL | `http://vllm-b:8000` |
-| `LLM_C_API_BASE` | Deep vLLM OpenAI-compatible endpoint base URL | `http://vllm-c:8000` |
+| `LLM_A_API_BASE` | Primary text vLLM OpenAI-compatible endpoint base URL | `http://vllm-c:8000` on current production |
+| `LLM_B_API_BASE` | Secondary text vLLM endpoint when enabled | Same as `LLM_A_API_BASE` on current production |
+| `LLM_C_API_BASE` | Analyst/deep vLLM OpenAI-compatible endpoint base URL | `http://vllm-c:8000` |
+| `LLM_VISION_API_BASE` | Vision/OCR vLLM endpoint when enabled | `http://vllm-vision:8000` or production override |
 | `REDIS_URL` | Model admission-control Redis URL | `redis://redis:6379/0` |
 | `INGESTION_JOB_TIMEOUT_SECONDS` | Timeout for ingestion and queued long-document jobs | `1800` |
 | `INGESTION_WORKER_CONCURRENCY` | Worker concurrency for ingestion and long-document analysis | `1` for pilots |
@@ -61,7 +63,13 @@ docker compose ps
 *   `nginx`: Should report healthy.
 *   `redis`: Should report healthy.
 *   `bankai-qdrant`: Should be listening on 6333.
-*   `lipicore-vllm-b` / `lipicore-vllm-c`: Ensure local vLLM model servers are running and reachable from the backend.
+*   `lipicore-vllm-c`: Ensure the current text/analyst vLLM model server is running and reachable from the backend.
+*   `lipicore-vllm-vision`: Ensure the vision/OCR vLLM server is running if image or OCR analysis is enabled.
+
+Current production note: `/data/bankai` routes `LLM_A`, `LLM_B`, and `LLM_C`
+to `lipicore-vllm-c` / Gemma 4 26B 4-bit, and routes vision/OCR work to
+`lipicore-vllm-vision` / Qwen3-VL 8B. `lipicore-vllm-b` is not active on that
+server profile.
 
 ---
 

@@ -18,26 +18,29 @@ Every model recommendation must record:
 
 ## Current Remote Baseline
 
-The 2026-05-21 remote inventory found:
+The 2026-05-23 post-deployment remote inventory found:
 
 - Ubuntu 22.04.3, 16 CPU cores, 125 GiB RAM.
 - 2 x NVIDIA L40S, 46 GiB each.
-- `/data` has about 606 GiB free.
-- Initial running endpoints: Gemma fast, Gemma 26B AWQ, and Qwen2.5 7B AWQ voice.
-- Qwen2.5 voice was removed from the active vLLM set during the 2026-05-21 swap window.
-- Both GPUs were heavily occupied, so new model tests require a controlled swap window. Keep the Gemma 26B analyst tier on GPU 1 unless explicitly testing analyst replacements.
+- `/` has about 26 GiB free and `/data` has about 584 GiB free.
+- Running endpoints:
+  - `lipicore-vllm-c` / `gemma-4-26b-4bit` on GPU 1, debug port `8003`.
+  - `lipicore-vllm-vision` / `qwen3-vl-8b` on GPU 0, debug port `8007`.
+- `lipicore-vllm-b` is not running on the current production profile.
+- GPU memory is already heavily occupied, around 38.9/46 GiB on GPU 0 and 40.7/46 GiB on GPU 1 at the last check. New model tests require a controlled swap window.
+- Keep the Gemma 26B text/analyst tier on GPU 1 unless explicitly testing analyst replacements.
 
 Benchmark artifacts are under `reports/model-lab/`.
 
 ## Routing Defaults
 
-- `ask_knowledge`, short staff drafts, and customer-care responses route to the fast tier unless the user explicitly selects another model.
-- `approved_knowledge`, compliance review, document comparison, loan support, and queued long-document analysis route to the analyst tier.
-- Vision/OCR page review routes to the dedicated `vision` profile. The first implementation target is `Qwen/Qwen3-VL-8B-Instruct`; do not make scanned-document claims until it is deployed and benchmarked.
+- Current production: `ask_knowledge`, short staff drafts, customer-care responses, `approved_knowledge`, compliance review, document comparison, loan support, and queued long-document analysis all route to the Gemma 4 26B endpoint.
+- Future capacity profile: short staff chat may move back to a fast tier after GPU memory and quality tests prove it is stable.
+- Vision/OCR page review routes to the dedicated Qwen3-VL endpoint. Do not make strong scanned-document claims until bank-specific OCR/PDF/XLS benchmarks are recorded.
 
 ## Vision Endpoint
 
-`docker-compose.yml` includes `vllm-vision` behind the `vision` profile so it is not started accidentally on constrained two-GPU pilots. Start it only after reserving a GPU:
+`docker-compose.yml` includes `vllm-vision` behind the `vision` profile so it is not started accidentally on constrained two-GPU pilots. On the current production server, `lipicore-vllm-vision` is already running. For a new server, start it only after reserving a GPU:
 
 ```bash
 docker compose --profile vision up -d vllm-vision

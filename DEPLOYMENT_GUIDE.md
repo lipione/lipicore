@@ -1,7 +1,7 @@
 # BankAi Enterprise Deployment Guide
 
-**Version:** 1.3
-**Date:** May 21, 2026
+**Version:** 1.4
+**Date:** May 23, 2026
 **For:** On-premises or private data center deployment
 
 ## System Requirements
@@ -11,7 +11,7 @@
 | CPU | 8 cores | 16+ cores |
 | RAM | 64 GB | 128+ GB |
 | Storage | 500 GB SSD | 1 TB+ SSD/NVMe |
-| GPU | 2 NVIDIA GPUs | separate GPUs for fast and deep tiers |
+| GPU | 2 NVIDIA GPUs | separate GPUs for text/analyst and vision or optional fast tiers |
 | Network | 1 Gbps | private network plus public 80/443 |
 | OS | Ubuntu 22.04 LTS | Ubuntu 22.04/24.04 LTS |
 
@@ -32,12 +32,27 @@ nginx 80/443
         +-- Qdrant
         +-- MinIO
         +-- Redis
-        +-- vLLM fast tier on GPU 0
-        +-- vLLM deep tier on GPU 1
+        +-- vLLM text model route
+        +-- vLLM vision/OCR model route where enabled
 ```
 
-The current production deployment uses clean Gemma 4 models with no LoRA
-adapters and no Ollama service.
+The current production deployment uses clean Gemma 4 for text, Qwen3-VL for
+vision/OCR, no LoRA adapters, and no Ollama service.
+
+## Current Remote Production Profile
+
+The live `/data/bankai` server is deployed at commit `615d299` with this
+production override:
+
+- `LLM_A_API_BASE`, `LLM_B_API_BASE`, and `LLM_C_API_BASE` all point to
+  `http://lipicore-vllm-c:8000`.
+- `LLM_A_MODEL`, `LLM_B_MODEL`, and `LLM_C_MODEL` all use
+  `gemma-4-26b-4bit`.
+- Vision/OCR uses `http://lipicore-vllm-vision:8000` with `qwen3-vl-8b`.
+- `lipicore-vllm-b` is not running on the current server profile.
+
+Preserve the production `docker-compose.yml`, `.env`, nginx config, TLS
+directories, and running GPU containers during app-only deployments.
 
 ## Pre-Deployment Checklist
 
@@ -45,12 +60,15 @@ adapters and no Ollama service.
 2. Ports 80 and 443 are open to the internet.
 3. SSH is restricted to the operator port or private network.
 4. `/data/bankai` exists and is owned by the deployment user.
-5. Gemma model directories exist on the host:
-   - `/data/models/llm/gemma-4-E4B-it`
+5. Required model directories exist on the host for the selected profile:
    - `/data/models/llm/gemma-4-26b-a4b-awq-4bit`
+   - Qwen3-VL weights or cache for the configured vision endpoint
+   - `/data/models/llm/gemma-4-E4B-it` only if the fast 4B route is enabled
 6. `.env` contains production secrets and public origins.
 
 ## Installation
+
+For a fresh non-production install:
 
 ```bash
 cd /data/bankai
@@ -59,6 +77,25 @@ nano .env
 docker compose up -d --build
 docker compose ps
 ```
+
+For the current production server, use an app-only deployment so GPU model
+containers are not restarted accidentally:
+
+```bash
+cd /data/bankai
+mkdir -p /data/bankai-backups/$(date +%Y%m%d-%H%M%S)-pre-upgrade
+# Back up .env, docker-compose.yml, nginx.conf, letsencrypt, and certbot-lib.
+git fetch --all --prune
+git checkout <approved-commit>
+# Restore production .env, docker-compose.yml, nginx.conf, and TLS directories.
+docker compose build backend frontend messenger-backend ingestion-worker
+docker compose run --rm --no-deps backend alembic upgrade head
+docker compose up -d --no-deps backend frontend messenger-backend ingestion-worker nginx
+docker compose ps
+```
+
+Do not run a blind `docker compose up -d --build` on the live server if it
+would start, replace, or restart GPU model services.
 
 Run database migrations if the release includes schema changes:
 
@@ -71,17 +108,7 @@ operator script. Do not commit passwords or JWT secrets to Git.
 
 ## vLLM Runtime
 
-Fast tier:
-
-```text
-Container: lipicore-vllm-b
-Served name: gemma-4
-Model path: /data/models/llm/gemma-4-E4B-it
-GPU: 0
-External debug port: 8002
-```
-
-Deep tier:
+Current production text route:
 
 ```text
 Container: lipicore-vllm-c
@@ -89,15 +116,36 @@ Served name: gemma-4-26b-4bit
 Model path: /data/models/llm/gemma-4-26b-a4b-awq-4bit
 GPU: 1
 External debug port: 8003
+Routes: LLM_A, LLM_B, LLM_C
+```
+
+Current production vision/OCR route:
+
+```text
+Container: lipicore-vllm-vision
+Served name: qwen3-vl-8b
+GPU: 0
+External debug port: 8007
+```
+
+Optional fast tier for future capacity work:
+
+```text
+Container: lipicore-vllm-b
+Served name: gemma-4
+Model path: /data/models/llm/gemma-4-E4B-it
+External debug port: 8002
+Status on current production server: not running
 ```
 
 Verify the model servers:
 
 ```bash
-curl -s http://localhost:8002/v1/models
 curl -s http://localhost:8003/v1/models
-docker compose logs --tail=100 vllm-b
+curl -s http://localhost:8007/v1/models
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep 'lipicore-vllm'
 docker compose logs --tail=100 vllm-c
+nvidia-smi
 ```
 
 ## Redis Admission Control
@@ -120,6 +168,10 @@ LLM_FAST_MAX_TOKENS=512
 LLM_DEEP_MAX_TOKENS=768
 LLM_DEEP_CONTEXT_WINDOW_TOKENS=8192
 ```
+
+If `LLM_A`, `LLM_B`, and `LLM_C` all point to the same 26B endpoint, size the
+combined concurrency against that single GPU. Do not add the A/B/C limits
+together as independent capacity.
 
 Authenticated operators can check queue state through:
 
@@ -148,7 +200,7 @@ Before enabling this for a bank pilot, run migrations and test one clean PDF, on
 docker compose exec backend alembic upgrade head
 ```
 
-Monitor worker memory, Redis queue depth, job age, deep-model queue time, and GPU memory before raising `INGESTION_WORKER_CONCURRENCY`.
+Monitor worker memory, Redis queue depth, job age, analyst-model queue time, and GPU memory before raising `INGESTION_WORKER_CONCURRENCY`.
 
 ## HTTPS Setup
 
@@ -213,9 +265,16 @@ Restart individual services:
 
 ```bash
 docker compose restart backend
-docker compose restart vllm-b
-docker compose restart vllm-c
 docker compose restart nginx
+```
+
+Restart model services only inside a maintenance window after confirming GPU
+memory, driver/library health, and the exact production model profile:
+
+```bash
+nvidia-smi
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep 'lipicore-vllm'
+docker compose restart vllm-c
 ```
 
 Rebuild after code changes:
@@ -283,8 +342,8 @@ switches from self-signed TLS to Let's Encrypt.
 ### vLLM Does Not Start
 
 ```bash
-docker compose logs --tail=200 vllm-b
 docker compose logs --tail=200 vllm-c
+docker logs --tail=200 lipicore-vllm-vision
 nvidia-smi
 ```
 
@@ -383,7 +442,8 @@ docker compose ps
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.3 | 2026-05-21 | Queued long-document analysis for heavy OCR/PDF/XLS jobs, stored results, role-scoped job access, and worker/deep-model operating guidance |
+| 1.4 | 2026-05-23 | Current production profile, app-only deployment guidance, text route consolidation on `vllm-c`, Qwen3-VL vision endpoint, and GPU restart guardrails |
+| 1.3 | 2026-05-21 | Queued long-document analysis for heavy OCR/PDF/XLS jobs, stored results, role-scoped job access, and worker/analyst-model operating guidance |
 | 1.2 | 2026-05-19 | Redis/RQ ingestion worker, document lifecycle and chunk permissions, reranking, citation verification, Evaluation Center, source evidence UI, health-gated upgrades |
 | 1.1 | 2026-05-07 | vLLM two-GPU runtime, Redis admission control, Let's Encrypt HTTPS |
 | 1.0 | 2026-04-28 | Initial enterprise deployment guide |

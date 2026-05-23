@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-05-23
+
+- Deployed the bank staff AI upgrade to the remote production path `/data/bankai` at commit `615d299`.
+- Applied Alembic migrations through `012`, including document freshness/confidence, support cases, compliance reviews, loan support, document extraction review pages, and queued long-document analysis jobs.
+- Rebuilt and recreated app services while preserving production `docker-compose.yml`, `.env`, nginx, certificates, and running GPU model containers.
+- Documented the current production model profile:
+  - All text routes (`LLM_A`, `LLM_B`, `LLM_C`) route to `lipicore-vllm-c` / Gemma 4 26B 4-bit.
+  - Vision/OCR routes use `lipicore-vllm-vision` / Qwen3-VL 8B.
+  - `lipicore-vllm-b` is not running and should not be started without a GPU capacity decision.
+- Verified remote health checks for backend, frontend, and protected API routes after deployment.
+
 ## 2026-05-21
 
 - Added queued long-document analysis for heavy OCR, large PDFs, and detailed Excel/PDF review:

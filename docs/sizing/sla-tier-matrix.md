@@ -4,7 +4,7 @@ LipiCore availability claims must be tied to a named deployment tier. Do not mak
 
 | Tier | Architecture | Suitable For | Availability Language |
 | --- | --- | --- | --- |
-| Pilot | Single node, local Postgres/Qdrant/Redis/MinIO, one fast model, one analyst model, daily backups | 20-50 users, 30-day pilot | No HA claim. Best-effort pilot support with backup and restore process. |
+| Pilot | Single node, local Postgres/Qdrant/Redis/MinIO, one text model route, optional separate fast/vision routes, daily backups | 20-50 users, 30-day pilot | No HA claim. Best-effort pilot support with backup and restore process. |
 | Department | Separate API, worker, data, and model services where possible; monitored backups; optional model replica | Customer care, branch support, compliance lookup for one department | Department-grade resilience. SLA depends on agreed infrastructure and support window. |
 | Whole-bank HA | Multiple API/frontend replicas, HA Postgres, Qdrant cluster or managed vector DB, Redis Sentinel/Cluster, redundant object storage, model replicas, load balancer, monitoring, restore drills | Enterprise bank rollout | SLA may be contracted only after failover, restore, and model-restart drills pass. |
 
@@ -41,4 +41,4 @@ Production monitoring must cover:
 
 Only the Whole-bank HA tier can support a formal availability SLA. Pilot and Department tiers can have support-response commitments, but should not be sold as highly available unless the bank funds and accepts the required architecture.
 
-Long-document analysis turnaround should be treated as a separate queue-based service target, not as the same SLA as interactive chat. It depends on OCR/page count, workbook size, worker capacity, and deep-model queue load.
+Long-document analysis turnaround should be treated as a separate queue-based service target, not as the same SLA as interactive chat. It depends on OCR/page count, workbook size, worker capacity, and analyst-model queue load.

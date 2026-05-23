@@ -1,7 +1,7 @@
 # What LipiCore Does Not Do
 
-**Prepared:** May 21, 2026  
-**Use for:** Risk, compliance, procurement, and executive review
+- **Prepared:** May 23, 2026
+- **Use for:** Risk, compliance, procurement, and executive review
 
 LipiCore is a secure internal AI assistant and decision-support appliance for bank staff. It helps staff search approved bank knowledge, analyze internal files, summarize, compare, extract, and draft responses. It is not an autonomous bank decision engine.
 

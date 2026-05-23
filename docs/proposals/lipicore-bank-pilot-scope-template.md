@@ -1,8 +1,8 @@
 # LipiCore Bank Pilot Scope Template
 
-**Prepared:** May 21, 2026  
-**Pilot name:** Bank Staff AI Helpdesk  
-**Recommended duration:** 30 days
+- **Prepared:** May 23, 2026
+- **Pilot name:** Bank Staff AI Helpdesk
+- **Recommended duration:** 30 days
 
 ## Pilot Objective
 
