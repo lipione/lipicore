@@ -22,6 +22,7 @@ SECTION_RE = re.compile(
 )
 DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
 DEVANAGARI_MARK_AFTER_NON_DEVANAGARI_RE = re.compile(r"(^|[^\u0900-\u097F])[\u093A-\u094D]")
+OCR_LATIN_NOISE_RE = re.compile(r"[A-Za-z%]")
 DEGRADED_NEPALI_TEXT_PATTERNS = (
     re.compile(r"वव[षशकदधचजतथन]"),
     re.compile(r"मम[ितधन]"),
@@ -83,6 +84,29 @@ def _is_degraded_devanagari_pdf_text(text: str) -> bool:
     return _degraded_devanagari_score(text) >= threshold
 
 
+def _ocr_line_noise_score(line: str) -> int:
+    return len(OCR_LATIN_NOISE_RE.findall(line or ""))
+
+
+def _merge_direct_lines_for_ocr_noise(direct_text: str, ocr_text: str) -> str:
+    direct_lines = direct_text.splitlines()
+    ocr_lines = ocr_text.splitlines()
+    merged_lines: list[str] = []
+    for index, ocr_line in enumerate(ocr_lines):
+        direct_line = direct_lines[index] if index < len(direct_lines) else ""
+        if (
+            direct_line.strip()
+            and _ocr_line_noise_score(ocr_line) > 0
+            and _ocr_line_noise_score(direct_line) == 0
+            and len(DEVANAGARI_RE.findall(direct_line)) >= 3
+            and _degraded_devanagari_score(direct_line) <= _degraded_devanagari_score(ocr_line) + 2
+        ):
+            merged_lines.append(direct_line)
+        else:
+            merged_lines.append(ocr_line)
+    return "\n".join(merged_lines)
+
+
 def _ocr_pdf_page_if_better(file_path: str, page_number: int, text: str) -> OcrResult | None:
     if page_number > settings.OCR_MAX_PAGES:
         return None
@@ -96,7 +120,10 @@ def _ocr_pdf_page_if_better(file_path: str, page_number: int, text: str) -> OcrR
         finally:
             image.close()
         if result.text.strip() and _degraded_devanagari_score(result.text) < _degraded_devanagari_score(text):
-            return result
+            return OcrResult(
+                text=_merge_direct_lines_for_ocr_noise(text, result.text),
+                confidence=result.confidence,
+            )
     return None
 
 

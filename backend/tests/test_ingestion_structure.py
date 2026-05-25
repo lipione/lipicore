@@ -165,3 +165,51 @@ def test_clean_nepali_pdf_text_layer_does_not_use_ocr(monkeypatch, tmp_path: Pat
     assert pages[0]["text"] == clean_text
     assert pages[0]["ocr_confidence"] is None
     assert "pdf_text_layer_repaired" not in pages[0]
+
+
+def test_degraded_nepali_pdf_repair_keeps_direct_line_when_ocr_adds_latin_noise(monkeypatch, tmp_path: Path):
+    pdf_path = tmp_path / "noisy-nepali.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+
+    corrupt_text = "भउू पयोग ऐन , २०७६\n२०७६/०५/०६\n(२) यो ऐन िरुु न्ि प्रारम्भ हनु ेछ।"
+    ocr_text = "भूउपयोग UT, ROWE\n२०७६/०%५/०६\n(२) यो ऐन तुरुन्त प्रारम्भ हुनेछ।"
+
+    class FakePage:
+        def extract_text(self):
+            return corrupt_text
+
+        def extract_tables(self):
+            return []
+
+    class FakePdf:
+        pages = [FakePage()]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeImage:
+        def close(self):
+            pass
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pdfplumber",
+        SimpleNamespace(open=lambda _path: FakePdf()),
+    )
+    monkeypatch.setattr(
+        ingestion_service,
+        "convert_pdf_pages_to_images",
+        lambda path, *, first_page, last_page: [FakeImage()],
+    )
+    monkeypatch.setattr(
+        ingestion_service,
+        "ocr_pil_image_to_text",
+        lambda _image: ingestion_service.OcrResult(text=ocr_text, confidence=0.92),
+    )
+
+    pages = extract_pages(str(pdf_path), "pdf")
+
+    assert pages[0]["text"] == "भउू पयोग ऐन , २०७६\n२०७६/०५/०६\n(२) यो ऐन तुरुन्त प्रारम्भ हुनेछ।"
