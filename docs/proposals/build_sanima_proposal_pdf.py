@@ -339,8 +339,8 @@ def cover_page():
         ["Hosting and server", "Silver Lining"],
     ]
     meta_right = [
-        ["Product", "LipiCore Enterprise Document Intelligence Platform"],
-        ["Proposal date", "May 21, 2026"],
+        ["Product", "LipiCore Bank Staff AI Appliance and Document Intelligence Platform"],
+        ["Proposal date", "May 23, 2026"],
         ["Validity", "30 days from proposal date"],
     ]
 
@@ -363,7 +363,7 @@ def cover_page():
     return [
         Spacer(1, 1.05 * inch),
         p("CONFIDENTIAL COMMERCIAL PROPOSAL", STYLES["CoverKicker"]),
-        p("Managed Hosted LipiCore Enterprise Document Intelligence Platform", STYLES["CoverTitle"]),
+        p("Managed Hosted LipiCore Bank Staff AI Appliance", STYLES["CoverTitle"]),
         p("Proposal to Sanima Bank", STYLES["CoverSubtitle"]),
         HRFlowable(width="62%", thickness=1, color=BLUE, spaceBefore=2, spaceAfter=20, hAlign="CENTER"),
         wrapper,
@@ -418,7 +418,7 @@ def market_comparison_table():
         [
             "LipiCore Standard",
             "NPR 800,000/month for 1,000-2,000 users",
-            "Windows/macOS desktop client, hosted banking document platform, RAG, audit logs, RBAC, internal chat, support, and managed infrastructure.",
+            "Windows/macOS desktop client, hosted bank AI appliance, approved-knowledge Q&A, OCR extraction, RAG, audit logs, RBAC, internal chat, support, and managed infrastructure.",
             "Purpose-built for bank document intelligence; model choice and capacity are managed by Lipi One/Silver Lining.",
         ],
         [
@@ -429,7 +429,7 @@ def market_comparison_table():
         ],
         [
             "Claude Team",
-            "USD 25/user/month monthly or USD 20/user/month annual equivalent for standard seats; Team is listed for 5-150 users.",
+            "Around USD 25/user/month monthly for standard seats, with annual discounts depending on current Claude plan terms; Team is listed for 5-150 users.",
             "General Claude team workspace with connectors and administration features.",
             "Larger banks need Enterprise; enterprise use may combine seat price and API usage. Banking-specific platform still needs to be built.",
         ],
@@ -446,11 +446,46 @@ def market_comparison_table():
 def bank_scale_cost_table():
     rows = [
         ["User Count", "ChatGPT / Claude @ USD 25/User/Month", "Approx. NPR / Month"],
-        ["500 users", "USD 12,500/month", "Approx. NPR 19.2 lakh/month"],
-        ["2,000 users", "USD 50,000/month", "Approx. NPR 76.8 lakh/month"],
-        ["5,000 users", "USD 125,000/month", "Approx. NPR 1.92 crore/month"],
+        ["500 users", "USD 12,500/month", "Approx. NPR 19.1 lakh/month"],
+        ["2,000 users", "USD 50,000/month", "Approx. NPR 76.5 lakh/month"],
+        ["5,000 users", "USD 125,000/month", "Approx. NPR 1.91 crore/month"],
     ]
     return table(rows, [1.25 * inch, 2.7 * inch, 2.55 * inch])
+
+
+def updated_workspaces_table():
+    rows = [
+        ["Workspace", "Current Included Capability", "Safe Boundary"],
+        [
+            "OCR Extraction",
+            "Upload supported PDFs, Office files, spreadsheets, CSV/TXT, and images to extract text without adding them to approved knowledge.",
+            "Extracted text is staff-reviewable and not a guarantee of perfect OCR.",
+        ],
+        [
+            "Compliance Workspace",
+            "Circular impact summaries, affected departments, obligations, review notes, and officer-review status.",
+            "Supports compliance research and drafting; it is not regulator-approved compliance automation.",
+        ],
+        [
+            "Model Lab",
+            "Model route visibility, capability tags, status metrics, benchmark runner, candidate comparison, and claim-readiness indicators.",
+            "Model recommendations must be backed by measured bank workload evidence.",
+        ],
+    ]
+    return table(rows, [1.35 * inch, 3.15 * inch, 2.0 * inch])
+
+
+def workflow_fit_table():
+    rows = [
+        ["Workflow", "Fit Today", "Commercial Positioning"],
+        ["Customer-care and branch lookup", "Strong", "Recommended first use case with approved SOPs, product FAQs, and source-backed answer checks."],
+        ["Compliance circular search", "Strong", "Works best with approved circulars, freshness metadata, and scheduled RAG evaluations."],
+        ["Internal policy Q&A", "Strong", "Useful across operations, HR/admin, branch teams, product teams, and internal audit."],
+        ["OCR text extraction", "Strong", "Extracts text from supported documents and images without indexing them into approved knowledge."],
+        ["Large document analysis", "Good, queue-based", "Heavy OCR, large PDFs, and Excel workbooks run as background jobs with stored results."],
+        ["Compliance review notes", "Controlled support", "Summarizes circular impact and obligations for officer review and sign-off."],
+    ]
+    return table(rows, [1.8 * inch, 1.2 * inch, 3.5 * inch])
 
 
 def scope_phase_table():
@@ -468,13 +503,13 @@ def scope_phase_table():
         ],
         [
             "3. Application configuration",
-            "Configure tenant, roles, branding, document categories, audit views, and AI routing.",
-            "Provide role matrix, user list, and document category structure.",
+            "Configure tenant, roles, branding, document categories, workflow modules, audit views, AI routing, and evaluation settings.",
+            "Provide role matrix, user list, document category structure, workflow owners, and pilot use cases.",
         ],
         [
             "4. Initial onboarding",
-            "Upload and index initial documents, validate retrieval, citations, parsing, and response behavior.",
-            "Provide sample and initial production documents approved for onboarding.",
+            "Upload and index initial documents, validate retrieval, citations, parsing, long-document jobs, and workflow draft behavior.",
+            "Provide sample and initial production documents plus OCR samples, compliance circulars, and evaluation questions approved for onboarding.",
         ],
         [
             "5. Training and UAT",
@@ -501,20 +536,20 @@ def build_story():
     story.extend(heading("1. Executive Summary"))
     story.append(
         p(
-            "Lipi One Pvt. Ltd. proposes to provide Sanima Bank with the LipiCore Enterprise Document Intelligence Platform as a managed hosted service delivered through dedicated Windows and macOS desktop software. The platform is designed for banking teams that need secure document analysis, policy search, compliance review, internal knowledge assistance, and AI-supported document workflows without relying on public AI services for confidential banking material.",
+            "Lipi One Pvt. Ltd. proposes to provide Sanima Bank with the updated LipiCore Bank Staff AI Appliance and Document Intelligence Platform as a managed hosted service delivered through dedicated Windows and macOS desktop software. The platform is designed for banking teams that need approved-knowledge Q&A, secure document analysis, OCR text extraction, compliance research, model evaluation, and AI-assisted drafting without relying on public AI services for confidential banking material.",
             STYLES["Body"],
         )
     )
     story.append(
         p(
-            "The solution will be hosted on server infrastructure provided and managed through Silver Lining. Lipi One Pvt. Ltd. will provide the LipiCore software platform, desktop client packaging, implementation, configuration, support, and ongoing maintenance. Sanima Bank will receive a secured bank environment with role-based access, document upload and indexing, AI chat over approved documents, source citations, activity logging, analytics, administrative controls, and the internal staff chat module included as a bonus.",
+            "The solution will be hosted on server infrastructure provided and managed through Silver Lining. Lipi One Pvt. Ltd. will provide the LipiCore software platform, desktop client packaging, implementation, configuration, support, and ongoing maintenance. Sanima Bank will receive a secured bank environment with role-based access, document upload and indexing, AI chat over approved documents, source citations, OCR Extraction, Compliance Workspace, Model Lab, activity logging, analytics, administrative controls, and the internal staff chat module included as a bonus.",
             STYLES["Body"],
         )
     )
     story.append(
         callout(
             "Recommended approach",
-            "Adopt the Standard hosted package for a 1,000-2,000 user production rollout, with final capacity confirmed after user count, expected monthly query volume, document volume, OCR needs, storage volume, and support requirements are reviewed.",
+            "Adopt the Standard hosted package for a 1,000-2,000 user production rollout after a measured department pilot. Final capacity should be confirmed after active-user concurrency, monthly query volume, document volume, OCR/vision needs, storage volume, workflow mix, and support requirements are reviewed.",
         )
     )
 
@@ -531,6 +566,9 @@ def build_story():
                 "Securely upload, process, search, and analyze internal banking documents.",
                 "Ask natural language questions over policies, circulars, reports, manuals, SOPs, and operational documents.",
                 "Receive source-grounded AI answers with document references and citations.",
+                "Extract text from supported PDFs, Office files, spreadsheets, CSV/TXT, and images without indexing them.",
+                "Prepare compliance circular impact notes and obligation summaries for officer review.",
+                "Track model routes, status, and benchmark evidence before making model or capacity claims.",
                 "Maintain audit records for user activity, uploads, queries, and assistant responses.",
                 "Apply role-based access for administrators, bank admins, and staff users.",
                 "Use a managed hosted environment without Sanima Bank needing to operate AI servers or model infrastructure.",
@@ -546,7 +584,7 @@ def build_story():
     story.extend(heading("3. Proposed Solution"))
     story.append(
         p(
-            "LipiCore Enterprise Document Intelligence Platform will be deployed as a secure managed hosted service. Sanima Bank users will access the platform through LipiCore Desktop software for Windows and macOS, connected only to the approved hosted LipiCore environment. This provides the bank with a controlled application surface instead of ordinary browser access, while keeping the backend services, documents, database, vector index, queues, and model runtime in the managed hosted environment.",
+            "LipiCore Bank Staff AI Appliance and Document Intelligence Platform will be deployed as a secure managed hosted service for Sanima Bank. Users will access the platform through LipiCore Desktop software for Windows and macOS, connected only to the approved hosted LipiCore environment. This provides the bank with a controlled application surface instead of ordinary browser access, while keeping the backend services, documents, database, vector index, queues, and model runtime in the managed hosted environment.",
             STYLES["Body"],
         )
     )
@@ -562,8 +600,10 @@ def build_story():
             [
                 "Secure document upload and enterprise document library.",
                 "Windows and macOS desktop software access.",
-                "AI chat over uploaded documents and approved knowledge sources.",
+                "AI chat over uploaded documents and approved knowledge sources with streaming responses and conversation history.",
+                "Local private model routes for text/analyst work and vision/OCR work, sized according to package capacity.",
                 "Queued long-document analysis for large PDFs, scanned documents, and Excel workbooks.",
+                "OCR Extraction, Compliance Workspace, and Model Lab modules.",
                 "Session-bound document isolation for temporary analysis.",
                 "Bank-level data partitioning for hosted environments.",
                 "Source citations, source passage review, and document attribution for generated answers.",
@@ -576,6 +616,23 @@ def build_story():
                 "Private model execution on managed infrastructure.",
                 "Configurable fast and deep AI response modes, subject to selected package capacity.",
             ]
+        )
+    )
+
+    page_break(story)
+    story.extend(heading("Updated Product Modules", 2))
+    story.append(
+        p(
+            "The current LipiCore product is broader than a basic document chatbot. It now includes focused staff tools for approved knowledge, OCR extraction, compliance support, model evaluation, and long-document analysis while keeping final decisions with authorized bank staff.",
+            STYLES["Body"],
+        )
+    )
+    story.append(updated_workspaces_table())
+    story.append(Spacer(1, 8))
+    story.append(
+        callout(
+            "Product boundary",
+            "LipiCore is a staff-assistance and decision-support appliance. It does not autonomously approve loans, replace compliance officers, guarantee regulatory correctness, or certify scanned signatures/seals. High-risk outputs require Sanima Bank review and sign-off.",
         )
     )
 
@@ -597,8 +654,11 @@ def build_story():
                 "Qdrant vector database.",
                 "MinIO object storage.",
                 "Redis queue and admission control.",
-                "vLLM/private model runtime.",
+                "Redis/RQ ingestion and long-document worker.",
+                "vLLM/private model runtime for text/analyst routes.",
+                "Vision/OCR model route for scanned and image-heavy workflows where enabled.",
                 "Nginx reverse proxy with HTTPS/TLS.",
+                "Model Lab, RAG Evaluation Center, and audit dashboards.",
                 "Monitoring, backups, and operational tooling.",
             ]
         )
@@ -644,18 +704,23 @@ def build_story():
         ["Document Library", "Upload, organize, process, lifecycle-manage, and search bank documents."],
         ["Approved Knowledge Q&A", "Ask questions over approved documents with source references and citations where available."],
         ["Queued Long-Document Analysis", "Background processing for large PDFs, OCR-heavy files, and detailed Excel workbook review."],
+        ["OCR Extraction", "Upload supported documents and images to extract text without adding them to approved knowledge."],
+        ["Compliance Workspace", "Circular impact summaries, obligations, affected departments, review notes, and officer-review workflow."],
+        ["Model Lab", "Model route visibility, status metrics, benchmark runner, and claim-readiness comparison."],
         ["Internal Chat (Bonus)", "Bank-scoped staff messenger module included as a bonus module and kept separate from AI/RAG context."],
         ["Session Uploads", "Upload temporary documents into a chat session for isolated analysis."],
         ["Source Evidence", "Assistant answers include source document references and passage evidence where available."],
         ["RAG Evaluation", "Evaluation center for testing retrieval and answer quality on agreed question sets."],
         ["Audit Logs", "Activity records for uploads, queries, users, and assistant responses."],
         ["Analytics Dashboard", "Usage, document, and activity-level reporting."],
-        ["Compliance Support", "Policy comparison, document review, and risk analysis assistance."],
+        ["Compliance Support", "Policy comparison, document analysis, and risk analysis assistance."],
         ["Model Modes", "Fast response and deeper analysis modes, subject to package capacity."],
     ]
     story.append(simple_table(["Module", "Included Scope"], modules, [1.65 * inch, 4.85 * inch]))
     story.extend(heading("Supported File Types", 2))
     story.append(bullet_list(["PDF", "DOCX", "XLSX/XLS", "PPTX", "TXT", "CSV", "Image-based documents where OCR is enabled and document quality permits"]))
+    story.extend(heading("Supported Staff Workflows", 2))
+    story.append(workflow_fit_table())
 
     page_break(story)
     story.extend(heading("7. Security and Compliance Controls"))
@@ -674,8 +739,10 @@ def build_story():
                 "Prompt guardrails for document-grounded responses.",
                 "Source verification and retrieval evaluation controls for reducing unsupported answers.",
                 "Document lifecycle states to control approved, superseded, archived, and disabled content.",
+                "Document freshness and review metadata for approved knowledge where configured.",
                 "PII masking controls for sensitive information.",
                 "Audit logging for major system activity.",
+                "OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation activity remain role-scoped and auditable.",
                 "Internal messenger data is kept separate from AI document chat and is not embedded into the RAG index by default.",
                 "Restricted operational access to hosted infrastructure.",
                 "Database, object storage, and vector store access controlled through backend services.",
@@ -726,6 +793,7 @@ def build_story():
                 "Configured Sanima Bank tenant and administrator accounts.",
                 "Role-based user access structure.",
                 "Document library and AI assistant modules.",
+                "OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation modules configured for agreed pilot scope.",
                 "Internal chat system bonus module.",
                 "Initial document ingestion as defined in scope.",
                 "Audit logging and analytics views.",
@@ -760,7 +828,7 @@ def build_story():
     story.extend(heading("Market Comparison and Tradeoffs", 2))
     story.append(
         p(
-            "Public ChatGPT and Claude prices are useful benchmarks, but they are not direct substitutes for LipiCore. ChatGPT Business and Claude Team are general-purpose AI workspaces. LipiCore is a managed banking document intelligence platform with hosted infrastructure, document ingestion, retrieval, source citations, role-based access, audit records, internal staff chat, and support included in one package.",
+            "Public ChatGPT and Claude prices are useful benchmarks, but they are not direct substitutes for LipiCore. ChatGPT Business and Claude Team are general-purpose AI workspaces. LipiCore is a managed bank staff AI appliance with desktop delivery, hosted infrastructure, document ingestion, OCR extraction, retrieval, source citations, role-based access, audit records, internal staff chat, model evaluation tooling, and support included in one package.",
             STYLES["Body"],
         )
     )
@@ -769,7 +837,7 @@ def build_story():
     story.append(bank_scale_cost_table())
     story.append(
         p(
-            "For reference, these comparisons use an indicative USD/NPR rate of approximately NPR 154 per USD. Actual foreign exchange, taxes, procurement terms, data residency, enterprise contract terms, and usage limits may vary.",
+            "For reference, these comparisons use an indicative USD/NPR rate of approximately NPR 153.07 per USD as of May 23, 2026. Actual foreign exchange, taxes, procurement terms, data residency, enterprise contract terms, and usage limits may vary.",
             STYLES["Small"],
         )
     )
@@ -777,7 +845,7 @@ def build_story():
     story.append(market_comparison_table())
     story.append(
         p(
-            "Market pricing references: OpenAI ChatGPT Business public pricing, OpenAI API pricing, Anthropic Claude pricing, and public USD/NPR exchange-rate sources as of May 2026.",
+            "Market pricing references: OpenAI ChatGPT Business public pricing, Anthropic Claude pricing, and public USD/NPR exchange-rate sources checked on May 23, 2026.",
             STYLES["Small"],
         )
     )
@@ -792,7 +860,9 @@ def build_story():
                 "Sanima Bank tenant setup.",
                 "Security and access configuration.",
                 "Initial admin/user role configuration.",
+                "Initial workflow configuration for OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation.",
                 "Initial document onboarding up to 10 GB or 1,000 files.",
+                "Representative queued long-document and OCR extraction testing on agreed sample files.",
                 "UAT support.",
                 "One administrator training session.",
                 "One staff training session.",
@@ -820,14 +890,13 @@ def build_story():
     story.append(
         bullet_list(
             [
-                "LipiCore Enterprise Document Intelligence Platform software license.",
+                "LipiCore Bank Staff AI Appliance and Document Intelligence Platform software license.",
                 "Windows and macOS LipiCore Desktop software access.",
                 "AI document analysis modules.",
+                "OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation modules.",
                 "RAG retrieval, source citation, and audit logging features.",
                 "User management and role-based access control.",
-                "Product maintenance updates.",
-                "Security patches.",
-                "Helpdesk and technical support under the selected support plan.",
+                "Maintenance updates, security patches, and helpdesk support under the selected support plan.",
             ]
         )
     )
@@ -836,7 +905,7 @@ def build_story():
     story.extend(heading("Internal Chat System Bonus Module", 2))
     story.append(
         p(
-            "Lipi One Pvt. Ltd. will include the internal chat system as a bonus module with the hosted LipiCore package for Sanima Bank. The internal chat system is separate from the AI document chat. It is intended for staff-to-staff communication inside the LipiCore environment, so teams can coordinate around document review, compliance queries, operational follow-ups, and internal decisions without leaving the secured platform.",
+            "Lipi One Pvt. Ltd. will include the internal chat system as a bonus module with the hosted LipiCore package for Sanima Bank. The internal chat system is separate from the AI document chat. It is intended for staff-to-staff communication inside the LipiCore environment, so teams can coordinate around document analysis, compliance queries, operational follow-ups, and internal decisions without leaving the secured platform.",
             STYLES["Body"],
         )
     )
@@ -896,6 +965,14 @@ def build_story():
             STYLES["Small"],
         )
     )
+    story.extend(heading("Capacity Posture", 2))
+    capacity_rows = [
+        ["Evidence Area", "Current Position"],
+        ["Production profile", "Private text/analyst model route and separate vision/OCR route; final model mix and replicas depend on selected capacity."],
+        ["Load evidence", "Current test-server evidence supports normal internal use patterns; whole-bank rollout requires bank-specific concurrency and document tests."],
+        ["Large-file work", "Heavy OCR/PDF/XLS jobs use queues and worker capacity, not unlimited instant processing."],
+    ]
+    story.append(simple_table(["Area", "Position"], capacity_rows[1:], [1.45 * inch, 5.05 * inch]))
 
     page_break(story)
     story.extend(heading("13. Acceptance Criteria"))
@@ -910,6 +987,9 @@ def build_story():
                 "Role-based permissions work according to agreed configuration.",
                 "Audit logs capture key user and system activity.",
                 "Representative queued long-document analysis jobs complete successfully on agreed sample files.",
+                "OCR Extraction can extract text from agreed sample files without indexing them into approved knowledge.",
+                "Compliance Workspace can create a circular review and save an impact summary marked for officer review.",
+                "Model Lab and RAG Evaluation Center are accessible to authorized roles for route visibility and evaluation evidence.",
                 "Windows and macOS desktop access packages connect only to approved LipiCore hosted origins.",
                 "Internal chat module supports direct messages, group/channel conversations, and administrative user control.",
                 "Training has been completed.",
@@ -926,6 +1006,8 @@ def build_story():
                 "Nominate technical/security contact.",
                 "Provide user list and role matrix.",
                 "Provide sample and initial production documents.",
+                "Provide sample documents, compliance circulars, OCR samples, and evaluation questions for UAT.",
+                "Nominate workflow owners for OCR Extraction, Compliance, Model Lab, and RAG Evaluation.",
                 "Review configuration and UAT findings on time.",
                 "Provide internal approvals for staff access and production use.",
                 "Complete required compliance review and procurement approvals.",
@@ -949,6 +1031,8 @@ def build_story():
                 "Perfect OCR, handwriting, seal, signature, or complex-table verification.",
                 "Automatic credit, risk, legal, regulatory, or customer decisions without authorized bank review.",
                 "Using internal messenger messages as AI/RAG context unless separately scoped and approved in writing.",
+                "Policy gap detection, maker-checker lending approval, regulatory filing automation, and audit export workflows beyond the implemented pilot scope unless separately contracted.",
+                "A 50-case lending evaluation pack, full compliance evaluation pack, or OCR benchmark report unless included in final UAT scope.",
                 "Legal, regulatory, or audit certification.",
                 "Third-party VAPT charges.",
                 "Bank-side network, device, or endpoint management.",
@@ -968,6 +1052,8 @@ def build_story():
                 "Sanima Bank will appoint users for UAT within the agreed project timeline.",
                 "AI output is an assistance tool and does not replace authorized bank decision-making.",
                 "Queued long-document analysis turnaround depends on document quality, OCR requirement, worker capacity, model queue load, and selected package sizing.",
+                "OCR Extraction, Compliance Workspace, and Model Lab are staff-assistance and evaluation modules; final business interpretation remains with Sanima Bank.",
+                "Model recommendations and stronger capacity claims require measured Sanima Bank workload evidence.",
                 "Desktop software does not run the backend, database, vector database, object store, RAG pipeline, or model services locally.",
                 "Sanima Bank will validate AI-assisted outputs before using them for final regulatory, credit, legal, or customer-facing decisions.",
             ]
@@ -1013,6 +1099,7 @@ def build_story():
         bullet_list(
             [
                 "Banking-focused document intelligence workflows.",
+                "Focused bank staff workflows for approved knowledge, OCR extraction, compliance support, long-document analysis, and model evaluation.",
                 "Managed hosted model that separates hosting/server and software charges.",
                 "Private model execution on controlled infrastructure.",
                 "Document-grounded answers with source citations.",
@@ -1040,6 +1127,7 @@ def build_story():
         )
     )
 
+    page_break(story)
     story.extend(heading("Appendix A: Technical Overview"))
     tech_rows = [
         ["Desktop client", "LipiCore Desktop for Windows and macOS connected to hosted LipiCore services"],
@@ -1048,9 +1136,10 @@ def build_story():
         ["Vector database", "Qdrant"],
         ["Object storage", "MinIO"],
         ["Queue/admission control", "Redis and RQ workers"],
-        ["AI runtime", "vLLM/private LLM"],
+        ["AI runtime", "vLLM/private model routes for text, analyst, long-document, and vision/OCR workloads where enabled"],
         ["Reverse proxy", "Nginx with TLS"],
         ["Retrieval", "Hybrid vector and keyword search with reranking and source verification"],
+        ["Workspaces", "OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation Center"],
         ["Messenger", "Separate internal chat service boundary; not part of AI/RAG context by default"],
     ]
     story.append(simple_table(["Component", "Technology"], tech_rows, [2.0 * inch, 4.5 * inch]))
@@ -1066,6 +1155,8 @@ def build_story():
                 "Hybrid retrieval and reranking prioritize relevant approved sources.",
                 "The AI model generates a response using retrieved context.",
                 "The response includes source references where applicable.",
+                "Workflow modules store reviewable outputs, source ids where applicable, status, and audit metadata.",
+                "Model Lab and RAG Evaluation Center provide evidence before route, model, or retrieval changes.",
                 "User actions and responses are logged for audit.",
             ]
         )
@@ -1074,11 +1165,11 @@ def build_story():
     page_break(story)
     story.extend(heading("Appendix B: Department Use Cases"))
     use_cases = [
-        ["Credit", "Loan policy search, agreement review, collateral document checks"],
-        ["Compliance", "Circular interpretation, policy comparison, audit evidence lookup"],
-        ["Operations", "SOP lookup, internal process guidance, exception handling support"],
+        ["Credit", "Loan policy search, document summarization, open-question extraction"],
+        ["Compliance", "Circular interpretation, impact summaries, obligation notes, review queue"],
+        ["Operations", "SOP lookup, internal process guidance, OCR extraction for operational documents"],
         ["Risk", "Risk policy review, portfolio documentation analysis"],
-        ["Legal", "Contract clause search, document comparison, regulatory reference lookup"],
+        ["Legal", "Contract clause search, document comparison, regulatory reference lookup with review boundary"],
         ["Internal Audit", "Audit trail review, document evidence search, control testing support"],
         ["HR/Admin", "Policy FAQ, staff manual search, onboarding document support"],
     ]
@@ -1101,7 +1192,7 @@ def draw_header_footer(canvas, doc):
     canvas.line(MARGIN, height - 0.52 * inch, width - MARGIN, height - 0.52 * inch)
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(MUTED)
-    canvas.drawString(MARGIN, height - 0.42 * inch, "LipiCore Enterprise Document Intelligence Platform")
+    canvas.drawString(MARGIN, height - 0.42 * inch, "LipiCore Bank Staff AI Appliance")
     canvas.drawRightString(width - MARGIN, height - 0.42 * inch, "Proposal to Sanima Bank")
 
     canvas.setStrokeColor(BORDER)
@@ -1123,7 +1214,7 @@ def build_pdf():
         rightMargin=MARGIN,
         topMargin=0.72 * inch,
         bottomMargin=0.72 * inch,
-        title="Proposal to Sanima Bank - LipiCore Enterprise Document Intelligence Platform",
+        title="Proposal to Sanima Bank - LipiCore Bank Staff AI Appliance",
         author="Lipi One Pvt. Ltd.",
         subject="Managed hosted document intelligence platform proposal",
     )

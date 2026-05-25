@@ -10,15 +10,13 @@ const NAV_SECTIONS = [
     items: [
       { icon: 'chat',           label: 'Chat Assistant',      to: '/chat',               permission: PERMISSIONS.USE_CHAT },
       { icon: 'account_tree',   label: 'Process Navigator',   to: '/process-navigator',  permission: PERMISSIONS.VIEW_PROCESS_NAVIGATOR },
-      { icon: 'support_agent',  label: 'Support Desk',        to: '/support-desk',       permission: PERMISSIONS.USE_CHAT },
-      { icon: 'request_quote',  label: 'Loan Support',        to: '/loan-support',       permission: PERMISSIONS.VIEW_TASKS },
+      { icon: 'document_scanner', label: 'OCR Extraction',     to: '/ocr',                permission: PERMISSIONS.USE_CHAT_FILE_UPLOAD },
     ],
   },
   {
     label: 'KNOWLEDGE',
     items: [
       { icon: 'folder_managed', label: 'Document Library',    to: '/documents',          permission: PERMISSIONS.VIEW_DOCUMENTS },
-      { icon: 'fact_check',      label: 'Document Review',     to: '/document-review',    permission: PERMISSIONS.MANAGE_DOCUMENT_LIBRARY },
       { icon: 'gpp_maybe',      label: 'Compliance Monitor',  to: '/regulatory',         permission: PERMISSIONS.VIEW_REGULATORY_LIBRARY },
       { icon: 'rule',           label: 'Compliance Workspace', to: '/compliance-workspace', permission: PERMISSIONS.MANAGE_COMPLIANCE },
     ],

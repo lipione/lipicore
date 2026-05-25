@@ -1,7 +1,7 @@
 # BankAi Public Deployment - Live
 
 **Date:** May 23, 2026
-**Status:** Production stack deployed at commit `615d299`; staff helpdesk, document governance, decision-support workspaces, Model Lab, and queued long-document analysis are live
+**Status:** Production stack deployed at commit `615d299`; staff helpdesk, document governance, OCR extraction, Model Lab, and queued long-document analysis are live
 
 ## Public Access
 
@@ -137,8 +137,9 @@ session.
 - Chat UI now supports a mobile drawer layout, corrected model labels for the
   current vLLM routes, safer uploaded-document source selection, real message
   timestamps, and env-driven Playwright checks.
-- Current deployed workflows include Support Desk, Compliance Workspace, Loan
-  Support, Document Review, Model Lab, and queued long-document analysis.
+- Current deployed workflows include staff chat, approved knowledge, Document
+  Library, OCR Extraction, Compliance Workspace, Model Lab, and queued
+  long-document analysis.
 - App-only deploys should rebuild/recreate backend, frontend, messenger backend,
   ingestion worker, and nginx with `--no-deps`. Do not restart GPU model
   containers without a maintenance window and capacity check.

@@ -56,7 +56,8 @@ BankAi/LipiCore does not currently claim to:
 *   **Long-Document Queue:** Reuses Redis/RQ for large-file extraction, context packing, analyst-model generation, and persisted results.
 *   **Storage:** MinIO (S3-compatible persistent storage).
 *   **Streaming:** Server-Sent Events (SSE) for both generation and document status tracking.
-*   **Decision-Support Workspaces:** Support Desk, Compliance Workspace, Loan Support, Document Review, Model Lab, and Evaluation Center.
+*   **OCR Extraction Workspace:** Upload supported files and extract text without adding them to the approved knowledge base.
+*   **Governance Workspaces:** Compliance Workspace, Model Lab, Evaluation Center, audit logs, and admin controls.
 
 ---
 
@@ -70,7 +71,7 @@ BankAi uses a decoupled **Worker-Observer** architecture for document processing
 5.  **Admission Control:** Redis coordinates per-model and per-user concurrency so GPU memory is protected under load.
 6.  **Generation:** Response is streamed token-by-token from the local vLLM runtime.
 
-For heavy files, users should use the queued long-document workflow instead of normal chat. The workflow creates a background job, extracts PDF/OCR/Excel content, packs relevant excerpts into the deep model context, and stores the result for staff review. See [Queued Long-Document Analysis](docs/long-document-analysis.md).
+For heavy files, users should use the queued long-document workflow instead of normal chat. The workflow creates a background job, extracts PDF/OCR/Excel content, packs relevant excerpts into the analyst-model context, and stores the result for staff review. See [Queued Long-Document Analysis](docs/long-document-analysis.md).
 
 ---
 

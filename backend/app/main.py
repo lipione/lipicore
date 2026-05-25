@@ -22,6 +22,7 @@ from .api import (
     loan_support,
     long_document_analysis,
     model_lab,
+    ocr,
     support_cases,
     tasks,
     users,
@@ -94,3 +95,4 @@ app.include_router(loan_support.router, prefix=f"{settings.API_V1_STR}/loan-supp
 app.include_router(long_document_analysis.router, prefix=f"{settings.API_V1_STR}/long-document-analysis", tags=["long-document-analysis"])
 app.include_router(model_lab.router, prefix=f"{settings.API_V1_STR}/model-lab", tags=["model-lab"])
 app.include_router(document_review.router, prefix=f"{settings.API_V1_STR}/document-review", tags=["document-review"])
+app.include_router(ocr.router, prefix=f"{settings.API_V1_STR}/ocr", tags=["ocr"])

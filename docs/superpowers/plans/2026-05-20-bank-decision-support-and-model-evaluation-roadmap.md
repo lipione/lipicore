@@ -4,7 +4,7 @@
 
 **Goal:** Turn bank-requested claims into controlled, auditable LipiCore modules without claiming autonomous lending, compliance replacement, guaranteed regulatory correctness, perfect OCR, blanket HA/SLA, or general superiority to GPT-4/GPT-5.
 
-**Architecture:** Keep the current FastAPI, React/Vite, PostgreSQL, Qdrant, Redis/RQ, MinIO, nginx, and vLLM stack. Add workflow modules for customer care, compliance, lending support, document intelligence, model evaluation, and HA/SLA evidence. Every high-risk output must carry source evidence, confidence, limitations, and human approval state.
+**Architecture:** Keep the current FastAPI, React/Vite, PostgreSQL, Qdrant, Redis/RQ, MinIO, nginx, and vLLM stack. Add focused modules for OCR extraction, approved-knowledge assistance, compliance support, document intelligence, model evaluation, and HA/SLA evidence. Every high-risk output must carry source evidence, confidence, limitations, and human approval state.
 
 **Tech Stack:** FastAPI, SQLModel, Alembic, PostgreSQL, Qdrant, Redis/RQ, MinIO, React/Vite, Tailwind, vLLM, optional SGLang/TensorRT-LLM lab runtimes, pytest, Playwright, Locust.
 
@@ -12,6 +12,11 @@
 Migrations through `012` are applied. Current production routes all text lanes
 to Gemma 4 26B 4-bit on `lipicore-vllm-c`, routes vision/OCR work to Qwen3-VL
 8B on `lipicore-vllm-vision`, and keeps the optional fast 4B endpoint disabled.
+
+**Status as of 2026-05-25:** the visible product surface has been narrowed.
+Support, lending, and extraction-review pages are no longer primary product
+pages. The replacement user-facing workflow is OCR Extraction for transient text
+extraction without indexing.
 
 ---
 
@@ -25,7 +30,7 @@ LipiCore already has the right base for a bank staff appliance:
 - Approved document lifecycle and chunk-level permission metadata.
 - RAG source evidence panel, citation verifier, and Evaluation Center.
 - Load tests for API smoke, 20/40 streaming staff bursts, and 25/50/100 active-staff claims.
-- Support Desk, Compliance Workspace, Loan Support, Document Review, Model Lab, and queued long-document analysis foundations.
+- OCR Extraction, Compliance Workspace, Model Lab, and queued long-document analysis foundations.
 - Pilot, department, and whole-bank sizing docs.
 - HA reference compose under `deploy/ha`.
 
@@ -39,7 +44,7 @@ Use this wording in bank replies:
 
 Use this capability ladder:
 
-- Today: staff AI helpdesk, approved-knowledge Q&A, document analysis, drafting, summarization, audit trail, Support Desk, Compliance Workspace, Loan Support, Document Review, Model Lab, and queued long-document analysis.
+- Today: staff AI helpdesk, approved-knowledge Q&A, document analysis, OCR Extraction, drafting, summarization, audit trail, Compliance Workspace, Model Lab, and queued long-document analysis.
 - Pilot: customer care, branch support, compliance lookup, controlled internal file analysis, and limited loan/compliance decision-support notes with human review.
 - Next phase: workflow audit/export polish, priority queues, stronger OCR confidence review, evaluation packs, and model benchmark evidence.
 - Later: HA whole-bank deployment, failover drills, specialized extraction, and stronger long-document reasoning.
@@ -198,7 +203,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - Create: `backend/tests/test_support_case_service.py`
 - Create: `frontend/tests/e2e/support-desk.spec.js`
 
-- [x] Add support case records: customer issue category, channel, priority, staff owner, status, source docs, draft response, escalation target.
+- [x] Add legacy customer-care records: issue category, channel, priority, staff owner, status, source docs, draft response, escalation target.
 - [ ] Add guided tasks: failed transaction response, card dispute response, KYC/account servicing answer, complaint escalation note.
 - [x] Require generated customer replies to include "staff review required" metadata.
 - [ ] Add supervisor escalation action: assign case, add note, export draft.
@@ -206,7 +211,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [ ] Add dashboard metrics: answer accepted, edited, escalated, no-source, response time.
 - [ ] Verification: 25-case pilot eval with approved customer-care SOPs and 10 no-source traps.
   - 2026-05-21: Support case API/service/frontend foundation added. Pilot eval, guided task generation, and export/audit workflow remain release gates.
-  - 2026-05-23: Support Desk deployed on production as controlled decision-support foundation; supervisor/export/audit polish remains before stronger claims.
+  - 2026-05-23: Legacy customer-care workspace foundation deployed; de-scoped from the visible product surface on 2026-05-25.
 
 ## Phase 3: Compliance Workspace
 
@@ -267,7 +272,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [x] Ensure system never emits final approve/reject as an automated decision.
 - [ ] Verification: loan eval pack with at least 50 cases, including missing-doc, conflicting-info, unsupported-policy, and no-source scenarios.
   - 2026-05-21: Loan support API/service/frontend foundation added. It stores missing documents, risk factors, memo drafts, and keeps `automated_decision` unset.
-  - 2026-05-23: Loan Support deployed on production as decision support only; eligibility citations, maker-checker, and 50-case eval pack remain release gates.
+  - 2026-05-23: Legacy lending workspace foundation deployed as decision support only; de-scoped from the visible product surface on 2026-05-25.
 
 ## Phase 5: Document Intelligence And Extraction Confidence
 
@@ -299,7 +304,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [ ] Add visual-document retrieval experiment using Qwen3-VL-Reranker or ColPali-style page embeddings for scanned PDFs.
 - [ ] Verification: build a document extraction benchmark with clean PDFs, scanned PDFs, tables, merged Excel cells, forms, and Nepali PDFs.
   - 2026-05-21: Document extraction page model/API/service/frontend queue added. Queued long-document analysis API/service/UI added. Full table structure preservation and visual retrieval experiments remain release gates.
-  - 2026-05-23: Document Review and queued long-document analysis deployed on production; Qwen3-VL vision/OCR endpoint active, but scanned-document claims still require bank-specific benchmarks.
+  - 2026-05-23: Legacy extraction-review queue and queued long-document analysis deployed; user-facing OCR Extraction replaced the review page on 2026-05-25.
 
 ## Phase 6: Model Lab, Routing, And Benchmark Harness
 

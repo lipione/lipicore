@@ -22,7 +22,8 @@ LipiCore is a decision-support and staff-productivity system. It is not an auton
 | Approved knowledge Q&A | Answers from approved policies, circulars, SOPs, manuals, product documents, and uploaded files. | Source-backed answers from approved bank knowledge where matching sources exist. |
 | Staff chat | General banking and customer-service assistance with source-backed answers when available. | Staff assistant for routine lookup, drafting, summarization, and internal guidance. |
 | Document analysis | Upload supported files, summarize, ask questions, compare, and extract points. Heavy PDF/OCR/XLS review can be queued as a background long-document job. | Internal file analysis with citations where extracted text supports the answer; large files are processed asynchronously for staff review. |
-| Decision-support workspaces | Support Desk, Compliance Workspace, Loan Support, Document Review, Model Lab, and Evaluation Center are available as controlled staff workflows. | Workflow support, notes, drafts, review queues, and benchmark evidence without autonomous business decisions. |
+| OCR extraction | Upload supported PDFs, Office files, spreadsheets, CSV/TXT, and images to extract text without adding them to approved knowledge. | Transient text extraction for staff review; complex scans, tables, stamps, signatures, and handwriting still require caution. |
+| Governance workspaces | Compliance Workspace, Model Lab, and Evaluation Center are available as controlled staff workflows. | Review notes, benchmark evidence, and evaluation records without autonomous business decisions. |
 | Drafting | Customer replies, internal memos, notices, scripts, FAQs, and escalation notes. | Staff-ready drafts for human review. |
 | Bilingual usage | English and Nepali staff usage. | Bilingual support for staff workflows, subject to evaluation on the bank's documents. |
 | Data control | Local deployment with private model runtime and self-hosted storage/vector database. | Bank data stays inside bank-controlled infrastructure. |
@@ -32,7 +33,7 @@ LipiCore is a decision-support and staff-productivity system. It is not an auton
 
 | Bank asks for | Safe response now | Required before stronger claim |
 | --- | --- | --- |
-| Lending decisions | LipiCore can support lending teams by summarizing loan files, checking required documents, extracting risk factors, and drafting credit memo notes. Final approval remains with authorized bank officers. | Loan file workspace, product checklists, policy citations, risk summary, missing-document detector, maker-checker workflow. |
+| Lending decisions | LipiCore is not currently positioned as a lending workflow product. It can answer approved policy questions where sources exist, but final lending work remains outside the active product scope. | A separately contracted loan workspace, policy citations, validation set, maker-checker workflow, and bank-approved governance model. |
 | Compliance officer replacement | LipiCore reduces manual compliance lookup, circular summarization, and drafting work. Compliance officers remain responsible for review, interpretation, and approval. | Compliance workspace, circular impact review, policy gap notes, checklist generator, review queue, audit export. |
 | Guaranteed regulatory correctness | LipiCore answers from approved bank knowledge and shows source citations. Regulatory correctness depends on the bank keeping approved documents current. | Effective dates, superseded documents, mandatory citation mode, citation verifier, compliance evaluation suite. |
 | Scanned PDFs, tables, seals, signatures, handwriting | LipiCore supports OCR, table extraction, and queued long-document analysis. High-risk scanned or complex documents should be reviewed by staff, especially tables, stamps, handwritten notes, and signatures. | Full OCR benchmarks, layout-aware parsing, table extraction, confidence scores, low-confidence review queue, side-by-side source viewer. |
@@ -55,7 +56,8 @@ LipiCore is a decision-support and staff-productivity system. It is not an auton
 - Airgapped or bank-controlled deployment.
 - Staff-ready drafts for human review.
 - Queued long-document analysis for large PDFs, Excel workbooks, and OCR-heavy files.
-- Decision-support for customer care, branch, compliance, operations, and lending teams.
+- OCR extraction for supported documents and images without external AI providers.
+- Decision-support for customer care, branch, compliance, and operations teams.
 - Audit logs, role controls, document governance, and evaluation workflow.
 - SLA and availability depend on deployment tier.
 

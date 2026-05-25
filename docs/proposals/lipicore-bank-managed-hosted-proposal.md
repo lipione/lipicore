@@ -1,9 +1,9 @@
-# Proposal for Managed Hosted LipiCore Enterprise Document Intelligence Platform
+# Proposal for Managed Hosted LipiCore Bank Staff AI Appliance
 
 - **Prepared for:** Sanima Bank
 - **Prepared by:** Lipi One Pvt. Ltd.
 - **Hosting and server:** Silver Lining
-- **Product:** LipiCore Enterprise Document Intelligence Platform
+- **Product:** LipiCore Bank Staff AI Appliance and Document Intelligence Platform
 - **Proposal date:** May 23, 2026
 - **Validity:** 30 days from proposal date
 - **Commercial model:** One-time setup fee + monthly managed server charge + monthly software subscription
@@ -12,9 +12,9 @@
 
 ## 1. Executive Summary
 
-LipiCore Enterprise Document Intelligence Platform is a secure, enterprise-grade AI platform designed for banks and financial institutions that need private document analysis, policy search, regulatory review, and staff-facing AI assistance without sending confidential banking data to public AI services.
+LipiCore Bank Staff AI Appliance and Document Intelligence Platform is a secure, enterprise-grade AI platform designed for banks and financial institutions that need approved-knowledge Q&A, private document analysis, OCR text extraction, compliance research, model evaluation, and staff-facing AI assistance without sending confidential banking data to public AI services.
 
-The proposed model is a managed hosted package operated for Sanima Bank on Silver Lining server infrastructure, with Lipi One Pvt. Ltd. providing the LipiCore software, desktop client packaging, implementation, and support. Sanima Bank receives Windows and macOS desktop software connected to the approved hosted environment, role-based access, secure document upload, AI-powered analysis, source citations, audit logging, the internal chat module as a bonus, and ongoing managed support. Pricing is separated into:
+The proposed model is a managed hosted package operated for Sanima Bank on Silver Lining server infrastructure, with Lipi One Pvt. Ltd. providing the LipiCore software, desktop client packaging, implementation, and support. Sanima Bank receives Windows and macOS desktop software connected to the approved hosted environment, role-based access, secure document upload, AI-powered analysis, source citations, OCR Extraction, Compliance Workspace, Model Lab, RAG Evaluation, audit logging, the internal chat module as a bonus, and ongoing managed support. Pricing is separated into:
 
 1. A one-time setup and onboarding charge.
 2. A monthly managed server and infrastructure charge.
@@ -34,6 +34,9 @@ The expected system should help bank staff:
 - Ask natural language questions over uploaded documents and approved knowledge bases.
 - Queue large PDF, OCR-heavy, and Excel workbook analysis without blocking normal staff chat.
 - Receive answers with source references and document attribution.
+- Extract text from supported PDFs, Office files, spreadsheets, CSV/TXT, and images without indexing them.
+- Prepare compliance circular impact notes and obligation summaries for officer review.
+- Track model routes, status, and benchmark evidence before making model or capacity claims.
 - Maintain audit logs for user activity, queries, uploads, and AI responses.
 - Enforce access controls for administrators, bank admins, and staff users.
 - Support confidential deployment where bank documents remain within controlled hosted infrastructure.
@@ -46,7 +49,7 @@ The expected system should help bank staff:
 
 ## 3. Proposed Solution
 
-We propose deploying LipiCore Enterprise Document Intelligence Platform as a managed hosted service on Silver Lining server infrastructure.
+We propose deploying LipiCore Bank Staff AI Appliance and Document Intelligence Platform as a managed hosted service on Silver Lining server infrastructure.
 
 Sanima Bank will access the platform through LipiCore Desktop software for Windows and macOS, connected only to the approved hosted LipiCore environment. Lipi One Pvt. Ltd. and Silver Lining will host, operate, monitor, maintain, and update the platform. Sanima Bank will not need to procure or maintain AI servers, GPUs, databases, vector databases, or model runtime infrastructure.
 
@@ -57,7 +60,9 @@ AI output is positioned as staff assistance and does not replace authorized Sani
 - Secure document upload and analysis.
 - Queued long-document analysis for large PDFs, OCR-heavy files, and detailed Excel/PDF review.
 - Windows and macOS desktop software access.
-- AI chat over bank documents.
+- AI chat over bank documents with streaming responses and conversation history.
+- Local private model routes for text/analyst work and vision/OCR work, sized according to package capacity.
+- OCR Extraction, Compliance Workspace, and Model Lab modules.
 - Approved knowledge Q&A with source evidence.
 - Document lifecycle controls for draft, approved, superseded, archived, and disabled documents.
 - Hybrid retrieval with vector search, keyword search, reranking, and citation verification.
@@ -72,6 +77,16 @@ AI output is positioned as staff assistance and does not replace authorized Sani
 - Private model execution on LipiCore-hosted infrastructure.
 - English and Nepali document support where document quality permits.
 - Configurable AI model modes, sized to the selected hosted capacity profile.
+
+### Updated Product Modules
+
+| Workspace | Current Included Capability | Safe Boundary |
+|---|---|---|
+| OCR Extraction | Upload supported PDFs, Office files, spreadsheets, CSV/TXT, and images to extract text without adding them to approved knowledge | Extracted text is staff-reviewable and not a guarantee of perfect OCR |
+| Compliance Workspace | Circular impact summaries, affected departments, obligations, review notes, and officer-review status | Supports compliance research and drafting; it is not regulator-approved compliance automation |
+| Model Lab | Model route visibility, capability tags, status metrics, benchmark runner, candidate comparison, and claim-readiness indicators | Model recommendations must be backed by measured bank workload evidence |
+
+Product boundary: LipiCore is a staff-assistance and decision-support appliance. It does not autonomously approve loans, replace compliance officers, guarantee regulatory correctness, or certify scanned signatures/seals. High-risk outputs require Sanima Bank review and sign-off.
 
 ---
 
@@ -89,8 +104,11 @@ The hosted stack includes:
 - Qdrant vector database.
 - MinIO object storage.
 - Redis queue and admission control.
-- vLLM/private LLM runtime.
+- Redis/RQ ingestion and long-document worker.
+- vLLM/private model runtime for text/analyst routes.
+- Vision/OCR model route for scanned and image-heavy workflows where enabled.
 - Nginx reverse proxy with TLS.
+- Model Lab, RAG Evaluation Center, and audit dashboards.
 - Monitoring, backup, and operational tooling.
 
 ### Desktop Software Access Model
@@ -191,13 +209,16 @@ LipiCore will:
 | Document Library | Upload, organize, process, lifecycle-manage, and search bank documents |
 | Queued Long-Document Analysis | Background analysis for large PDFs, scanned/OCR-heavy files, and detailed Excel workbooks |
 | Approved Knowledge Q&A | Ask questions over uploaded and approved documents with source references where available |
+| OCR Extraction | Upload supported documents and images to extract text without indexing them into approved knowledge |
+| Compliance Workspace | Circular impact summaries, obligations, affected departments, review notes, and officer-review workflow |
+| Model Lab | Model route visibility, status metrics, benchmark runner, and claim-readiness comparison |
 | Internal Chat System (Bonus) | Bank-scoped staff messenger module included as a bonus module and kept separate from AI/RAG context |
 | Session Uploads | Upload temporary documents into a chat session for isolated analysis |
 | Source Evidence | Assistant answers include source document references and passage evidence where available |
 | RAG Evaluation | Evaluation center for testing retrieval and answer quality on agreed question sets |
 | Audit Logs | Activity records for uploads, queries, users, and assistant responses |
 | Analytics Dashboard | Usage, document, and activity-level reporting |
-| Compliance Workflow Support | Policy comparison, document review, risk analysis support |
+| Compliance Workflow Support | Policy comparison, document analysis, risk analysis support |
 | Model Modes | Fast response mode and deeper analysis mode, subject to package capacity |
 | Admin Settings | Tenant configuration, roles, system preferences, and security views |
 
@@ -244,8 +265,10 @@ The platform is designed for confidential banking workflows.
 - Prompt guardrails for document-grounded responses.
 - Source verification and retrieval evaluation controls for reducing unsupported answers.
 - Document lifecycle states to control approved, superseded, archived, and disabled content.
+- Document freshness and review metadata for approved knowledge where configured.
 - PII masking controls for sensitive information.
 - Audit logging for major system activity.
+- OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation activity remain role-scoped and auditable.
 - Internal messenger data is kept separate from AI document chat and is not embedded into the RAG index by default.
 - Restricted operational access to hosted infrastructure.
 - Database, object storage, and vector store access controlled through backend services.
@@ -288,6 +311,7 @@ LipiCore will deliver:
 - Configured bank tenant and administrator accounts.
 - Role-based user access structure.
 - Document library and chat assistant modules.
+- OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation modules configured for agreed pilot scope.
 - Internal chat system bonus module.
 - Initial document ingestion as defined in scope.
 - Audit logging and analytics views.
@@ -329,7 +353,7 @@ All prices below are indicative in **NPR and exclusive of applicable VAT, taxes,
 
 ### Market Comparison and Tradeoffs
 
-Public ChatGPT and Claude prices are useful benchmarks, but they are not direct substitutes for LipiCore. ChatGPT Business and Claude Team are general-purpose AI workspaces. LipiCore is a managed banking document intelligence platform with hosted infrastructure, document ingestion, retrieval, source citations, role-based access, audit records, internal staff chat, and support included in one package.
+Public ChatGPT and Claude prices are useful benchmarks, but they are not direct substitutes for LipiCore. ChatGPT Business and Claude Team are general-purpose AI workspaces. LipiCore is a managed bank staff AI appliance with desktop delivery, hosted infrastructure, document ingestion, OCR extraction, retrieval, source citations, role-based access, audit records, internal staff chat, model evaluation tooling, and support included in one package.
 
 #### LipiCore Effective Per-User Cost
 
@@ -341,24 +365,24 @@ Public ChatGPT and Claude prices are useful benchmarks, but they are not direct 
 
 #### Public AI Workspace Benchmark
 
-Assuming approximately NPR 154 per USD:
+Assuming approximately NPR 153.07 per USD as of May 23, 2026:
 
 | User Count | ChatGPT / Claude at USD 25/User/Month | Approx. NPR / Month |
 |---:|---:|---:|
-| 500 users | USD 12,500/month | Approx. NPR 19.2 lakh/month |
-| 2,000 users | USD 50,000/month | Approx. NPR 76.8 lakh/month |
-| 5,000 users | USD 125,000/month | Approx. NPR 1.92 crore/month |
+| 500 users | USD 12,500/month | Approx. NPR 19.1 lakh/month |
+| 2,000 users | USD 50,000/month | Approx. NPR 76.5 lakh/month |
+| 5,000 users | USD 125,000/month | Approx. NPR 1.91 crore/month |
 
 #### Practical Tradeoffs
 
 | Option | Indicative Public Cost | What It Includes | Bank Tradeoff |
 |---|---|---|---|
-| LipiCore Standard | NPR 800,000/month for 1,000-2,000 users | Hosted banking document platform, RAG, audit logs, RBAC, internal chat, support, and managed infrastructure | Purpose-built for bank document intelligence; model choice and capacity are managed by Lipi One/Silver Lining |
+| LipiCore Standard | NPR 800,000/month for 1,000-2,000 users | Windows/macOS desktop client, hosted bank AI appliance, approved-knowledge Q&A, OCR extraction, RAG, audit logs, RBAC, internal chat, support, and managed infrastructure | Purpose-built for bank document intelligence; model choice and capacity are managed by Lipi One/Silver Lining |
 | ChatGPT Business | USD 25/user/month monthly or USD 20/user/month annual equivalent | General ChatGPT workspace with admin controls and business privacy terms | Seat cost scales linearly; API usage, custom RAG, bank document platform, hosting, and custom audit workflows are separate |
-| Claude Team | USD 25/user/month monthly or USD 20/user/month annual equivalent for standard seats; Team is listed for 5-150 users | General Claude team workspace with connectors and administration features | Larger banks need Enterprise; enterprise use may combine seat price and API usage. Banking-specific platform still needs to be built |
+| Claude Team | Around USD 25/user/month monthly for standard seats, with annual discounts depending on current Claude plan terms; Team is listed for 5-150 users | General Claude team workspace with connectors and administration features | Larger banks need Enterprise; enterprise use may combine seat price and API usage. Banking-specific platform still needs to be built |
 | DIY API Build | Token usage varies by model and workload; GPT-5.4/Sonnet-class models can become material at high document volume | Access to frontier model APIs | Bank must still build and operate document ingestion, vector search, citations, RBAC, audit logs, security review, support, and hosting |
 
-Market pricing references: OpenAI ChatGPT Business public pricing, OpenAI API pricing, Anthropic Claude pricing, and public USD/NPR exchange-rate sources as of May 2026.
+Market pricing references: OpenAI ChatGPT Business public pricing, Anthropic Claude pricing, and public USD/NPR exchange-rate sources checked on May 23, 2026.
 
 ### What the One-Time Setup Fee Covers
 
@@ -367,8 +391,10 @@ Market pricing references: OpenAI ChatGPT Business public pricing, OpenAI API pr
 - Bank tenant setup.
 - Security and access configuration.
 - Initial admin/user role configuration.
+- Initial workflow configuration for OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation.
 - Initial document onboarding up to 10 GB or 1,000 files.
 - Representative queued long-document testing for selected large PDFs, scanned PDFs, and Excel workbooks.
+- Representative OCR extraction testing on agreed sample files.
 - UAT support.
 - One administrator training session.
 - One staff training session.
@@ -388,21 +414,20 @@ Market pricing references: OpenAI ChatGPT Business public pricing, OpenAI API pr
 
 ### What the Monthly Software License + Support Charge Covers
 
-- LipiCore Enterprise Document Intelligence Platform software license.
+- LipiCore Bank Staff AI Appliance and Document Intelligence Platform software license.
 - Windows and macOS LipiCore Desktop software access.
 - AI document analysis modules.
+- OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation modules.
 - Queued long-document analysis module for large PDF/OCR/XLS work, subject to package capacity.
 - RAG retrieval, source citation, and audit logging features.
 - User management and RBAC.
-- Product maintenance updates.
-- Security patches.
-- Helpdesk and technical support under the selected support plan.
+- Maintenance updates, security patches, and helpdesk support under the selected support plan.
 
 ### Internal Chat System Bonus Module
 
 Lipi One Pvt. Ltd. will include the internal chat system as a bonus module with the hosted LipiCore package for Sanima Bank.
 
-The internal chat system is separate from the AI document chat. It is intended for staff-to-staff communication inside the LipiCore environment, so teams can coordinate around document review, compliance queries, operational follow-ups, and internal decisions without leaving the secured platform.
+The internal chat system is separate from the AI document chat. It is intended for staff-to-staff communication inside the LipiCore environment, so teams can coordinate around document analysis, compliance queries, operational follow-ups, and internal decisions without leaving the secured platform.
 
 Messenger boundary: chat messages and shared files are not embedded into the document intelligence index, not used as AI context, and not used to train public AI models unless a future written scope explicitly changes that boundary.
 
@@ -458,6 +483,14 @@ Annual prepayment discounts can be discussed for banks that prefer yearly procur
 
 Formal SLA commitments depend on final infrastructure, monitoring, backup and restore procedure, failover design, support terms, and successful operational drills. Availability excludes planned maintenance, bank network issues, force majeure, third-party internet disruption, and bank-side access problems.
 
+### Capacity Posture
+
+| Area | Position |
+|---|---|
+| Production profile | Private text/analyst model route and separate vision/OCR route; final model mix and replicas depend on selected capacity |
+| Load evidence | Current test-server evidence supports normal internal use patterns; whole-bank rollout requires bank-specific concurrency and document tests |
+| Large-file work | Heavy OCR/PDF/XLS jobs use queues and worker capacity, not unlimited instant processing |
+
 ---
 
 ## 13. Acceptance Criteria
@@ -472,6 +505,9 @@ The implementation will be considered accepted when:
 - Role-based permissions work according to agreed configuration.
 - Audit logs capture key user and system activity.
 - Representative queued long-document analysis jobs complete successfully on agreed sample files.
+- OCR Extraction can extract text from agreed sample files without indexing them into approved knowledge.
+- Compliance Workspace can create a circular review and save an impact summary marked for officer review.
+- Model Lab and RAG Evaluation Center are accessible to authorized roles for route visibility and evaluation evidence.
 - Windows and macOS desktop access packages connect only to approved LipiCore hosted origins.
 - Internal chat module supports direct messages, group/channel conversations, and administrative user control.
 - Training has been completed.
@@ -487,6 +523,8 @@ Sanima Bank will provide:
 - Technical/security contact.
 - User list and role matrix.
 - Sample and initial production documents.
+- Sample documents, compliance circulars, OCR samples, and evaluation questions for UAT.
+- Workflow owners for OCR Extraction, Compliance, Model Lab, and RAG Evaluation.
 - Timely review of configuration and UAT findings.
 - Internal approvals for staff access and production use.
 - Required compliance review and procurement approvals.
@@ -508,6 +546,8 @@ The following are excluded unless separately agreed:
 - Perfect OCR, handwriting, seal, signature, or complex-table verification.
 - Automatic credit, risk, legal, regulatory, or customer decisions without authorized bank review.
 - Using internal messenger messages as AI/RAG context unless separately scoped and approved in writing.
+- Policy gap detection, maker-checker lending approval, regulatory filing automation, and audit export workflows beyond the implemented pilot scope unless separately contracted.
+- A 50-case lending evaluation pack, full compliance evaluation pack, or OCR benchmark report unless included in final UAT scope.
 - Legal, regulatory, or audit certification.
 - Third-party VAPT charges.
 - Bank-side network, device, or endpoint management.
@@ -524,6 +564,8 @@ The following are excluded unless separately agreed:
 - AI output is an assistance tool and does not replace authorized bank decision-making.
 - Desktop software does not run the backend, database, vector database, object store, RAG pipeline, or model services locally.
 - Queued long-document analysis turnaround depends on document quality, OCR requirements, worker capacity, and model queue load.
+- OCR Extraction, Compliance Workspace, and Model Lab are staff-assistance and evaluation modules; final business interpretation remains with Sanima Bank.
+- Model recommendations and stronger capacity claims require measured Sanima Bank workload evidence.
 - Sanima Bank will validate AI-assisted outputs before using them for final regulatory, credit, legal, or customer-facing decisions.
 
 ---
@@ -559,11 +601,12 @@ Upon termination, subject to payment clearance and agreed data retention policie
 
 ## 19. Why LipiCore
 
-LipiCore Enterprise Document Intelligence Platform is built specifically for financial institutions that require secure document intelligence, controlled AI usage, and operational auditability.
+LipiCore Bank Staff AI Appliance and Document Intelligence Platform is built specifically for financial institutions that require secure document intelligence, controlled AI usage, and operational auditability.
 
 Key advantages:
 
-- Banking-focused AI workflows.
+- Banking-focused document intelligence workflows.
+- Focused bank staff workflows for approved knowledge, OCR extraction, compliance support, long-document analysis, and model evaluation.
 - Private hosted model execution.
 - Document-grounded answers with citations.
 - Session and bank-level data isolation.
@@ -596,9 +639,12 @@ The platform uses a retrieval-augmented generation architecture:
 3. Text is extracted and divided into searchable chunks.
 4. Embeddings are created and stored in a vector database.
 5. User questions are matched against relevant document chunks.
-6. The AI model generates a response using retrieved context.
-7. The response includes source references where applicable.
-8. User actions and responses are logged for audit.
+6. Hybrid retrieval and reranking prioritize relevant approved sources.
+7. The AI model generates a response using retrieved context.
+8. The response includes source references where applicable.
+9. Workflow modules store reviewable outputs, source ids where applicable, status, and audit metadata.
+10. Model Lab and RAG Evaluation Center provide evidence before route, model, or retrieval changes.
+11. User actions and responses are logged for audit.
 
 Core components:
 
@@ -608,8 +654,11 @@ Core components:
 - Vector database: Qdrant.
 - Object storage: MinIO.
 - Queue/admission control: Redis.
-- AI runtime: vLLM/private LLM.
+- AI runtime: vLLM/private model routes for text, analyst, long-document, and vision/OCR workloads where enabled.
 - Reverse proxy: Nginx with TLS.
+- Retrieval: Hybrid vector and keyword search with reranking and source verification.
+- Workspaces: OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation Center.
+- Messenger: Separate internal chat service boundary; not part of AI/RAG context by default.
 
 ---
 
@@ -617,11 +666,11 @@ Core components:
 
 | Department | Example Use Cases |
 |---|---|
-| Credit | Loan policy search, agreement review, collateral document checks |
-| Compliance | Circular interpretation, policy comparison, audit evidence lookup |
-| Operations | SOP lookup, internal process guidance, exception handling support |
+| Credit | Loan policy search, document summarization, open-question extraction |
+| Compliance | Circular interpretation, impact summaries, obligation notes, review queue |
+| Operations | SOP lookup, internal process guidance, OCR extraction for operational documents |
 | Risk | Risk policy review, portfolio documentation analysis |
-| Legal | Contract clause search, document comparison, regulatory reference lookup |
+| Legal | Contract clause search, document comparison, regulatory reference lookup with review boundary |
 | Internal Audit | Audit trail review, document evidence search, control testing support |
 | HR/Admin | Policy FAQ, staff manual search, onboarding document support |
 
@@ -633,4 +682,4 @@ Core components:
 |---|---|---|
 | One-time setup | One-time | Implementation, configuration, onboarding, training |
 | Server / infrastructure | Monthly | Hosting, compute, storage, AI runtime, monitoring, backup |
-| Software license + support | Monthly | LipiCore Enterprise Document Intelligence Platform, updates, patches, support |
+| Software license + support | Monthly | LipiCore Bank Staff AI Appliance and Document Intelligence Platform, updates, patches, support |

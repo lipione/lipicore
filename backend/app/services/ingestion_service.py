@@ -183,7 +183,7 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
         for para in doc.paragraphs:
             text += para.text + "\n"
         pages.append(_page_payload(page_number=None, text=text, extraction_confidence=1.0))
-    elif ft == 'txt':
+    elif ft in ['txt', 'csv']:
         with open(file_path, 'r', encoding='utf-8') as f:
             text = f.read()
         pages.append(_page_payload(page_number=None, text=text, extraction_confidence=1.0))

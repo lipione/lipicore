@@ -27,10 +27,8 @@ The current product is strongest as an internal knowledge, document analysis, cu
 - Redis/RQ ingestion queue with a separate worker process.
 - OCR fallback and table-aware extraction for PDFs and spreadsheets.
 - Queued long-document analysis for heavy OCR, large PDFs, and detailed Excel/PDF review.
-- Support Desk for customer-care and branch cases with source-backed draft assistance.
 - Compliance Workspace for circular/review notes with human sign-off.
-- Loan Support workspace for missing-document tracking, risk-factor notes, and credit memo drafts without automated approval.
-- Document Review queue for low-confidence extraction pages.
+- OCR Extraction workspace for transient text extraction from supported documents and images without indexing.
 - Model Lab for model inventory, route visibility, and benchmark evidence.
 - RAG Evaluation Center for bank-specific test cases.
 - Audit logs, RBAC, bank partitioning, and white-label branding.
@@ -44,10 +42,10 @@ The current product is strongest as an internal knowledge, document analysis, cu
 | Compliance circular search | Strong | Requires approved document governance and evaluation sets. |
 | Internal policy Q&A | Strong | Works when policies are uploaded, approved, and kept current. |
 | Drafting emails/replies | Good | Should be reviewed by staff before use. |
+| OCR text extraction | Strong | Extracts text from supported files without adding them to approved knowledge. |
 | Document summarization | Good | Best for normal PDFs, Word files, spreadsheets, and PowerPoints. |
 | Large document analysis | Good but queue-based | Heavy OCR, large PDFs, and detailed Excel workbooks run as background jobs with stored results. |
 | Multi-document comparison | Good but bounded | Long, broad answers need queued analysis, multi-step retrieval, or map-reduce improvements. |
-| Loan support notes | Controlled support | Can track required/missing documents, risk-factor notes, and credit memo drafts. It does not approve or reject loans. |
 | Compliance review notes | Controlled support | Can summarize circular impact and review notes. Officers remain responsible for interpretation and sign-off. |
 | Credit/risk decisioning | Not ready | Requires validated workflow controls, integrations, supervisor review, and a bank-approved governance model. |
 | Regulatory reporting automation | Not ready | Needs structured workflows, source validation, and formal sign-off. |
@@ -103,6 +101,7 @@ These are test-server results, not contractual SLAs.
 | Frontend lint | `npm run lint` passed with zero errors and existing e2e console warnings only |
 | Production deployment | `/data/bankai` deployed at commit `615d299`; migrations applied through `012` |
 | Production route checks | Backend and frontend health checks passed; protected Model Lab and long-document endpoints return `401` unauthenticated |
+| OCR extraction API | TXT extraction returns text without creating document records; unsupported files are rejected |
 | 25 active staff token smoke | 442 requests, 0 failures, p95 stream around 17s |
 | 50 active staff API smoke | 752 requests, 0 failures |
 | 100 active staff API-only smoke | 2,357 requests, 0 failures, p95 around 57ms |

@@ -22,10 +22,10 @@ const QUICK_START = [
     route: '/documents',
   },
   {
-    icon: 'support_agent',
-    title: 'Support Case Draft',
-    desc: 'Capture a customer-care or branch issue and prepare a staff-reviewed draft response.',
-    route: '/support-desk',
+    icon: 'document_scanner',
+    title: 'OCR Text Extraction',
+    desc: 'Upload PDFs, Office files, spreadsheets, CSV/TXT, or images and extract text without indexing them.',
+    route: '/ocr',
   },
 ];
 
@@ -128,7 +128,6 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState([]);
   const [pinnedDocs, setPinnedDocs] = useState([]);
   const [analysisJobs, setAnalysisJobs] = useState([]);
-  const [reviewQueue, setReviewQueue] = useState([]);
   const [modelStatus, setModelStatus] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -140,15 +139,13 @@ export default function Dashboard() {
       api.get('/chat/sessions?limit=5'),
       api.get('/documents?limit=3'),
       api.get('/long-document-analysis?limit=100'),
-      api.get('/document-review/queue'),
       api.get('/model-lab/status'),
-    ]).then(([statsRes, sessRes, docsRes, jobsRes, reviewRes, modelRes]) => {
+    ]).then(([statsRes, sessRes, docsRes, jobsRes, modelRes]) => {
       if (!mounted) return;
       if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
       if (sessRes.status === 'fulfilled') setSessions(sessRes.value.data || []);
       if (docsRes.status === 'fulfilled') setPinnedDocs((docsRes.value.data || []).slice(0, 3));
       if (jobsRes.status === 'fulfilled') setAnalysisJobs(jobsRes.value.data || []);
-      if (reviewRes.status === 'fulfilled') setReviewQueue(reviewRes.value.data || []);
       if (modelRes.status === 'fulfilled') setModelStatus(modelRes.value.data?.models || null);
     });
     return () => {
@@ -213,7 +210,7 @@ export default function Dashboard() {
         <MetricCard label="Documents Indexed" value={formatNumber(stats?.total_documents)} icon="description" detail="Approved and searchable knowledge" />
         <MetricCard label="Active Sessions" value={formatNumber(stats?.active_sessions)} icon="chat_bubble" detail="Staff assistant sessions" />
         <MetricCard label="Long Jobs Active" value={longDocSummary.active} icon="pending_actions" detail={`${longDocSummary.completed} completed, ${longDocSummary.failed} failed`} />
-        <MetricCard label="Review Queue" value={reviewQueue.length} icon="fact_check" detail="Low-confidence extraction pages" />
+        <MetricCard label="OCR Extraction" value="Ready" icon="document_scanner" detail="Transient text extraction" />
       </div>
 
       <div className="grid grid-cols-12 gap-gutter">
@@ -260,10 +257,10 @@ export default function Dashboard() {
               <h2 className="text-h2 font-h2 text-on-background">Operational Queues</h2>
               <button
                 type="button"
-                onClick={() => navigate('/document-review')}
+                onClick={() => navigate('/ocr')}
                 className="text-sm text-outline hover:text-secondary"
               >
-                Review pages
+                Open OCR
               </button>
             </div>
             <div className="grid gap-sm">
@@ -282,15 +279,15 @@ export default function Dashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/document-review')}
+                onClick={() => navigate('/ocr')}
                 className="text-left p-md bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold text-slate-900">Extraction review</p>
-                    <p className="text-xs text-slate-500">OCR, table, layout, stamp, and signature flags</p>
+                    <p className="text-sm font-bold text-slate-900">OCR extraction</p>
+                    <p className="text-xs text-slate-500">Upload and extract text without indexing</p>
                   </div>
-                  <span className="text-2xl font-bold text-slate-900">{reviewQueue.length}</span>
+                  <span className="material-symbols-outlined text-2xl text-slate-900">document_scanner</span>
                 </div>
               </button>
             </div>

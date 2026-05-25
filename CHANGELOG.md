@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-25
+
+- Replaced the visible Support Desk, Loan Support, and Document Review product pages with a focused OCR Extraction page.
+- Added `POST /api/ocr/extract` for transient text extraction from supported files without creating document records or indexing them into approved knowledge.
+- Added CSV extraction support to the shared ingestion/extraction path.
+- Redirected old frontend workflow URLs to `/ocr` and updated dashboard/sidebar entry points.
+- Added backend OCR API tests for successful TXT extraction and unsupported file rejection.
+
 ## 2026-05-23
 
 - Deployed the bank staff AI upgrade to the remote production path `/data/bankai` at commit `615d299`.

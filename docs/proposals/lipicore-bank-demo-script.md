@@ -58,16 +58,17 @@ Use this opening:
 
 **Buyer message:** Heavy documents do not block normal chat. LipiCore queues the work, uses extracted source excerpts, stores the result, and keeps final decisions with staff.
 
-## Optional Flow 5: Controlled Decision Support
+## Flow 5: OCR Extraction
 
-**Purpose:** Show that lending and compliance are handled as staff workflows, not autonomous decisions.
+**Purpose:** Show direct text extraction without indexing the file into approved knowledge.
 
-1. Open Support Desk, Compliance Workspace, or Loan Support.
-2. Create a case or review record using approved source documents.
-3. Generate or paste a staff draft, summary, checklist, risk note, or credit memo draft.
-4. Point out the human review language and the absence of auto-approve/auto-reject behavior.
+1. Open OCR Extraction.
+2. Upload a PDF, image, spreadsheet, CSV/TXT, Word, or PowerPoint file.
+3. Click `Extract Text`.
+4. Show full extracted text, per-page or per-sheet output, confidence indicators where available, copy, and TXT export.
+5. Explain that this does not add the file to approved knowledge unless staff intentionally upload it through the Document Library.
 
-**Buyer message:** LipiCore can support regulated workflows with notes, drafts, and review records while final authority remains with bank officers.
+**Buyer message:** Staff can quickly extract text from internal files while keeping data inside the bank-controlled environment.
 
 ## Close
 

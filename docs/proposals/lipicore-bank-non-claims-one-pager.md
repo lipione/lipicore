@@ -7,7 +7,7 @@ LipiCore is a secure internal AI assistant and decision-support appliance for ba
 
 ## Final Decisions Stay With Bank Staff
 
-LipiCore does not make final lending, compliance, regulatory, operational, or customer-impact decisions. It can prepare summaries, checklists, risk-factor notes, missing-document notes, customer-care drafts, policy explanations, and credit memo drafts, but authorized bank staff must review and approve final actions.
+LipiCore does not make final lending, compliance, regulatory, operational, or customer-impact decisions. It can prepare document summaries, OCR text extraction, checklists, customer-care drafts, policy explanations, and compliance notes, but authorized bank staff must review and approve final actions.
 
 ## It Does Not Replace Compliance Officers
 

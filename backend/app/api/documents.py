@@ -23,7 +23,7 @@ import json
 router = APIRouter()
 
 UPLOAD_DIR = settings.UPLOAD_DIR
-ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.xlsx', '.xls', '.pptx', '.ppt'}
+ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.csv', '.jpg', '.jpeg', '.png', '.xlsx', '.xls', '.pptx', '.ppt'}
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # Match nginx client_max_body_size.
 
 
@@ -47,7 +47,7 @@ async def upload_document(
 
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Supported: PDF, DOCX, TXT, JPG, PNG, XLSX, PPTX")
+        raise HTTPException(status_code=400, detail="Supported: PDF, DOCX, TXT, CSV, JPG, PNG, XLSX, PPTX")
 
     ensure_upload_dir()
     safe_name = f"{current_user.bank_id}_{uuid.uuid4().hex}{ext}"

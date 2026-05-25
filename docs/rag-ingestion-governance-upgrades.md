@@ -16,11 +16,11 @@
 - Scanned PDF fallback now OCRs up to `OCR_MAX_PAGES` instead of only the first 3 pages.
 - PDF table extraction uses `pdfplumber` when available.
 - Excel extraction preserves sheet names, workbook dimensions, merged ranges, named table ranges, formulas, cached values, and cell coordinates.
-- Ingestion creates page-level extraction review records so low OCR/table/layout confidence can appear in the Document Review queue.
+- Ingestion creates page-level extraction metadata so low OCR/table/layout confidence can be audited or used by future review workflows.
 - File analysis now packs relevant page/section excerpts into the model context instead of truncating to the first few thousand characters.
 - Heavy OCR and very large Excel/PDF analysis now runs as queued long-document jobs with status polling, relevance-based excerpt packing, and stored results for staff review.
 - Detailed workflow reference: `docs/long-document-analysis.md`.
-- Staff decision-support workspaces now exist for Support Desk, Compliance Workspace, Loan Support, Document Review, and Model Lab.
+- The visible product surface now emphasizes OCR Extraction, Compliance Workspace, Model Lab, RAG Evaluation, and queued long-document analysis.
 - Fast and analyst model routes now have separate context-window settings: `LLM_FAST_CONTEXT_WINDOW_TOKENS` and `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
 - Current production routes all text lanes to the Gemma 4 26B endpoint and uses Qwen3-VL for vision/OCR; the optional fast text endpoint is disabled until GPU capacity is rebalanced.
 - HA deployment reference under `deploy/ha`.

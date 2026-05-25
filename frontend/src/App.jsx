@@ -4,7 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChatAssistant from './pages/ChatAssistant';
 import Documents from './pages/Documents';
-import DocumentReview from './pages/DocumentReview';
+import OcrExtraction from './pages/OcrExtraction';
 import Features from './pages/Features';
 import Tasks from './pages/Tasks';
 import Users from './pages/Users';
@@ -19,8 +19,6 @@ import ModelLab from './pages/ModelLab';
 import AdminSecurity from './pages/AdminSecurity';
 import ComplianceRisk from './pages/ComplianceRisk';
 import ComplianceWorkspace from './pages/ComplianceWorkspace';
-import LoanSupport from './pages/LoanSupport';
-import SupportDesk from './pages/SupportDesk';
 import LipiCoreProcessNavigator from './pages/LipiCoreProcessNavigator';
 import MainLayout from './layouts/MainLayout';
 
@@ -47,11 +45,12 @@ function App() {
           <Route path="dashboard"      element={<Dashboard />} />
           <Route path="chat"           element={<ChatAssistant />} />
           <Route path="documents"      element={<Documents />} />
-          <Route path="document-review" element={<DocumentReview />} />
+          <Route path="ocr"            element={<OcrExtraction />} />
+          <Route path="document-review" element={<Navigate to="/ocr" replace />} />
           <Route path="features"       element={<Features />} />
           <Route path="tasks"          element={<Tasks />} />
-          <Route path="support-desk"   element={<SupportDesk />} />
-          <Route path="loan-support"   element={<LoanSupport />} />
+          <Route path="support-desk"   element={<Navigate to="/ocr" replace />} />
+          <Route path="loan-support"   element={<Navigate to="/ocr" replace />} />
           <Route path="sessions"       element={<SessionHistory />} />
           <Route path="analytics"      element={<Analytics />} />
           <Route path="evaluations"    element={<EvaluationCenter />} />
