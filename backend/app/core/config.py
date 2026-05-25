@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     INGESTION_JOB_FAILURE_TTL_SECONDS: int = int(os.getenv("INGESTION_JOB_FAILURE_TTL_SECONDS", "604800"))
     INGESTION_MAX_RETRIES: int = int(os.getenv("INGESTION_MAX_RETRIES", "2"))
     INGESTION_WORKER_CONCURRENCY: int = int(os.getenv("INGESTION_WORKER_CONCURRENCY", "1"))
+    OCR_ENGINE: str = os.getenv("OCR_ENGINE", "tesseract")
+    OCR_LANGUAGES: str = os.getenv("OCR_LANGUAGES", "eng+nep")
+    OCR_TESSERACT_CONFIG: str = os.getenv("OCR_TESSERACT_CONFIG", "--psm 6")
+    OCR_IMAGE_DPI: int = int(os.getenv("OCR_IMAGE_DPI", "300"))
     OCR_MAX_PAGES: int = int(os.getenv("OCR_MAX_PAGES", "200"))
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_uploads"))

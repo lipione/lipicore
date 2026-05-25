@@ -65,7 +65,7 @@ Start with three lanes:
 
 - Fast staff chat: no active fast endpoint on the current production profile; test Gemma 4 4B, Gemma 3 12B, or another small candidate only in a controlled swap window.
 - Analyst/long-doc: current Gemma 26B baseline, Qwen3-30B-A3B 2507 or FP8 variant. Test through queued long-document jobs for realistic extraction, context-packing, and queue pressure.
-- Vision/OCR: current Qwen3-VL 8B baseline, tested through scanned PDF/image workflows rather than simple image prompts only.
+- Vision/image: current Qwen3-VL 8B baseline for image-heavy analysis. OCR text extraction is handled by open-source Tesseract and should be benchmarked separately from vision prompts.
 - Retrieval: BGE-M3, Jina embeddings v3, Qwen3 embedding/reranker.
 
 Do not change embeddings in production without creating a parallel Qdrant collection or migration plan.
@@ -127,7 +127,7 @@ A candidate can replace baseline only if it improves the target lane without bre
 ## Recommended First Test Matrix
 
 1. Current Gemma 26B text baseline at realistic staff concurrency.
-2. Current Qwen3-VL 8B baseline on scanned PDF/image-heavy document tasks.
+2. Open-source Tesseract OCR on scanned PDF/image text extraction, plus current Qwen3-VL 8B on separate image-heavy analysis tasks.
 3. Candidate fast endpoint only after freeing GPU memory.
 4. Current deep vs Qwen3-30B-A3B-Instruct-2507 FP8 if GPU memory is tight.
 5. Current embedding model vs BGE-M3 in a parallel retrieval collection.

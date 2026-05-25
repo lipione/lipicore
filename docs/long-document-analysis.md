@@ -28,7 +28,7 @@ Use normal chat or Ask Approved Knowledge for short policy questions where index
 2. The backend enqueues `process_long_document_analysis_job` on the existing Redis/RQ ingestion queue.
 3. The worker reuses the extraction pipeline:
    - PDF text and table extraction through `pdfplumber` when available.
-   - OCR fallback for scanned PDFs up to `OCR_MAX_PAGES`.
+   - Open-source Tesseract OCR fallback for scanned PDFs up to `OCR_MAX_PAGES`.
    - Excel extraction preserving sheet names, workbook dimensions, merged ranges, table ranges, formulas/cached values, and cell coordinates.
 4. The worker uses `build_large_file_prompt` to select relevant page/sheet excerpts within `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
 5. The analyst/deep model generates the result using a system prompt that requires source-backed analysis and forbids autonomous decisions.
@@ -74,6 +74,7 @@ Current defaults:
 
 - Document Library upload limit: 50 MB.
 - Chat upload limit: 50 MB.
+- OCR engine: open-source Tesseract, configured by `OCR_ENGINE`, `OCR_LANGUAGES`, `OCR_TESSERACT_CONFIG`, and `OCR_IMAGE_DPI`.
 - OCR fallback page cap: `OCR_MAX_PAGES=200`.
 - Ingestion/analysis job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.
 - Default worker concurrency: `INGESTION_WORKER_CONCURRENCY=1`.

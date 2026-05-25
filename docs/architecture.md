@@ -9,7 +9,7 @@ The Bank's Own LLM architecture is designed around isolation, security, and the 
 4. **MinIO:** S3-compatible object storage for storing raw uploaded documents securely.
 5. **Qdrant:** Vector database storing text chunk embeddings with payload metadata (bank_id, document_id) for precise, isolated retrieval.
 6. **Redis:** Admission-control state for local model concurrency and RQ-backed document ingestion.
-7. **LLM Engine:** Local vLLM model servers exposed through OpenAI-compatible endpoints. The repository supports separate text and vision routes; the current production server routes all text lanes to Gemma 4 26B and uses Qwen3-VL for vision/OCR.
+7. **LLM Engine:** Local vLLM model servers exposed through OpenAI-compatible endpoints. The repository supports separate text and vision routes; the current production server routes all text lanes to Gemma 4 26B. OCR extraction uses open-source Tesseract, while Qwen3-VL remains available for separate vision/image analysis where enabled.
 8. **Ingestion Worker:** Extracts text/tables/OCR output, chunks content, embeds chunks, and indexes PostgreSQL/Qdrant outside the API process.
 9. **Long-Document Analysis Jobs:** Redis/RQ-backed background jobs for heavy OCR, large PDFs, and detailed Excel/PDF review.
 10. **Evaluation Center:** Frontend and API workflow for running bank-specific RAG quality tests.

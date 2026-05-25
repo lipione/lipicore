@@ -22,7 +22,7 @@
 - Detailed workflow reference: `docs/long-document-analysis.md`.
 - The visible product surface now emphasizes OCR Extraction, Compliance Workspace, Model Lab, RAG Evaluation, and queued long-document analysis.
 - Fast and analyst model routes now have separate context-window settings: `LLM_FAST_CONTEXT_WINDOW_TOKENS` and `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
-- Current production routes all text lanes to the Gemma 4 26B endpoint and uses Qwen3-VL for vision/OCR; the optional fast text endpoint is disabled until GPU capacity is rebalanced.
+- Current production routes all text lanes to the Gemma 4 26B endpoint. OCR extraction uses open-source Tesseract plus direct parsers by default; Qwen3-VL remains available for separate vision/image analysis where enabled. The optional fast text endpoint is disabled until GPU capacity is rebalanced.
 - HA deployment reference under `deploy/ha`.
 - Docker Compose health checks cover Redis, backend, frontend, and nginx.
 - `deploy/upgrade.sh` provides health-gated upgrades, optional backend tests, internal health checks, and public health checks.
@@ -31,7 +31,7 @@
 ## Remaining Hard Problems
 
 - Citation verification is lexical overlap, not a formal natural-language entailment model.
-- OCR still depends on host image/PDF tooling and vision model quality.
+- OCR still depends on host image/PDF tooling, Tesseract language packs, and source scan quality.
 - Complex charts, handwriting, seals, and signatures are still weak.
 - Larger context windows require a deployed model endpoint that actually supports the configured context length.
 - Queued long-document analysis reduces chat blocking, but it still depends on OCR quality, worker capacity, deep-model queue load, and selected-excerpt relevance.

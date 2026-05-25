@@ -31,7 +31,8 @@ nginx reverse proxy
         +-- Redis admission control and RQ queue
         +-- RQ ingestion and long-document analysis queue
         +-- vLLM text/analyst model on GPU 1
-        +-- vLLM vision/OCR model on GPU 0
+        +-- open-source OCR tooling in backend/worker
+        +-- vLLM vision/image model on GPU 0
 ```
 
 ## Running Services
@@ -47,7 +48,8 @@ nginx reverse proxy
 | Redis | `lipicore-redis` | LLM request admission control | internal |
 | ingestion worker | `lipicore-ingestion-worker` | document ingestion and queued long-document analysis | internal |
 | vLLM text/analyst | `lipicore-vllm-c` | Gemma 4 26B 4-bit on GPU 1 | 8003 |
-| vLLM vision/OCR | `lipicore-vllm-vision` | Qwen3-VL 8B on GPU 0 | 8007 |
+| open-source OCR | backend / ingestion worker | Tesseract OCR for scanned PDFs and images | internal |
+| vLLM vision/image | `lipicore-vllm-vision` | Qwen3-VL 8B on GPU 0 | 8007 |
 
 `lipicore-vllm-b` is not running in the current production profile. Do not
 start it unless a GPU capacity decision is made first.
@@ -60,7 +62,7 @@ current stack.
 | Route | Container | Served model name | GPU | Current role |
 |------|-----------|-------------------|-----|--------------|
 | Text A/B/C | `lipicore-vllm-c` | `gemma-4-26b-4bit` | 1 | All interactive text, analyst, support, compliance, loan, and long-document generation |
-| Vision | `lipicore-vllm-vision` | `qwen3-vl-8b` | 0 | Vision/OCR file analysis route |
+| Vision | `lipicore-vllm-vision` | `qwen3-vl-8b` | 0 | Vision/image analysis route |
 
 The production `docker-compose.yml` and `.env` on `/data/bankai` intentionally
 route `LLM_A`, `LLM_B`, and `LLM_C` to `lipicore-vllm-c`. This differs from the
@@ -71,9 +73,9 @@ Redis coordinates distributed queueing so the backend can reject or wait on
 requests instead of overloading GPU memory.
 
 Heavy OCR, large PDF, and Excel workbook analysis should be queued from Document
-Library. The job uses the ingestion worker plus the text/analyst model, stores
-progress and results in PostgreSQL, and should be monitored separately from
-interactive chat latency.
+Library. OCR text extraction uses open-source Tesseract in the backend/worker;
+analysis jobs then use the text/analyst model, store progress and results in
+PostgreSQL, and should be monitored separately from interactive chat latency.
 
 ## TLS Status
 

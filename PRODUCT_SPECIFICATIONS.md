@@ -16,7 +16,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 ## Core Capabilities
 
 - Staff chat with streaming responses, conversation history, and selected-document context.
-- Local vLLM model routes for text/analyst work and vision/OCR work. The current production server routes all text lanes to Gemma 4 26B 4-bit and keeps the fast 4B lane disabled until GPU capacity is rebalanced.
+- Local vLLM model routes for text/analyst work and separate vision-capable analysis. OCR extraction uses open-source Tesseract plus direct document parsers by default. The current production server routes all text lanes to Gemma 4 26B 4-bit and keeps the fast 4B lane disabled until GPU capacity is rebalanced.
 - Retrieval-augmented generation over uploaded and approved documents.
 - Hybrid retrieval using Qdrant vector search plus PostgreSQL full-text search.
 - Reranking before context construction.
@@ -25,7 +25,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 - Document lifecycle states: `draft`, `approved`, `superseded`, `archived`, and `disabled`.
 - Chunk-level permission metadata copied into PostgreSQL and Qdrant.
 - Redis/RQ ingestion queue with a separate worker process.
-- OCR fallback and table-aware extraction for PDFs and spreadsheets.
+- Open-source OCR fallback and table-aware extraction for PDFs and spreadsheets.
 - Queued long-document analysis for heavy OCR, large PDFs, and detailed Excel/PDF review.
 - Compliance Workspace for circular/review notes with human sign-off.
 - OCR Extraction workspace for transient text extraction from supported documents and images without indexing.
@@ -59,7 +59,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 | XLSX/XLS | Supported | Sheet names, merged ranges, and cell coordinates are preserved; spreadsheet formulas/models are not deeply interpreted. |
 | PPTX | Supported | Text extraction works; visual layouts/charts are limited. |
 | TXT/CSV | Supported | Good fit for policy, FAQ, and tabular text imports. |
-| Images | Partial | OCR/vision fallback exists, but should not be treated as high-accuracy for bank-critical evidence. |
+| Images | Partial | Open-source OCR fallback exists, but should not be treated as high-accuracy for bank-critical evidence. |
 
 ## Queued Long-Document Analysis
 
@@ -68,6 +68,7 @@ Large PDFs, OCR-heavy documents, and detailed Excel workbooks should use queued 
 Current defaults:
 
 - Document Library upload limit: 50 MB.
+- OCR engine: open-source Tesseract with `OCR_LANGUAGES=eng+nep` by default.
 - OCR fallback cap: `OCR_MAX_PAGES=200`.
 - Job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.
 - Worker concurrency: `INGESTION_WORKER_CONCURRENCY=1`.

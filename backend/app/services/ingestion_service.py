@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from ..models.document import Document, DocumentChunk
 from ..core.config import settings
 from .embedding_service import generate_embeddings
+from .ocr_service import OcrResult, convert_pdf_pages_to_images, ocr_image_file, ocr_pil_image_to_text
 from .qdrant_service import upload_points
 
 
@@ -136,10 +137,6 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
             pass
 
         try:
-            from pdf2image import convert_from_path
-            import base64
-            from .llm_service import call_vision_llm
-
             reader = PdfReader(file_path)
             pdf_page_count = pdf_page_count or len(reader.pages)
             if not text.strip():
@@ -152,32 +149,27 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
                             extraction_confidence=0.78,
                         ))
                         text += page_text + "\n"
-
-            # If PDF has no extractable text (scanned/image-based), fall back to vision OCR
-            if not text.strip():
-                try:
-                    last_page = min(settings.OCR_MAX_PAGES, pdf_page_count)
-                    images = convert_from_path(file_path, first_page=1, last_page=last_page)
-                    for index, img in enumerate(images, start=1):
-                        import io
-                        img_bytes = io.BytesIO()
-                        img.save(img_bytes, format='PNG')
-                        img_b64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
-                        desc = call_vision_llm(
-                            "Extract all text from this document image. Be thorough and preserve formatting.",
-                            img_b64
-                        )
-                        pages.append(_page_payload(
-                            page_number=index,
-                            text=desc,
-                            extraction_confidence=0.62,
-                            ocr_confidence=0.55,
-                        ))
-                        text += desc + "\n"
-                except Exception:
-                    pass  # Vision OCR also failed, will be caught by empty text check
         except Exception:
             pass  # PDF reading failed, will be caught by empty text check
+
+        # If PDF has no extractable text, use open-source OCR on rendered pages.
+        if not text.strip() and pdf_page_count:
+            try:
+                last_page = min(settings.OCR_MAX_PAGES, pdf_page_count)
+                images = convert_pdf_pages_to_images(file_path, first_page=1, last_page=last_page)
+                for index, img in enumerate(images, start=1):
+                    result = ocr_pil_image_to_text(img)
+                    if not result.text.strip():
+                        continue
+                    pages.append(_page_payload(
+                        page_number=index,
+                        text=result.text,
+                        extraction_confidence=0.82,
+                        ocr_confidence=result.confidence,
+                    ))
+                    text += result.text + "\n"
+            except Exception as exc:
+                raise RuntimeError(f"Open-source OCR failed for scanned PDF: {exc}") from exc
     elif ft == 'docx':
         doc = DocxDocument(file_path)
         for para in doc.paragraphs:
@@ -205,21 +197,13 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
             ))
             text += slide_text
     elif ft in ['jpg', 'jpeg', 'png']:
-        import base64
-        from .llm_service import call_vision_llm
-        with open(file_path, 'rb') as f:
-            image_b64 = base64.b64encode(f.read()).decode('utf-8')
-        description = call_vision_llm(
-            "Please provide a detailed text description of this document or image. "
-            "Extract any text you see. If it's a financial document, list key numbers and dates.",
-            image_b64
-        )
-        text = f"Image/Photo Description:\n{description}"
+        result = ocr_image_file(file_path)
+        text = result.text
         pages.append(_page_payload(
             page_number=1,
             text=text,
-            extraction_confidence=0.62,
-            ocr_confidence=0.55,
+            extraction_confidence=0.82,
+            ocr_confidence=result.confidence,
         ))
     if not pages and text.strip():
         pages.append(_page_payload(page_number=None, text=text, extraction_confidence=0.7))

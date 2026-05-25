@@ -10,13 +10,17 @@
 
 **Status as of 2026-05-23:** deployed to `/data/bankai` at commit `615d299`.
 Migrations through `012` are applied. Current production routes all text lanes
-to Gemma 4 26B 4-bit on `lipicore-vllm-c`, routes vision/OCR work to Qwen3-VL
+to Gemma 4 26B 4-bit on `lipicore-vllm-c`, routes vision/image work to Qwen3-VL
 8B on `lipicore-vllm-vision`, and keeps the optional fast 4B endpoint disabled.
 
 **Status as of 2026-05-25:** the visible product surface has been narrowed.
 Support, lending, and extraction-review pages are no longer primary product
 pages. The replacement user-facing workflow is OCR Extraction for transient text
 extraction without indexing.
+
+**Status as of 2026-05-25 OCR update:** OCR Extraction now uses open-source
+Tesseract plus direct document parsers by default. Qwen3-VL remains a separate
+vision/image analysis route, not the default OCR text extraction path.
 
 ---
 
@@ -25,7 +29,7 @@ extraction without indexing.
 LipiCore already has the right base for a bank staff appliance:
 
 - Staff chat modes and model mode selector.
-- vLLM route registry with Redis admission control; current production routes all text lanes to the 26B endpoint and vision/OCR to Qwen3-VL.
+- vLLM route registry with Redis admission control; current production routes all text lanes to the 26B endpoint, while OCR text extraction uses open-source Tesseract and vision/image work can route to Qwen3-VL.
 - Document upload, async ingestion, OCR/table extraction hooks, chunking, embeddings, Qdrant indexing.
 - Approved document lifecycle and chunk-level permission metadata.
 - RAG source evidence panel, citation verifier, and Evaluation Center.
@@ -109,11 +113,12 @@ Goal: large policies, circular bundles, loan files, audit reports, multi-documen
 - Also test: Qwen3.6-35B-A3B, Llama 4 Scout, Gemma 4 31B/26B, DeepSeek V3.2 only on high-end infrastructure.
 - Required architecture: do not send raw 500-page files directly by default. Use queued long-document jobs, relevance-based excerpt packing, map-reduce where needed, source tables, selective retrieval, and final synthesis.
 
-### Vision/OCR Tier
+### OCR And Vision Tier
 
 Goal: scanned PDFs, tables, forms, stamps/seals/signature detection, image-based source evidence.
 
-- Current baseline: Qwen3-VL 8B is active on production for vision/OCR-capable analysis.
+- Current OCR baseline: open-source Tesseract for scanned-page and image text extraction.
+- Current vision baseline: Qwen3-VL 8B is active on production for vision/image-capable analysis.
 - Test: Gemma 4 E4B/26B/31B multimodal, Llama 4 Scout, Qwen3-VL variants, and Qwen3-VL-Reranker where runtime support is stable.
 - Keep handwriting and signature verification as detection/flagging, not legal authentication.
 - Required metrics: OCR character error rate, table cell accuracy, page-level confidence, false positive/negative rate for stamp/signature/handwriting flags.

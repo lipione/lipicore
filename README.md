@@ -56,7 +56,7 @@ BankAi/LipiCore does not currently claim to:
 *   **Long-Document Queue:** Reuses Redis/RQ for large-file extraction, context packing, analyst-model generation, and persisted results.
 *   **Storage:** MinIO (S3-compatible persistent storage).
 *   **Streaming:** Server-Sent Events (SSE) for both generation and document status tracking.
-*   **OCR Extraction Workspace:** Upload supported files and extract text without adding them to the approved knowledge base.
+*   **OCR Extraction Workspace:** Upload supported files and extract text through open-source Tesseract OCR and direct parsers without adding them to the approved knowledge base.
 *   **Governance Workspaces:** Compliance Workspace, Model Lab, Evaluation Center, audit logs, and admin controls.
 
 ---
@@ -159,7 +159,7 @@ Supported fields include `product_name`, `bank_name`, `logo_url`, `primary_color
 
 *   **Public UI:** `https://ai.silverlining.com.np`
 *   **Text model route:** all current text routes (`LLM_A`, `LLM_B`, `LLM_C`) point to Gemma 4 26B 4-bit served by `lipicore-vllm-c` on GPU 1.
-*   **Vision/OCR route:** Qwen3-VL 8B is served by `lipicore-vllm-vision` on GPU 0 for vision-capable file analysis.
+*   **Open-source OCR:** Tesseract handles image and scanned-PDF text extraction; Qwen3-VL remains available only for separate vision-capable analysis routes.
 *   **Fast 4B route:** not active in the current production server profile; do not start `lipicore-vllm-b` without a GPU capacity decision.
 *   **Queueing:** Redis limits concurrent requests per model and per user.
 *   **Deployed commit:** `615d299` in `/data/bankai`.

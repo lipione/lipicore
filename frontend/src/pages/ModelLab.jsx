@@ -148,7 +148,7 @@ export default function ModelLab() {
           <p className="text-xs font-bold uppercase text-slate-400">Current upgrade</p>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">Model Lab</h1>
           <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-            Runtime capacity, benchmark evidence, and candidate models for staff chat, approved knowledge, long context, embeddings, reranking, and vision OCR.
+            Runtime capacity, benchmark evidence, and candidate models for staff chat, approved knowledge, long context, embeddings, reranking, and vision/image analysis.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

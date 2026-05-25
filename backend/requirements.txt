@@ -18,6 +18,7 @@ pdfplumber
 python-docx
 pdf2image
 Pillow
+pytesseract
 pytest
 httpx
 pytest-asyncio

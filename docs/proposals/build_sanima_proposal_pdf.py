@@ -549,7 +549,7 @@ def build_story():
     story.append(
         callout(
             "Recommended approach",
-            "Adopt the Standard hosted package for a 1,000-2,000 user production rollout after a measured department pilot. Final capacity should be confirmed after active-user concurrency, monthly query volume, document volume, OCR/vision needs, storage volume, workflow mix, and support requirements are reviewed.",
+            "Adopt the Standard hosted package for a 1,000-2,000 user production rollout after a measured department pilot. Final capacity should be confirmed after active-user concurrency, monthly query volume, document volume, open-source OCR needs, optional vision needs, storage volume, workflow mix, and support requirements are reviewed.",
         )
     )
 
@@ -601,7 +601,7 @@ def build_story():
                 "Secure document upload and enterprise document library.",
                 "Windows and macOS desktop software access.",
                 "AI chat over uploaded documents and approved knowledge sources with streaming responses and conversation history.",
-                "Local private model routes for text/analyst work and vision/OCR work, sized according to package capacity.",
+                "Local private model routes for text/analyst work and optional vision/image analysis, sized according to package capacity. OCR extraction uses open-source Tesseract plus direct parsers by default.",
                 "Queued long-document analysis for large PDFs, scanned documents, and Excel workbooks.",
                 "OCR Extraction, Compliance Workspace, and Model Lab modules.",
                 "Session-bound document isolation for temporary analysis.",
@@ -656,7 +656,7 @@ def build_story():
                 "Redis queue and admission control.",
                 "Redis/RQ ingestion and long-document worker.",
                 "vLLM/private model runtime for text/analyst routes.",
-                "Vision/OCR model route for scanned and image-heavy workflows where enabled.",
+                "Optional vision/image model route for image-heavy workflows where enabled; OCR text extraction uses open-source Tesseract.",
                 "Nginx reverse proxy with HTTPS/TLS.",
                 "Model Lab, RAG Evaluation Center, and audit dashboards.",
                 "Monitoring, backups, and operational tooling.",
@@ -968,7 +968,7 @@ def build_story():
     story.extend(heading("Capacity Posture", 2))
     capacity_rows = [
         ["Evidence Area", "Current Position"],
-        ["Production profile", "Private text/analyst model route and separate vision/OCR route; final model mix and replicas depend on selected capacity."],
+        ["Production profile", "Private text/analyst model route, open-source OCR, and optional separate vision/image route; final model mix and replicas depend on selected capacity."],
         ["Load evidence", "Current test-server evidence supports normal internal use patterns; whole-bank rollout requires bank-specific concurrency and document tests."],
         ["Large-file work", "Heavy OCR/PDF/XLS jobs use queues and worker capacity, not unlimited instant processing."],
     ]
@@ -1136,7 +1136,7 @@ def build_story():
         ["Vector database", "Qdrant"],
         ["Object storage", "MinIO"],
         ["Queue/admission control", "Redis and RQ workers"],
-        ["AI runtime", "vLLM/private model routes for text, analyst, long-document, and vision/OCR workloads where enabled"],
+        ["AI runtime", "vLLM/private model routes for text, analyst, long-document, and optional vision/image workloads where enabled; OCR text extraction uses open-source Tesseract"],
         ["Reverse proxy", "Nginx with TLS"],
         ["Retrieval", "Hybrid vector and keyword search with reranking and source verification"],
         ["Workspaces", "OCR Extraction, Compliance Workspace, Model Lab, and RAG Evaluation Center"],

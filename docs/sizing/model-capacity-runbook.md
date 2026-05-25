@@ -34,9 +34,9 @@ Benchmark artifacts are under `reports/model-lab/`.
 
 ## Routing Defaults
 
-- Current production: `ask_knowledge`, short staff drafts, customer-care responses, `approved_knowledge`, compliance review, document comparison, OCR extraction fallback, and queued long-document analysis route through the configured text/vision endpoints as needed.
+- Current production: `ask_knowledge`, short staff drafts, customer-care responses, `approved_knowledge`, compliance review, document comparison, OCR extraction, and queued long-document analysis route through the configured text endpoints as needed. OCR text extraction itself uses open-source Tesseract plus direct document parsers by default.
 - Future capacity profile: short staff chat may move back to a fast tier after GPU memory and quality tests prove it is stable.
-- Vision/OCR page review routes to the dedicated Qwen3-VL endpoint. Do not make strong scanned-document claims until bank-specific OCR/PDF/XLS benchmarks are recorded.
+- Vision/image review routes can use the dedicated Qwen3-VL endpoint where enabled. Do not make strong scanned-document claims until bank-specific OCR/PDF/XLS benchmarks are recorded.
 
 ## Vision Endpoint
 
