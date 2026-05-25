@@ -9,9 +9,11 @@ from sqlmodel import SQLModel
 from app.models.bank import Bank
 from app.models.chat import ChatSession
 from app.models.document import Document, DocumentChunk
+from app.models.document_intelligence import DocumentExtractionPage
 from app.models.user import User
 from app.schemas.chat import ChatRequest
 from app.core.security import get_password_hash
+from app.api import chat as chat_api
 from app.services import rag_service
 from test_main import client, engine, get_token
 
@@ -367,6 +369,85 @@ def test_chat_request_accepts_approved_knowledge_mode():
     request = ChatRequest(message="What does approved policy say?", mode="approved_knowledge")
 
     assert request.mode == "approved_knowledge"
+
+
+def test_chat_extract_text_intent_uses_uploaded_file_pages(monkeypatch):
+    assert chat_api._is_extract_text_request("extract text from this upload") is True
+    assert chat_api._is_extract_text_request("summarize this upload") is False
+
+    def fail_reextract(*_args, **_kwargs):
+        raise AssertionError("ready extracted page text should be used before re-reading the file")
+
+    monkeypatch.setattr(chat_api, "extract_pages", fail_reextract, raising=False)
+
+    with Session(engine) as session:
+        bank = Bank(name="Extract Bank", code="EXT01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+
+        user = User(
+            email="extract@test.local",
+            password_hash="x",
+            name="Extract User",
+            role="staff_user",
+            bank_id=bank.id,
+            is_active=True,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        chat = ChatSession(bank_id=bank.id, user_id=user.id, title="Extract Session")
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+
+        doc = Document(
+            bank_id=bank.id,
+            uploaded_by=user.id,
+            title="customs-rules.pdf",
+            file_name="customs-rules.pdf",
+            file_type="pdf",
+            file_path="/tmp/customs-rules.pdf",
+            document_type="chat_upload",
+            status="ready",
+            session_id=chat.id,
+            document_scope="session_upload",
+        )
+        session.add(doc)
+        session.commit()
+        session.refresh(doc)
+
+        session.add(DocumentExtractionPage(
+            bank_id=bank.id,
+            document_id=doc.id,
+            page_number=1,
+            extracted_text="२) यो नियमावली तुरुन्त प्रारम्भ हुनेछ।",
+        ))
+        session.add(DocumentExtractionPage(
+            bank_id=bank.id,
+            document_id=doc.id,
+            page_number=2,
+            extracted_text="bad text",
+            corrected_text="२. परिभाषा: विषय वा प्रसङ्गले अर्को अर्थ नलागेमा।",
+        ))
+        session.commit()
+
+        response_text, sources = chat_api._build_uploaded_file_text_response(
+            db=session,
+            session_id=chat.id,
+            current_user=user,
+            active_document_ids=[doc.id],
+            max_chars=4000,
+        )
+
+    assert "Extracted text from customs-rules.pdf" in response_text
+    assert "तुरुन्त प्रारम्भ हुनेछ" in response_text
+    assert "विषय वा प्रसङ्गले अर्को अर्थ नलागेमा" in response_text
+    assert "bad text" not in response_text
+    assert sources[0]["document_id"] == doc.id
+    assert sources[0]["document_title"] == "customs-rules.pdf"
 
 
 def test_global_rag_returns_not_found_when_relevance_is_too_low(monkeypatch):

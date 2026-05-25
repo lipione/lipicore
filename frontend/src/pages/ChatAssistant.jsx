@@ -41,7 +41,9 @@ function ChatExportButton({ content }) {
       a.download = fn ? fn[1] : `response.${fmt}`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (_) {}
+    } catch (_) {
+      // Export failures leave the response visible; the user can retry.
+    }
     finally { setLoading(null); }
   };
 
@@ -135,6 +137,10 @@ function documentLabel(doc) {
 function activeDocumentId(doc) {
   const id = Number(doc?.document_id || doc?.id);
   return Number.isInteger(id) ? id : null;
+}
+
+function isExtractTextPrompt(text) {
+  return /\b(?:extract|show|display|give|copy|read)\s+(?:me\s+)?(?:the\s+)?(?:raw\s+|full\s+|all\s+)?text\b|\b(?:ocr|text extraction|extracted text|raw text|full text)\b|(?:टेक्स्ट|पाठ|अक्षर)\s*(?:निकाल|देखा|देऊ)/i.test(text || '');
 }
 
 function deriveClientAnswerMetadata(message) {
@@ -291,7 +297,7 @@ export default function ChatAssistant() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  useEffect(() => { if (!userScrolled) scrollBottom(); }, [messages, streamingText, userScrolled]);
+  useEffect(() => { if (!userScrolled) scrollBottom(); }, [messages, streamingText, userScrolled, scrollBottom]);
 
   useEffect(() => {
     if (!isLoading || !streamStartedAtRef.current) return undefined;
@@ -303,7 +309,9 @@ export default function ChatAssistant() {
 
   // ── Fetch sessions list ──────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
-    try { const r = await api.get('/chat/sessions'); setSessions(r.data); } catch (_) {}
+    try { const r = await api.get('/chat/sessions'); setSessions(r.data); } catch (_) {
+      // Session refresh failures are non-blocking for the active chat.
+    }
   }, []);
 
   // ── Load a session ───────────────────────────────────────────────────────
@@ -340,7 +348,9 @@ export default function ChatAssistant() {
             activeIds.includes(d.id) && d.session_id === id && d.document_scope === 'session_upload'
           );
           setActiveDocuments(sessionDocs);
-        } catch (_) {}
+        } catch (_) {
+          // Missing document metadata should not block loading chat history.
+        }
       } else {
         setActiveDocuments([]);
       }
@@ -356,7 +366,9 @@ export default function ChatAssistant() {
       setMessages([welcomeMsg(branding)]);
       navigate(`?session=${r.data.id}`);
       fetchSessions();
-    } catch (_) {}
+    } catch (_) {
+      // The bootstrap flow will leave the existing screen in place on failure.
+    }
   }, [branding, fetchSessions, navigate]);
 
   // ── Poll document status ────────────────────────────────────────────────
@@ -383,6 +395,15 @@ export default function ChatAssistant() {
           setActiveDocuments(prev =>
             prev.map(d => updated.find(u => u.id === d.id) || d)
           );
+          setMessages(prev => prev.map(message => {
+            if (!message.attachments?.length) return message;
+            return {
+              ...message,
+              attachments: message.attachments.map(file =>
+                updated.find(u => activeDocumentId(u) === activeDocumentId(file)) || file
+              ),
+            };
+          }));
 
           // Clear stale warnings if documents are now ready
           const allReady = updated.every(d => ['ready','approved','indexed'].includes(d.status));
@@ -459,27 +480,53 @@ export default function ChatAssistant() {
     }
 
     const tmpId = `tmp-${Date.now()}-${Math.random()}`;
-    setActiveDocuments(prev => [...prev, {
+    const tmpDoc = {
       id: tmpId, name: file.name, status: 'uploading',
       processing_progress: 0, processing_message: 'Uploading document...',
+    };
+    const uploadMessageId = `upload-${tmpId}`;
+    setActiveDocuments(prev => [...prev, tmpDoc]);
+    setMessages(prev => [...prev, {
+      id: uploadMessageId,
+      role: 'user',
+      content: '',
+      attachments: [tmpDoc],
+      sources: [],
+      suggestions: [],
+      created_at: new Date().toISOString(),
     }]);
 
     try {
       const fd = new FormData();
       fd.append('file', file);
       const r = await api.post(`/chat/sessions/${uploadSessionId}/files`, fd);
+      const uploadedDoc = { ...r.data, name: file.name, status: r.data.status || 'uploaded' };
       setActiveDocuments(prev =>
-        prev.map(d => d.id === tmpId ? { ...d, ...r.data, name: file.name, status: 'uploaded' } : d)
+        prev.map(d => d.id === tmpId ? uploadedDoc : d)
       );
+      setMessages(prev => prev.map(message =>
+        message.id === uploadMessageId
+          ? { ...message, attachments: [uploadedDoc] }
+          : message
+      ));
+      setSelectedMode(current => current === 'ask_knowledge' ? 'analyze_file' : current);
+      setInput(current => current || 'extract text');
+      textareaRef.current?.focus();
     } catch (err) {
       const errorDetail = err.response?.data?.detail || err.message;
+      const failedDoc = {
+        ...tmpDoc,
+        status: 'failed',
+        processing_message: `Upload failed: ${errorDetail}`,
+      };
       setActiveDocuments(prev =>
-        prev.map(d => d.id === tmpId
-          ? {
-              ...d, status: 'failed',
-              processing_message: `Upload failed: ${errorDetail}`
-            } : d)
+        prev.map(d => d.id === tmpId ? failedDoc : d)
       );
+      setMessages(prev => prev.map(message =>
+        message.id === uploadMessageId
+          ? { ...message, attachments: [failedDoc] }
+          : message
+      ));
     }
   }, [sessionId, navigate]);
 
@@ -529,20 +576,24 @@ export default function ChatAssistant() {
 
     // Block only when every attached real document is still processing. Ready
     // documents remain queryable while other uploads finish in the background.
+    const extractTextRequested = isExtractTextPrompt(content);
     const busy = activeDocuments.filter(
       d => !['ready','approved','indexed'].includes(d.status) && !String(d.id).startsWith('tmp')
     );
     const readyDocs = activeDocuments.filter(
       d => ['ready','approved','indexed'].includes(d.status) && !String(d.id).startsWith('tmp')
     );
-    const usedDocs = readyDocs.map(d => ({
+    const queryDocs = extractTextRequested
+      ? activeDocuments.filter(d => d.status !== 'failed' && !String(d.id).startsWith('tmp'))
+      : readyDocs;
+    const usedDocs = queryDocs.map(d => ({
       id: activeDocumentId(d),
       name: documentLabel(d),
       file_name: d.file_name,
       document_type: d.document_type,
       department: d.department,
     })).filter(d => d.id);
-    if (busy.length && readyDocs.length === 0) {
+    if (busy.length && readyDocs.length === 0 && !extractTextRequested) {
       setMessages(prev => [...prev, {
         id: Date.now(), role: 'assistant', created_at: new Date().toISOString(),
         content: `⚠️ **${busy[0].name || busy[0].file_name}** is still being processed. Please wait for "Ready" status before asking questions about it.`,
@@ -599,6 +650,7 @@ export default function ChatAssistant() {
       let answerMetadata = null;
       let capacityFailureReason = null;
 
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -629,7 +681,9 @@ export default function ChatAssistant() {
             if (data.sources)     sources     = data.sources;
             if (data.suggestions) suggestions = data.suggestions;
             if (data.answer_metadata) answerMetadata = data.answer_metadata;
-          } catch (_) {}
+          } catch (_) {
+            // Ignore malformed SSE lines and continue reading the stream.
+          }
         }
       }
 
@@ -840,21 +894,6 @@ export default function ChatAssistant() {
               </div>
             )}
 
-            {activeDocuments.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {activeDocuments.map(d => (
-                  <FilePreviewCard key={d.id} file={d} onRemove={doc => setActiveDocuments(prev => prev.filter(x => x.id !== doc.id))} />
-                ))}
-                <button onClick={() => {
-                  fileRef.current?.click();
-                }}
-                  className="p-3 bg-white border-2 border-dashed border-slate-200 rounded flex items-center justify-center gap-2 cursor-pointer hover:border-secondary transition-colors text-slate-400 hover:text-secondary text-body-sm font-medium">
-                  <span className="material-symbols-outlined">add_circle</span>
-                  Add reference document
-                </button>
-              </div>
-            )}
-
             <div className="relative">
               <button type="button" onClick={() => {
                 fileRef.current?.click();
@@ -986,6 +1025,7 @@ function MsgBubble({ msg, idx, isLast, isLoading, editingId, editText, setEditTe
   onCopy, onRegenerate, onEdit, onSubmitEdit, onCancelEdit, onSuggestion }) {
   const isUser    = msg.role === 'user';
   const isEditing = editingId === msg.id;
+  const attachments = msg.attachments || [];
 
   return (
     <div className={`flex ${isUser ? 'flex-col items-end' : 'gap-4'} group`}>
@@ -1004,8 +1044,16 @@ function MsgBubble({ msg, idx, isLast, isLoading, editingId, editText, setEditTe
           <div className={isUser ? 'bg-white border border-slate-200 rounded shadow-card p-4' : 'space-y-3'}>
             {!isUser && <AnswerTrustBadge message={msg} />}
 
+            {attachments.length > 0 && (
+              <div className="space-y-2 mb-2" data-testid="message-attachments">
+                {attachments.map(file => (
+                  <FilePreviewCard key={file.id || file.document_id || file.name || file.file_name} file={file} />
+                ))}
+              </div>
+            )}
+
             {isUser
-              ? <p className="text-body-sm text-on-surface leading-relaxed" data-testid="message-content">{msg.content}</p>
+              ? (msg.content ? <p className="text-body-sm text-on-surface leading-relaxed" data-testid="message-content">{msg.content}</p> : null)
               : <div className="text-body-sm text-on-surface" data-testid="message-content">{renderMarkdown(msg.content)}</div>
             }
 

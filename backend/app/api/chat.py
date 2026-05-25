@@ -48,6 +48,7 @@ from ..services.query_rewrite_service import rewrite_query_for_retrieval
 from ..services.llm_service import async_call_llm
 from ..services.llm_gateway import model_status, reserve_model, resolve_model_profile, select_model_key_for_workflow
 from ..services.ingestion_queue import enqueue_document_ingestion
+from ..services.ingestion_service import extract_pages
 from ..services.citation_verifier import attach_source_verification, verify_answer_against_sources
 from ..core.config import settings
 
@@ -305,6 +306,13 @@ SECTION_RE = re.compile(
     r"\b(?:दफा|परिच्छेद|बुँदा)\s*([०-९0-9]+(?:[.\-][०-९0-9]+)*)",
     re.IGNORECASE,
 )
+EXTRACT_TEXT_INTENT_RE = re.compile(
+    r"\b(?:extract|show|display|give|copy|read)\s+(?:me\s+)?(?:the\s+)?(?:raw\s+|full\s+|all\s+)?text\b|"
+    r"\b(?:ocr|text extraction|extracted text|raw text|full text)\b|"
+    r"(?:टेक्स्ट|पाठ|अक्षर)\s*(?:निकाल|देखा|देऊ)",
+    re.IGNORECASE,
+)
+CHAT_EXTRACT_TEXT_MAX_CHARS = 24000
 
 
 def _extract_section_label(text: str | None) -> str | None:
@@ -314,6 +322,144 @@ def _extract_section_label(text: str | None) -> str | None:
     if not match:
         return None
     return " ".join(match.group(0).strip().split())[:80]
+
+
+def _is_extract_text_request(message: str | None) -> bool:
+    return bool(EXTRACT_TEXT_INTENT_RE.search(message or ""))
+
+
+def _selected_session_uploads(
+    *,
+    db: Session,
+    session_id: int,
+    current_user: User,
+    active_document_ids: list[int] | None,
+):
+    if not active_document_ids:
+        return []
+    from ..models.document import Document
+
+    docs = []
+    seen: set[int] = set()
+    for doc_id in active_document_ids:
+        if doc_id in seen:
+            continue
+        seen.add(doc_id)
+        doc = db.get(Document, doc_id)
+        if (
+            doc
+            and doc.bank_id == current_user.bank_id
+            and doc.uploaded_by == current_user.id
+            and doc.session_id == session_id
+            and doc.document_scope == "session_upload"
+            and doc.status not in ("disabled", "failed")
+        ):
+            docs.append(doc)
+    return docs
+
+
+def _review_pages_for_document(db: Session, document_id: int) -> list[dict]:
+    from ..models.document_intelligence import DocumentExtractionPage
+
+    records = db.exec(
+        select(DocumentExtractionPage)
+        .where(DocumentExtractionPage.document_id == document_id)
+        .order_by(DocumentExtractionPage.page_number)
+    ).all()
+    pages = []
+    for record in records:
+        text = (record.corrected_text or record.extracted_text or "").strip()
+        if not text:
+            continue
+        pages.append({
+            "page_number": record.page_number,
+            "text": text,
+            "ocr_confidence": record.ocr_confidence,
+            "table_confidence": record.table_confidence,
+            "page_bbox_json": record.bbox_json,
+        })
+    return pages
+
+
+def _label_extracted_page(page: dict, index: int) -> str:
+    if page.get("sheet_name"):
+        return f"Sheet: {page.get('sheet_name')}"
+    if page.get("slide_number"):
+        return f"Slide {page.get('slide_number')}"
+    if page.get("page_number"):
+        return f"Page {page.get('page_number')}"
+    return f"Part {index}"
+
+
+def _build_uploaded_file_text_response(
+    *,
+    db: Session,
+    session_id: int,
+    current_user: User,
+    active_document_ids: list[int] | None,
+    max_chars: int = CHAT_EXTRACT_TEXT_MAX_CHARS,
+) -> tuple[str, list[dict]]:
+    docs = _selected_session_uploads(
+        db=db,
+        session_id=session_id,
+        current_user=current_user,
+        active_document_ids=active_document_ids,
+    )
+    if not docs:
+        return "", []
+
+    blocks = []
+    sources = []
+    for doc in docs:
+        pages = _review_pages_for_document(db, doc.id) or extract_pages(doc.file_path, doc.file_type)
+        page_blocks = []
+        for index, page in enumerate(pages, start=1):
+            text = (page.get("text") or "").strip()
+            if not text:
+                continue
+            page_blocks.append(f"### {_label_extracted_page(page, index)}\n{text}")
+        doc_text = "\n\n".join(page_blocks).strip()
+        if not doc_text:
+            continue
+        blocks.append(f"## Extracted text from {doc.file_name}\n\n{doc_text}")
+        sources.append({
+            "document_id": doc.id,
+            "document_title": doc.title or doc.file_name,
+            "title": doc.title or doc.file_name,
+            "file_name": doc.file_name,
+            "document_type": doc.document_type,
+            "department": doc.department,
+            "page_number": None,
+            "section_label": None,
+            "section_number": None,
+            "chunk_index": None,
+            "snippet": doc_text[:180],
+            "passage": doc_text[:1000],
+            "relevance_score": 1.0,
+            "source_warnings": [],
+        })
+
+    response = "\n\n---\n\n".join(blocks).strip()
+    if not response:
+        return "", sources
+    if len(response) > max_chars:
+        response = (
+            response[:max_chars].rstrip()
+            + "\n\n[Text truncated in chat. Open OCR Extraction for the full export.]"
+        )
+    return response, sources
+
+
+def _direct_extract_verification(sources: list[dict] | None) -> dict:
+    source_count = len(sources or [])
+    return {
+        "status": "supported" if source_count else "no_sources",
+        "verification_stage": "direct_extract",
+        "supported_sentence_count": 0,
+        "unsupported_sentence_count": 0,
+        "unsupported_sentences": [],
+        "nli_checked_sentence_count": 0,
+    }
 
 
 def _source_prefix(doc, payload: dict) -> str:
@@ -442,13 +588,25 @@ async def create_chat_message(
 
     # 3. Build prompt and call LLM async
     mode = chat_request.mode
+    active_doc_ids = _session_active_document_ids(session, chat_request.active_document_ids)
+    direct_text_extract = False
     sys_identity = f"{get_system_identity(chat_request.language)}\n\n{mode_instruction(mode)}"
     if chat_request.image:
         from ..services.llm_service import async_call_vision_llm
         answer = await async_call_vision_llm(f"{sys_identity}\n\n{chat_request.message}", chat_request.image)
         sources = []
+    elif active_doc_ids and _is_extract_text_request(safe_message):
+        answer, sources = _build_uploaded_file_text_response(
+            db=db,
+            session_id=session_id,
+            current_user=current_user,
+            active_document_ids=active_doc_ids,
+        )
+        if not answer:
+            answer = "No extractable text was found in the selected uploaded file."
+            sources = []
+        direct_text_extract = True
     else:
-        active_doc_ids = _session_active_document_ids(session, chat_request.active_document_ids)
         answer, sources = await async_generate_rag_response(
             retrieval_query,
             current_user.bank_id,
@@ -470,7 +628,11 @@ async def create_chat_message(
             )
             sources = []
 
-    citation_verification = verify_answer_against_sources(answer=answer, sources=sources)
+    citation_verification = (
+        _direct_extract_verification(sources)
+        if direct_text_extract
+        else verify_answer_against_sources(answer=answer, sources=sources)
+    )
     sources = attach_source_verification(sources, citation_verification)
     
     # 4. Save AI message
@@ -505,12 +667,13 @@ async def create_chat_message(
             "query": safe_message,
             "pii_detected": safe_message != chat_request.message,
             "masking_mode": "redact",
-            "llm_received_masked_input": True,
+            "llm_received_masked_input": not direct_text_extract,
             "sources_count": len(sources),
             "answer_type": answer_metadata["answer_type"],
             "mode": mode,
             "citation_verification": citation_verification,
             "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
+            "direct_text_extract": direct_text_extract or None,
         }
     )
     
@@ -570,13 +733,78 @@ async def stream_chat_message(
         if has_image and selected_model and not _model_supports_vision(selected_model):
             yield f"data: {json.dumps({'type': 'status', 'message': '⚠️ Warning: The selected model does not support image analysis. Using text-based analysis instead.'})}\n\n"
 
-        if should_show_document_search_status(active_document_ids=active_doc_ids, mode=mode, has_image=has_image):
+        direct_text_extract_requested = not has_image and bool(active_doc_ids) and _is_extract_text_request(safe_message)
+        if (
+            not direct_text_extract_requested
+            and should_show_document_search_status(active_document_ids=active_doc_ids, mode=mode, has_image=has_image)
+        ):
             status_message = "Searching selected documents..." if active_doc_ids else "Searching approved knowledge..."
             yield f"data: {json.dumps({'type': 'status', 'message': status_message})}\n\n"
 
         sources_list = []
         sys_identity = f"{get_system_identity(chat_request.language)}\n\n{mode_instruction(mode)}"
         logger.info("[STREAM] Got system identity")
+
+        if direct_text_extract_requested:
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Extracting text from selected upload...'})}\n\n"
+            full_response, sources_list = _build_uploaded_file_text_response(
+                db=db,
+                session_id=session_id,
+                current_user=current_user,
+                active_document_ids=active_doc_ids,
+            )
+            if not full_response:
+                full_response = "No extractable text was found in the selected uploaded file."
+                sources_list = []
+            yield f"data: {json.dumps({'token': full_response})}\n\n"
+            suggestions = []
+            citation_verification = _direct_extract_verification(sources_list)
+            sources_list = attach_source_verification(sources_list, citation_verification)
+            answer_metadata = derive_answer_metadata(
+                mode=mode,
+                sources=sources_list,
+                active_document_ids=active_doc_ids,
+                answer=full_response,
+                citation_verification=citation_verification,
+            )
+            try:
+                ai_msg = ChatMessage(
+                    bank_id=current_user.bank_id,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    role="assistant",
+                    content=full_response,
+                    sources_json=json.dumps(sources_list),
+                    suggestions_json=json.dumps(suggestions),
+                )
+                db.add(ai_msg)
+                db.commit()
+                _update_session_summary(session, safe_message, full_response, db)
+                log_audit_event(
+                    db=db,
+                    action="chat_query",
+                    resource_type="chat",
+                    resource_id=str(session_id),
+                    bank_id=current_user.bank_id,
+                    user_id=current_user.id,
+                    metadata={
+                        "query": safe_message,
+                        "pii_detected": safe_message != chat_request.message,
+                        "masking_mode": "redact",
+                        "llm_received_masked_input": False,
+                        "sources_count": len(sources_list),
+                        "answer_type": answer_metadata["answer_type"],
+                        "mode": mode,
+                        "citation_verification": citation_verification,
+                        "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
+                        "streamed": True,
+                        "direct_text_extract": True,
+                    },
+                )
+            except Exception as e:
+                logger.error(f"[STREAM] Error saving direct text extraction message: {e}")
+            yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
+            return
 
         if not has_image:
             try:
