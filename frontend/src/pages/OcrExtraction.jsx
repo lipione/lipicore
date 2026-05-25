@@ -50,6 +50,15 @@ function PageResult({ page }) {
       <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded border border-slate-100 bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
         {page.text}
       </pre>
+      {page.vision_review && (
+        <div className="mt-3 rounded border border-sky-200 bg-sky-50 p-3">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase text-sky-800">
+            <span className="material-symbols-outlined text-[16px]">visibility</span>
+            Vision Review
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-sky-900">{page.vision_review}</p>
+        </div>
+      )}
     </article>
   );
 }
@@ -61,6 +70,7 @@ export default function OcrExtraction() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [visionReview, setVisionReview] = useState(false);
 
   const totalPages = result?.page_count || 0;
   const totalCharacters = result?.character_count || 0;
@@ -90,6 +100,7 @@ export default function OcrExtraction() {
     setResult(null);
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('vision_review', visionReview ? 'true' : 'false');
     try {
       const { data } = await api.post('/ocr/extract', formData);
       setResult(data);
@@ -162,6 +173,25 @@ export default function OcrExtraction() {
               </span>
             </button>
 
+            <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3">
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="material-symbols-outlined text-[20px] text-secondary">visibility</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-slate-900">Vision Review</span>
+                  <span className="block text-xs leading-snug text-slate-500">Qwen-VL notes for PDF/image pages after OCR.</span>
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={visionReview}
+                onChange={(event) => setVisionReview(event.target.checked)}
+                className="sr-only"
+              />
+              <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${visionReview ? 'bg-secondary' : 'bg-slate-300'}`}>
+                <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition ${visionReview ? 'translate-x-5' : ''}`} />
+              </span>
+            </label>
+
             <button
               type="button"
               disabled={loading || !file}
@@ -169,7 +199,7 @@ export default function OcrExtraction() {
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-[18px]">{loading ? 'hourglass_top' : 'text_snippet'}</span>
-              {loading ? 'Extracting...' : 'Extract Text'}
+              {loading ? (visionReview ? 'Reviewing...' : 'Extracting...') : 'Extract Text'}
             </button>
           </div>
 
@@ -204,7 +234,12 @@ export default function OcrExtraction() {
             <div className="flex flex-col gap-3 border-b border-slate-100 p-md md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-h2 font-h2 text-on-surface">Extracted Text</h2>
-                <p className="text-sm text-slate-500">{hasResult ? result.file_name : 'No extraction result yet'}</p>
+                <p className="text-sm text-slate-500">
+                  {hasResult ? result.file_name : 'No extraction result yet'}
+                  {result?.vision_review_requested && result.vision_review_pages > 0
+                    ? ` · Vision reviewed ${result.vision_review_pages} page${result.vision_review_pages === 1 ? '' : 's'}`
+                    : ''}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button

@@ -12,6 +12,7 @@ class OcrPageResponse(BaseModel):
     extraction_confidence: Optional[float] = None
     ocr_confidence: Optional[float] = None
     table_confidence: Optional[float] = None
+    vision_review: Optional[str] = None
 
 
 class OcrExtractResponse(BaseModel):
@@ -20,5 +21,7 @@ class OcrExtractResponse(BaseModel):
     page_count: int
     character_count: int
     full_text: str
+    vision_review_requested: bool = False
+    vision_review_pages: int = 0
     warnings: list[str]
     pages: list[OcrPageResponse]

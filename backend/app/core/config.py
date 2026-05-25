@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     OCR_TESSERACT_CONFIG: str = os.getenv("OCR_TESSERACT_CONFIG", "--psm 6")
     OCR_IMAGE_DPI: int = int(os.getenv("OCR_IMAGE_DPI", "300"))
     OCR_MAX_PAGES: int = int(os.getenv("OCR_MAX_PAGES", "200"))
+    OCR_VISION_REVIEW_MAX_PAGES: int = int(os.getenv("OCR_VISION_REVIEW_MAX_PAGES", "3"))
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_uploads"))
     CHAT_UPLOAD_DIR: str = os.getenv("CHAT_UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_chat_uploads"))

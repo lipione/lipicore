@@ -74,6 +74,7 @@ services:
       - INGESTION_MAX_RETRIES=${INGESTION_MAX_RETRIES:-2}
       - INGESTION_WORKER_CONCURRENCY=${INGESTION_WORKER_CONCURRENCY:-1}
       - OCR_MAX_PAGES=${OCR_MAX_PAGES:-200}
+      - OCR_VISION_REVIEW_MAX_PAGES=${OCR_VISION_REVIEW_MAX_PAGES:-3}
       - COOKIE_SECURE=true
       - ALLOWED_ORIGINS=https://ai.silverlining.com.np,https://202.51.2.50,http://202.51.2.50,http://localhost:3000,http://localhost
       # Legacy single-LLM fields kept in backend settings; force them to vLLM.
@@ -141,6 +142,7 @@ services:
       - INGESTION_MAX_RETRIES=${INGESTION_MAX_RETRIES:-2}
       - INGESTION_WORKER_CONCURRENCY=${INGESTION_WORKER_CONCURRENCY:-1}
       - OCR_MAX_PAGES=${OCR_MAX_PAGES:-200}
+      - OCR_VISION_REVIEW_MAX_PAGES=${OCR_VISION_REVIEW_MAX_PAGES:-3}
       - COOKIE_SECURE=true
       - ALLOWED_ORIGINS=https://ai.silverlining.com.np,https://202.51.2.50,http://202.51.2.50,http://localhost:3000,http://localhost
       - LLM_PROVIDER=vllm

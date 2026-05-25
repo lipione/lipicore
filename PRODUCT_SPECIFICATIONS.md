@@ -70,6 +70,7 @@ Current defaults:
 - Document Library upload limit: 50 MB.
 - OCR engine: open-source Tesseract with `OCR_LANGUAGES=eng+nep` by default.
 - OCR fallback cap: `OCR_MAX_PAGES=200`.
+- Optional Vision Review uses Qwen-VL after OCR for PDF/image review notes only, capped by `OCR_VISION_REVIEW_MAX_PAGES=3`.
 - Job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.
 - Worker concurrency: `INGESTION_WORKER_CONCURRENCY=1`.
 - Deep context budget: `LLM_DEEP_CONTEXT_WINDOW_TOKENS`, default 8192 tokens.

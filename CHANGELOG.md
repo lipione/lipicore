@@ -7,6 +7,7 @@
 - Added CSV extraction support to the shared ingestion/extraction path.
 - Redirected old frontend workflow URLs to `/ocr` and updated dashboard/sidebar entry points.
 - Added backend OCR API tests for successful TXT extraction and unsupported file rejection.
+- Added optional OCR Vision Review: Qwen-VL can add separate review notes for PDF/image uploads after open-source OCR, capped by `OCR_VISION_REVIEW_MAX_PAGES`.
 
 ## 2026-05-23
 

@@ -29,6 +29,7 @@ cp .env.example .env
 | `INGESTION_JOB_TIMEOUT_SECONDS` | Timeout for ingestion and queued long-document jobs | `1800` |
 | `INGESTION_WORKER_CONCURRENCY` | Worker concurrency for ingestion and long-document analysis | `1` for pilots |
 | `OCR_MAX_PAGES` | Max pages for scanned-PDF OCR fallback | `200` |
+| `OCR_VISION_REVIEW_MAX_PAGES` | Max PDF pages sent to the vision model for optional OCR Vision Review | `3` |
 | `LLM_DEEP_CONTEXT_WINDOW_TOKENS` | Context budget for queued long-document analysis | Match deployed deep model |
 
 ---

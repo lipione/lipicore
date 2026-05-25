@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, Session, select
 
+from app.api import ocr as ocr_api
 from app.core.security import get_password_hash
 from app.models.bank import Bank
 from app.models.document import Document
@@ -64,3 +65,59 @@ def test_ocr_rejects_unsupported_files():
 
     assert response.status_code == 400
     assert "Supported" in response.json()["detail"]
+
+
+def test_ocr_vision_review_adds_separate_note_for_image(monkeypatch):
+    token = get_token("ocr-staff@test.local")
+    calls = []
+
+    def fake_extract_pages(file_path: str, file_type: str):
+        assert file_type == "png"
+        return [
+            {
+                "text": "Customer Name: Rama\nAmount: NPR 10,000",
+                "extraction_confidence": 0.9,
+                "ocr_confidence": 0.88,
+            }
+        ]
+
+    def fake_call_vision_llm(prompt: str, image_b64: str):
+        calls.append((prompt, image_b64))
+        return "Vision note: stamp is visible; review account number."
+
+    monkeypatch.setattr(ocr_api, "extract_pages", fake_extract_pages)
+    monkeypatch.setattr(ocr_api, "call_vision_llm", fake_call_vision_llm, raising=False)
+
+    response = client.post(
+        "/api/ocr/extract",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"vision_review": "true"},
+        files={"file": ("sample.png", b"not-a-real-image-but-not-needed", "image/png")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["vision_review_requested"] is True
+    assert payload["vision_review_pages"] == 1
+    assert payload["full_text"] == "Customer Name: Rama\nAmount: NPR 10,000"
+    assert payload["pages"][0]["vision_review"] == "Vision note: stamp is visible; review account number."
+    assert "OCR text for comparison" in calls[0][0]
+    assert calls[0][1]
+
+
+def test_ocr_vision_review_skips_non_visual_files():
+    token = get_token("ocr-staff@test.local")
+
+    response = client.post(
+        "/api/ocr/extract",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"vision_review": "true"},
+        files={"file": ("sample.txt", b"Plain internal memo", "text/plain")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["vision_review_requested"] is True
+    assert payload["vision_review_pages"] == 0
+    assert any("Vision review is only available" in warning for warning in payload["warnings"])
+    assert payload["pages"][0]["vision_review"] is None
