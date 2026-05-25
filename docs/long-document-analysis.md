@@ -76,6 +76,7 @@ Current defaults:
 - Chat upload limit: 50 MB.
 - OCR engine: open-source Tesseract, configured by `OCR_ENGINE`, `OCR_LANGUAGES`, `OCR_TESSERACT_CONFIG`, and `OCR_IMAGE_DPI`.
 - OCR fallback page cap: `OCR_MAX_PAGES=200`.
+- Nepali PDFs with degraded embedded text layers can be repaired page-by-page with OCR when direct extraction corrupts vowel marks or common letters.
 - OCR page Vision Review is optional and uses Qwen-VL only for separate visual notes on PDFs/images, capped by `OCR_VISION_REVIEW_MAX_PAGES=3`.
 - Ingestion/analysis job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.
 - Default worker concurrency: `INGESTION_WORKER_CONCURRENCY=1`.

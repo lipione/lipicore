@@ -20,6 +20,14 @@ SECTION_RE = re.compile(
     r"\b(?:दफा|परिच्छेद|बुँदा)\s*([०-९0-9]+(?:[.\-][०-९0-9]+)*)",
     re.IGNORECASE,
 )
+DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+DEVANAGARI_MARK_AFTER_NON_DEVANAGARI_RE = re.compile(r"(^|[^\u0900-\u097F])[\u093A-\u094D]")
+DEGRADED_NEPALI_TEXT_PATTERNS = (
+    re.compile(r"वव[षशकदधचजतथन]"),
+    re.compile(r"मम[ितधन]"),
+    re.compile(r"[अ-ह] ु"),
+    re.compile(r"\b(?:गन|अथ|काय|काम|पछ|समे|िेत्र|िोवक|भन्)\s"),
+)
 
 
 def _extract_section_label(text: str | None) -> str | None:
@@ -39,8 +47,9 @@ def _page_payload(
     ocr_confidence: float | None = None,
     table_confidence: float | None = None,
     page_bbox_json: str | None = None,
+    pdf_text_layer_repaired: bool = False,
 ) -> dict:
-    return {
+    payload = {
         "page_number": page_number,
         "text": text,
         "extraction_confidence": extraction_confidence,
@@ -48,6 +57,47 @@ def _page_payload(
         "table_confidence": table_confidence,
         "page_bbox_json": page_bbox_json,
     }
+    if pdf_text_layer_repaired:
+        payload["pdf_text_layer_repaired"] = True
+    return payload
+
+
+def _degraded_devanagari_score(text: str) -> int:
+    devanagari_count = len(DEVANAGARI_RE.findall(text or ""))
+    if devanagari_count < 40:
+        return 0
+
+    score = 0
+    score += len(DEVANAGARI_MARK_AFTER_NON_DEVANAGARI_RE.findall(text)) * 3
+    score += len(re.findall(r"\s[\u093A-\u094D]", text)) * 2
+    for pattern in DEGRADED_NEPALI_TEXT_PATTERNS:
+        score += len(pattern.findall(text)) * 2
+    return score
+
+
+def _is_degraded_devanagari_pdf_text(text: str) -> bool:
+    devanagari_count = len(DEVANAGARI_RE.findall(text or ""))
+    if devanagari_count < 40:
+        return False
+    threshold = max(8, devanagari_count // 90)
+    return _degraded_devanagari_score(text) >= threshold
+
+
+def _ocr_pdf_page_if_better(file_path: str, page_number: int, text: str) -> OcrResult | None:
+    if page_number > settings.OCR_MAX_PAGES:
+        return None
+    if not _is_degraded_devanagari_pdf_text(text):
+        return None
+
+    images = convert_pdf_pages_to_images(file_path, first_page=page_number, last_page=page_number)
+    for image in images:
+        try:
+            result = ocr_pil_image_to_text(image)
+        finally:
+            image.close()
+        if result.text.strip() and _degraded_devanagari_score(result.text) < _degraded_devanagari_score(text):
+            return result
+    return None
 
 
 def _extract_xlsx_pages(file_path: str) -> list[dict]:
@@ -113,24 +163,39 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
                 for index, page in enumerate(pdf.pages, start=1):
                     page_parts = []
                     page_text = page.extract_text() or ""
+                    ocr_confidence = None
+                    pdf_text_layer_repaired = False
                     if page_text.strip():
+                        try:
+                            ocr_result = _ocr_pdf_page_if_better(file_path, index, page_text)
+                        except Exception:
+                            ocr_result = None
+                        if ocr_result is not None:
+                            page_text = ocr_result.text
+                            ocr_confidence = ocr_result.confidence
+                            pdf_text_layer_repaired = True
                         page_parts.append(page_text)
-                    try:
-                        tables = page.extract_tables() or []
-                    except Exception:
+                    if not pdf_text_layer_repaired:
+                        try:
+                            tables = page.extract_tables() or []
+                        except Exception:
+                            tables = []
+                        for table_index, table in enumerate(tables, start=1):
+                            page_parts.append(f"[Table {table_index} on page {index}]")
+                            for row_index, row in enumerate(table or [], start=1):
+                                values = [str(cell).strip() if cell is not None else "" for cell in row]
+                                page_parts.append(f"Row {row_index}: " + " | ".join(values))
+                    else:
                         tables = []
-                    for table_index, table in enumerate(tables, start=1):
-                        page_parts.append(f"[Table {table_index} on page {index}]")
-                        for row_index, row in enumerate(table or [], start=1):
-                            values = [str(cell).strip() if cell is not None else "" for cell in row]
-                            page_parts.append(f"Row {row_index}: " + " | ".join(values))
                     combined = "\n".join(part for part in page_parts if part.strip())
                     if combined.strip():
                         pages.append(_page_payload(
                             page_number=index,
                             text=combined,
-                            extraction_confidence=0.94 if page_text.strip() else 0.86,
+                            extraction_confidence=0.82 if pdf_text_layer_repaired else 0.94 if page_text.strip() else 0.86,
+                            ocr_confidence=ocr_confidence,
                             table_confidence=0.84 if tables else None,
+                            pdf_text_layer_repaired=pdf_text_layer_repaired,
                         ))
                         text += combined + "\n"
         except Exception:

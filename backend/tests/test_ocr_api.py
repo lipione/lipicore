@@ -121,3 +121,31 @@ def test_ocr_vision_review_skips_non_visual_files():
     assert payload["vision_review_pages"] == 0
     assert any("Vision review is only available" in warning for warning in payload["warnings"])
     assert payload["pages"][0]["vision_review"] is None
+
+
+def test_ocr_warns_when_degraded_pdf_text_layer_was_repaired(monkeypatch):
+    token = get_token("ocr-staff@test.local")
+
+    def fake_extract_pages(file_path: str, file_type: str):
+        assert file_type == "pdf"
+        return [
+            {
+                "page_number": 1,
+                "text": "यो ऐन तुरुन्त प्रारम्भ हुनेछ।",
+                "extraction_confidence": 0.82,
+                "ocr_confidence": 0.93,
+                "pdf_text_layer_repaired": True,
+            }
+        ]
+
+    monkeypatch.setattr(ocr_api, "extract_pages", fake_extract_pages)
+
+    response = client.post(
+        "/api/ocr/extract",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("sample.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert any("degraded embedded PDF text" in warning for warning in payload["warnings"])

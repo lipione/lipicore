@@ -66,6 +66,8 @@ def _warnings_for_pages(pages: list[dict], full_text: str) -> list[str]:
     warnings: list[str] = []
     if not full_text.strip():
         warnings.append("No extractable text was found.")
+    if any(page.get("pdf_text_layer_repaired") for page in pages):
+        warnings.append("One or more pages had degraded embedded PDF text and were re-extracted with OCR.")
     if any((page.get("ocr_confidence") or 1.0) < 0.75 for page in pages):
         warnings.append("OCR confidence is low on one or more pages; staff review is required before high-risk use.")
     if any((page.get("table_confidence") or 1.0) < 0.75 for page in pages):

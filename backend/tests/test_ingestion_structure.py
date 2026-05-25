@@ -1,8 +1,10 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from openpyxl import Workbook
 from openpyxl.worksheet.table import Table
 
+from app.services import ingestion_service
 from app.services.ingestion_service import build_indexable_chunks, extract_pages
 
 
@@ -65,3 +67,101 @@ def test_extract_xlsx_preserves_sheet_tables_merges_and_formulas(tmp_path: Path)
     assert "Tables: LoanTable=A2:C3" in text
     assert "C3 formula==B3*1.1" in text
     assert "A3=ACME" in text
+
+
+def test_degraded_nepali_pdf_text_layer_uses_ocr_fallback(monkeypatch, tmp_path: Path):
+    pdf_path = tmp_path / "nepali.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+
+    corrupt_text = (
+        "२. पररभाषा: ववषय वा प्रसङ्गले अकको  अथ न नलागेमा यस ऐनमा,-\n"
+        "(२) यो ऐन िरुु न्ि प्रारम्भ हनु ेछ।\n"
+        "(क) वस्त ु सम्झन ु पछन।"
+    )
+    repaired_text = (
+        "२. परिभाषा: विषय वा प्रसङ्गले अर्को अर्थ नलागेमा यस ऐनमा,-\n"
+        "(२) यो ऐन तुरुन्त प्रारम्भ हुनेछ।\n"
+        "(क) वस्तु सम्झनु पर्छ।"
+    )
+
+    class FakePage:
+        def extract_text(self):
+            return corrupt_text
+
+        def extract_tables(self):
+            return []
+
+    class FakePdf:
+        pages = [FakePage()]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeImage:
+        def close(self):
+            pass
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pdfplumber",
+        SimpleNamespace(open=lambda _path: FakePdf()),
+    )
+    monkeypatch.setattr(
+        ingestion_service,
+        "convert_pdf_pages_to_images",
+        lambda path, *, first_page, last_page: [FakeImage()],
+    )
+    monkeypatch.setattr(
+        ingestion_service,
+        "ocr_pil_image_to_text",
+        lambda _image: ingestion_service.OcrResult(text=repaired_text, confidence=0.93),
+    )
+
+    pages = extract_pages(str(pdf_path), "pdf")
+
+    assert len(pages) == 1
+    assert pages[0]["text"] == repaired_text
+    assert pages[0]["ocr_confidence"] == 0.93
+    assert pages[0]["pdf_text_layer_repaired"] is True
+
+
+def test_clean_nepali_pdf_text_layer_does_not_use_ocr(monkeypatch, tmp_path: Path):
+    pdf_path = tmp_path / "clean-nepali.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    clean_text = "यो ऐन तुरुन्त प्रारम्भ हुनेछ। विषय वा प्रसङ्गले अर्को अर्थ नलागेमा।"
+
+    class FakePage:
+        def extract_text(self):
+            return clean_text
+
+        def extract_tables(self):
+            return []
+
+    class FakePdf:
+        pages = [FakePage()]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def fail_ocr(*_args, **_kwargs):
+        raise AssertionError("clean Nepali text layer should not be OCRed")
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pdfplumber",
+        SimpleNamespace(open=lambda _path: FakePdf()),
+    )
+    monkeypatch.setattr(ingestion_service, "convert_pdf_pages_to_images", fail_ocr)
+
+    pages = extract_pages(str(pdf_path), "pdf")
+
+    assert len(pages) == 1
+    assert pages[0]["text"] == clean_text
+    assert pages[0]["ocr_confidence"] is None
+    assert "pdf_text_layer_repaired" not in pages[0]
