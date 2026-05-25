@@ -88,6 +88,12 @@ def _ocr_line_noise_score(line: str) -> int:
     return len(OCR_LATIN_NOISE_RE.findall(line or ""))
 
 
+def _normalize_common_nepali_ocr_errors(text: str) -> str:
+    normalized = re.sub(r"(?<=[\u0900-\u097F])\s+a\s+(?=[\u0900-\u097F])", " वा ", text)
+    normalized = re.sub(r"(?<=[०-९])%+(?=[०-९])", "", normalized)
+    return normalized
+
+
 def _merge_direct_lines_for_ocr_noise(direct_text: str, ocr_text: str) -> str:
     direct_lines = direct_text.splitlines()
     ocr_lines = ocr_text.splitlines()
@@ -120,8 +126,9 @@ def _ocr_pdf_page_if_better(file_path: str, page_number: int, text: str) -> OcrR
         finally:
             image.close()
         if result.text.strip() and _degraded_devanagari_score(result.text) < _degraded_devanagari_score(text):
+            normalized_ocr_text = _normalize_common_nepali_ocr_errors(result.text)
             return OcrResult(
-                text=_merge_direct_lines_for_ocr_noise(text, result.text),
+                text=_merge_direct_lines_for_ocr_noise(text, normalized_ocr_text),
                 confidence=result.confidence,
             )
     return None

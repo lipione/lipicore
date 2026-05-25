@@ -171,8 +171,18 @@ def test_degraded_nepali_pdf_repair_keeps_direct_line_when_ocr_adds_latin_noise(
     pdf_path = tmp_path / "noisy-nepali.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 fake")
 
-    corrupt_text = "भउू पयोग ऐन , २०७६\n२०७६/०५/०६\n(२) यो ऐन िरुु न्ि प्रारम्भ हनु ेछ।"
-    ocr_text = "भूउपयोग UT, ROWE\n२०७६/०%५/०६\n(२) यो ऐन तुरुन्त प्रारम्भ हुनेछ।"
+    corrupt_text = (
+        "भउू पयोग ऐन , २०७६\n"
+        "२०७६/०५/०६\n"
+        "२. पररभाषा: ववषय वा प्रसङ्गले अकको  अथ न नलागेमा।\n"
+        "(२) यो ऐन िरुु न्ि प्रारम्भ हनु ेछ।"
+    )
+    ocr_text = (
+        "भूउपयोग UT, ROWE\n"
+        "२०७६/०%५/०६\n"
+        "२. परिभाषा: विषय a प्रसङ्गले अर्को अर्थ नलागेमा।\n"
+        "(२) यो ऐन तुरुन्त प्रारम्भ हुनेछ।"
+    )
 
     class FakePage:
         def extract_text(self):
@@ -212,4 +222,9 @@ def test_degraded_nepali_pdf_repair_keeps_direct_line_when_ocr_adds_latin_noise(
 
     pages = extract_pages(str(pdf_path), "pdf")
 
-    assert pages[0]["text"] == "भउू पयोग ऐन , २०७६\n२०७६/०५/०६\n(२) यो ऐन तुरुन्त प्रारम्भ हुनेछ।"
+    assert pages[0]["text"] == (
+        "भउू पयोग ऐन , २०७६\n"
+        "२०७६/०५/०६\n"
+        "२. परिभाषा: विषय वा प्रसङ्गले अर्को अर्थ नलागेमा।\n"
+        "(२) यो ऐन तुरुन्त प्रारम्भ हुनेछ।"
+    )
