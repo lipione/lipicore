@@ -1,4 +1,7 @@
 from types import SimpleNamespace
+from subprocess import run
+import os
+import sys
 
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
@@ -43,6 +46,34 @@ def test_qdrant_init_rejects_existing_collection_with_wrong_vector_size(monkeypa
         assert "1024" in str(exc)
     else:
         raise AssertionError("Expected dimension mismatch to fail startup")
+
+
+def test_reindex_service_registers_model_relationships_for_scripts():
+    env = os.environ.copy()
+    env.update(
+        {
+            "JWT_SECRET": "test-secret",
+            "SUPER_ADMIN_PASSWORD": "test-password",
+            "DATABASE_URL": "sqlite://",
+        }
+    )
+    result = run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from sqlalchemy.orm import configure_mappers; "
+                "import app.services.reindex_service; "
+                "configure_mappers()"
+            ),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_reindex_document_vectors_reuses_existing_chunks(monkeypatch):

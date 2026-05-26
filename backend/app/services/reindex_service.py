@@ -5,7 +5,10 @@ from qdrant_client.models import PointStruct
 from sqlmodel import Session, select
 
 from ..core.config import settings
+from ..models.bank import Bank  # noqa: F401
+from ..models.chat import ChatMessage, ChatSession  # noqa: F401
 from ..models.document import Document, DocumentChunk
+from ..models.user import User  # noqa: F401
 from .embedding_service import generate_embeddings
 from .qdrant_service import delete_points_by_document, upload_points
 
