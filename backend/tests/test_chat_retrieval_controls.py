@@ -28,3 +28,14 @@ def test_stream_context_uses_bounded_top_results():
     bounded = chat_api._document_context_results(results)
 
     assert bounded == results[:chat_api.MAX_CONTEXT_RESULTS]
+
+
+def test_stream_context_prompt_includes_rewritten_query_for_follow_up():
+    prompt = chat_api._document_context_prompt(
+        context="Banking offence source text",
+        retrieval_query="quote me exact policy about banking offence",
+        safe_message="quote me exait policy",
+    )
+
+    assert "quote me exact policy about banking offence" in prompt
+    assert "Banking offence source text" in prompt

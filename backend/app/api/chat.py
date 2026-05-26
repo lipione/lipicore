@@ -190,6 +190,21 @@ def _document_context_results(results: list) -> list:
     return results[:MAX_CONTEXT_RESULTS]
 
 
+def _document_context_prompt(*, context: str, retrieval_query: str, safe_message: str) -> str:
+    interpreted_query = ""
+    if retrieval_query and retrieval_query.strip().lower() != (safe_message or "").strip().lower():
+        interpreted_query = (
+            "The latest user request was normalized for document retrieval as: "
+            f"\"{retrieval_query.strip()}\". Treat this as the user's intended document question.\n\n"
+        )
+    return (
+        f"\n\n--- DOCUMENT CONTEXT ---\n"
+        f"{interpreted_query}"
+        f"Use the following context from approved documents to answer the user's question.\n\n"
+        f"{context}\n--- END DOCUMENT CONTEXT ---"
+    )
+
+
 def prepare_vllm_payload_messages(
     *,
     system: str,
@@ -935,10 +950,10 @@ async def stream_chat_message(
                             doc = db.get(Document, r.payload.get("document_id"))
                             context_blocks.append(f"{_source_prefix(doc, r.payload)}\n{r.payload.get('text', '')}")
                         context = "\n\n---\n\n".join(context_blocks)
-                        sys_identity += (
-                            f"\n\n--- DOCUMENT CONTEXT ---\n"
-                            f"Use the following context from approved documents to answer the user's question.\n\n"
-                            f"{context}\n--- END DOCUMENT CONTEXT ---"
+                        sys_identity += _document_context_prompt(
+                            context=context,
+                            retrieval_query=retrieval_query,
+                            safe_message=safe_message,
                         )
                         seen_src: set[tuple] = set()
                         for r in context_results:
