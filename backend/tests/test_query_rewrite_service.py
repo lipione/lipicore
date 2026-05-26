@@ -49,4 +49,27 @@ def test_source_lookup_follow_up_falls_back_to_last_user_subject(monkeypatch):
         history,
     )
 
-    assert rewritten == "quote me exait policy about banking offence"
+    assert rewritten == "quote me exact policy about banking offence"
+
+
+def test_source_lookup_follow_up_prefers_last_user_subject_without_llm(monkeypatch):
+    history = [
+        _message("user", "tell me about banking offence"),
+        _message("assistant", "The previous answer mentioned STR/SAR reporting as one example."),
+    ]
+    calls = 0
+
+    def fake_call_llm(_prompt: str) -> str:
+        nonlocal calls
+        calls += 1
+        return '{"query":"quote exact policy about suspicious transaction reporting"}'
+
+    monkeypatch.setattr(query_rewrite_service, "call_llm", fake_call_llm)
+
+    rewritten = query_rewrite_service.rewrite_query_for_retrieval(
+        "quote me exact policy",
+        history,
+    )
+
+    assert calls == 0
+    assert rewritten == "quote me exact policy about banking offence"

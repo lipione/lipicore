@@ -51,6 +51,11 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
+def _normalize_follow_up_question(question: str) -> str:
+    normalized = _normalize_text(question)
+    return re.sub(r"\bexait\b", "exact", normalized, flags=re.IGNORECASE)
+
+
 def _recent_history_text(history: Iterable[ChatMessage], limit: int = 6) -> str:
     lines = []
     for msg in list(history)[-limit:]:
@@ -113,7 +118,7 @@ def _fallback_rewrite(question: str, history: Iterable[ChatMessage]) -> str:
     if not _looks_like_source_lookup_follow_up(question):
         return question
     subject = _last_user_subject(history)
-    normalized_question = _normalize_text(question)
+    normalized_question = _normalize_follow_up_question(question)
     if not subject or subject.lower() in normalized_question.lower():
         return normalized_question or question
     return f"{normalized_question} about {subject}"
@@ -126,6 +131,11 @@ def rewrite_query_for_retrieval(question: str, history: list[ChatMessage] | None
     """
     if not history or not looks_like_follow_up(question):
         return question
+
+    if _looks_like_source_lookup_follow_up(question):
+        deterministic_query = _fallback_rewrite(question, history)
+        if deterministic_query and deterministic_query.lower() != _normalize_text(question).lower():
+            return deterministic_query
 
     history_text = _recent_history_text(history)
     if not history_text:
