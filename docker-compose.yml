@@ -92,8 +92,8 @@ services:
       - LLM_C_API_BASE=http://lipicore-vllm-c:8000
       - LLM_C_MODEL=gemma-4-26b-4bit
       - LLM_C_API_KEY=no-key
-      - LLM_VISION_API_BASE=${LLM_VISION_API_BASE:-http://lipicore-vllm-vision:8000}
-      - LLM_VISION_MODEL=${LLM_VISION_MODEL:-Qwen/Qwen3-VL-8B-Instruct}
+      - LLM_VISION_API_BASE=${LLM_VISION_API_BASE:-http://lipicore-vllm-c:8000}
+      - LLM_VISION_MODEL=${LLM_VISION_MODEL:-gemma-4-26b-4bit}
       - LLM_VISION_API_KEY=${LLM_VISION_API_KEY:-no-key}
       - LLM_VISION_MAX_CONCURRENCY=${LLM_VISION_MAX_CONCURRENCY:-2}
       - LLM_QUEUE_STALE_SECONDS=${LLM_QUEUE_STALE_SECONDS:-10}
@@ -158,8 +158,8 @@ services:
       - LLM_C_API_BASE=http://lipicore-vllm-c:8000
       - LLM_C_MODEL=gemma-4-26b-4bit
       - LLM_C_API_KEY=no-key
-      - LLM_VISION_API_BASE=${LLM_VISION_API_BASE:-http://lipicore-vllm-vision:8000}
-      - LLM_VISION_MODEL=${LLM_VISION_MODEL:-Qwen/Qwen3-VL-8B-Instruct}
+      - LLM_VISION_API_BASE=${LLM_VISION_API_BASE:-http://lipicore-vllm-c:8000}
+      - LLM_VISION_MODEL=${LLM_VISION_MODEL:-gemma-4-26b-4bit}
       - LLM_VISION_API_KEY=${LLM_VISION_API_KEY:-no-key}
       - LLM_VISION_MAX_CONCURRENCY=${LLM_VISION_MAX_CONCURRENCY:-2}
       - LLM_QUEUE_STALE_SECONDS=${LLM_QUEUE_STALE_SECONDS:-10}
@@ -296,7 +296,7 @@ services:
     entrypoint: /bin/bash
     command:
       - -c
-      - "vllm serve ${LLM_VISION_MODEL:-Qwen/Qwen3-VL-8B-Instruct} --host 0.0.0.0 --port 8000 --gpu-memory-utilization ${LLM_VISION_GPU_MEMORY_UTILIZATION:-0.70} --max-model-len ${LLM_VISION_CONTEXT_WINDOW_TOKENS:-8192} --max-num-batched-tokens ${LLM_VISION_MAX_BATCHED_TOKENS:-4096} --max-num-seqs ${LLM_VISION_MAX_NUM_SEQS:-2} --served-model-name ${LLM_VISION_SERVED_MODEL_NAME:-qwen3-vl-8b} --download-dir /data/models/hf_cache --trust-remote-code"
+      - "vllm serve ${QWEN_VISION_MODEL:-Qwen/Qwen3-VL-8B-Instruct} --host 0.0.0.0 --port 8000 --gpu-memory-utilization ${LLM_VISION_GPU_MEMORY_UTILIZATION:-0.70} --max-model-len ${LLM_VISION_CONTEXT_WINDOW_TOKENS:-8192} --max-num-batched-tokens ${LLM_VISION_MAX_BATCHED_TOKENS:-4096} --max-num-seqs ${LLM_VISION_MAX_NUM_SEQS:-2} --served-model-name ${QWEN_VISION_SERVED_MODEL_NAME:-qwen3-vl-8b} --download-dir /data/models/hf_cache --trust-remote-code"
     volumes:
       - /data:/data
     ports:
