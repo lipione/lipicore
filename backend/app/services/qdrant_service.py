@@ -3,13 +3,41 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from ..core.config import settings
 
 # Initialize Qdrant Client
-qdrant_client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
-COLLECTION_NAME = "bank_documents"
+qdrant_client = QdrantClient(
+    host=settings.QDRANT_HOST,
+    port=settings.QDRANT_PORT,
+    check_compatibility=False,
+)
+COLLECTION_NAME = settings.QDRANT_COLLECTION_NAME
 
-def init_qdrant():
+
+class QdrantCollectionDimensionError(RuntimeError):
+    pass
+
+
+def _collection_vector_size(collection_info) -> int | None:
+    vectors = collection_info.config.params.vectors
+    if hasattr(vectors, "size"):
+        return vectors.size
+    if isinstance(vectors, dict) and vectors:
+        first_config = next(iter(vectors.values()))
+        return getattr(first_config, "size", None)
+    return None
+
+
+def _ensure_collection_compatible() -> None:
+    info = qdrant_client.get_collection(COLLECTION_NAME)
+    vector_size = _collection_vector_size(info)
+    if vector_size and vector_size != settings.EMBEDDING_DIMENSION:
+        raise QdrantCollectionDimensionError(
+            f"Qdrant collection '{COLLECTION_NAME}' has vector size {vector_size}, "
+            f"but EMBEDDING_DIMENSION is {settings.EMBEDDING_DIMENSION}. "
+            "Use a new QDRANT_COLLECTION_NAME or rebuild the collection before starting."
+        )
+
+
+def init_qdrant(max_retries: int = 5, retry_delay: int = 2):
     import time
-    max_retries = 5
-    retry_delay = 2
     
     for i in range(max_retries):
         try:
@@ -23,8 +51,12 @@ def init_qdrant():
                     collection_name=COLLECTION_NAME,
                     vectors_config=VectorParams(size=settings.EMBEDDING_DIMENSION, distance=Distance.COSINE),
                 )
+            else:
+                _ensure_collection_compatible()
             print("Qdrant initialized successfully.")
             return
+        except QdrantCollectionDimensionError:
+            raise
         except Exception as e:
             print(f"Error connecting to Qdrant: {e}")
             if i < max_retries - 1:

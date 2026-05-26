@@ -593,6 +593,8 @@ def process_document(document_id: int):
                         "version_state": doc.version_state,
                         "document_scope": doc.document_scope,
                         "session_id": doc.session_id,
+                        "embedding_model": settings.EMBEDDING_MODEL,
+                        "embedding_dimension": settings.EMBEDDING_DIMENSION,
                     }
                 ))
 

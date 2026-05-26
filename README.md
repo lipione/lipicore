@@ -66,7 +66,7 @@ BankAi/LipiCore does not currently claim to:
 BankAi uses a decoupled **Worker-Observer** architecture for document processing:
 1.  **Ingestion:** Files are uploaded to an async worker that handles OCR, chunking, and embedding.
 2.  **Streaming:** The UI subscribes to an SSE status stream to update progress cards in real-time.
-3.  **Retrieval:** Context is retrieved from Qdrant using a session-aware metadata filter.
+3.  **Retrieval:** Context is retrieved from Qdrant using `BAAI/bge-m3` multilingual embeddings and a session-aware metadata filter.
 4.  **Reranking & Verification:** Retrieved candidates are reranked, filtered by relevance, and later checked by the citation verifier.
 5.  **Admission Control:** Redis coordinates per-model and per-user concurrency so GPU memory is protected under load.
 6.  **Generation:** Response is streamed token-by-token from the local vLLM runtime.

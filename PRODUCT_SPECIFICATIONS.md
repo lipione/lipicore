@@ -87,6 +87,7 @@ BankAi uses a defensive RAG pipeline rather than sending entire files to the mod
 3. Redis/RQ queues ingestion work for extraction, OCR/table parsing, chunking, embedding, and indexing.
 4. Chunks are stored with lifecycle and permission metadata.
 5. Retrieval combines Qdrant semantic search and PostgreSQL full-text search.
+   Semantic search uses `BAAI/bge-m3` multilingual embeddings with 1024-dimensional vectors so English questions can retrieve relevant Nepali policy chunks more reliably than the previous English-centric MiniLM baseline.
 6. Candidates are reranked, filtered by access rules and relevance threshold, then passed to the model.
 7. Answers include source metadata and citation verification results.
 8. Admins/auditors can run RAG evaluation cases against expected sources and required citation terms.

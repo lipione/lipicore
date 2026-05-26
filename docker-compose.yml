@@ -101,11 +101,17 @@ services:
       - LLM_FAST_CONTEXT_WINDOW_TOKENS=${LLM_FAST_CONTEXT_WINDOW_TOKENS:-8192}
       - LLM_DEEP_CONTEXT_WINDOW_TOKENS=${LLM_DEEP_CONTEXT_WINDOW_TOKENS:-8192}
       - LLM_VISION_CONTEXT_WINDOW_TOKENS=${LLM_VISION_CONTEXT_WINDOW_TOKENS:-8192}
+      - EMBEDDING_MODEL=BAAI/bge-m3
+      - EMBEDDING_DIMENSION=1024
+      - EMBEDDING_CACHE_DIR=/data/models/hf_cache/sentence-transformers
+      - EMBEDDING_NORMALIZE=true
+      - QDRANT_COLLECTION_NAME=bank_documents_bge_m3
     ports:
       - "8000:8000"
     volumes:
       - upload_data:/app/uploads
       - chat_upload_data:/app/chat_uploads
+      - /data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"]
       interval: 10s
@@ -167,10 +173,16 @@ services:
       - LLM_FAST_CONTEXT_WINDOW_TOKENS=${LLM_FAST_CONTEXT_WINDOW_TOKENS:-8192}
       - LLM_DEEP_CONTEXT_WINDOW_TOKENS=${LLM_DEEP_CONTEXT_WINDOW_TOKENS:-8192}
       - LLM_VISION_CONTEXT_WINDOW_TOKENS=${LLM_VISION_CONTEXT_WINDOW_TOKENS:-8192}
+      - EMBEDDING_MODEL=BAAI/bge-m3
+      - EMBEDDING_DIMENSION=1024
+      - EMBEDDING_CACHE_DIR=/data/models/hf_cache/sentence-transformers
+      - EMBEDDING_NORMALIZE=true
+      - QDRANT_COLLECTION_NAME=bank_documents_bge_m3
     command: ["python", "-m", "app.workers.ingestion_worker"]
     volumes:
       - upload_data:/app/uploads
       - chat_upload_data:/app/chat_uploads
+      - /data:/data
 
   messenger-backend:
     build: ./backend

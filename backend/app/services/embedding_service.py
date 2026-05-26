@@ -11,11 +11,14 @@ def get_embedding_model():
     model = getattr(_thread_state, "model", None)
     if model is None:
         with _model_lock:
-            model = SentenceTransformer(settings.EMBEDDING_MODEL)
+            model = SentenceTransformer(
+                settings.EMBEDDING_MODEL,
+                cache_folder=settings.EMBEDDING_CACHE_DIR,
+            )
         _thread_state.model = model
     return model
 
 def generate_embeddings(texts: list[str]) -> list[list[float]]:
     model = get_embedding_model()
-    embeddings = model.encode(texts)
+    embeddings = model.encode(texts, normalize_embeddings=settings.EMBEDDING_NORMALIZE)
     return embeddings.tolist()

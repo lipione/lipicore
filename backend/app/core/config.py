@@ -115,8 +115,11 @@ class Settings(BaseSettings):
     LLM_API_BASE: str = os.getenv("LLM_API_BASE") or os.getenv("LLM_A_API_BASE", "http://localhost:8001")
     LLM_API_KEY: str = os.getenv("LLM_API_KEY") or os.getenv("LLM_A_API_KEY", "no-key")
 
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "384"))
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
+    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "1024"))
+    EMBEDDING_CACHE_DIR: str | None = os.getenv("EMBEDDING_CACHE_DIR")
+    EMBEDDING_NORMALIZE: bool = os.getenv("EMBEDDING_NORMALIZE", "true").lower() in {"1", "true", "yes", "on"}
+    QDRANT_COLLECTION_NAME: str = os.getenv("QDRANT_COLLECTION_NAME", "bank_documents_bge_m3")
 
     SUPER_ADMIN_EMAIL: str = os.getenv("SUPER_ADMIN_EMAIL", "admin@lipicore.io")
     SUPER_ADMIN_PASSWORD: str = _super_admin_password

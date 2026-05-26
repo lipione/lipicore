@@ -312,6 +312,14 @@ API: POST /api/evaluations/rag
 
 Treat failures in expected sources, citation terms, or not-found behavior as release blockers for the affected workflow.
 
+When changing `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`, or `QDRANT_COLLECTION_NAME`, rebuild the vector index after the app starts:
+
+```bash
+docker compose exec backend python scripts/reindex_document_vectors.py
+```
+
+The current multilingual default is `BAAI/bge-m3`, `EMBEDDING_DIMENSION=1024`, and `QDRANT_COLLECTION_NAME=bank_documents_bge_m3`.
+
 The production nginx config uses Docker's embedded DNS resolver for backend
 and frontend upstreams. After backend or frontend containers are recreated,
 nginx should resolve the new container IP automatically; verify with:
