@@ -31,6 +31,7 @@ from ..services.rag_service import (
     GLOBAL_RETRIEVAL_STATUSES,
     GLOBAL_RETRIEVAL_VERSION_STATES,
     MAX_CANDIDATE_RESULTS,
+    MAX_CONTEXT_RESULTS,
     MIN_SOURCE_RELEVANCE_SCORE,
     NOT_FOUND_RESPONSE,
     SESSION_RETRIEVAL_STATUSES,
@@ -81,6 +82,23 @@ CHAT_UPLOAD_DIR = settings.CHAT_UPLOAD_DIR
 
 KNOWLEDGE_SEARCH_MODES = {"ask_knowledge", "approved_knowledge", "analyze_file", "compare"}
 SOURCE_REQUIRED_MODES = {"approved_knowledge", "analyze_file", "compare"}
+LOW_INTENT_TERMS = {
+    "hello",
+    "helo",
+    "hi",
+    "hey",
+    "namaste",
+    "namaskar",
+    "thanks",
+    "thank",
+    "thankyou",
+    "okay",
+    "ok",
+    "yes",
+    "no",
+    "नमस्ते",
+    "धन्यवाद",
+}
 MODEL_CONTEXT_LIMIT_TOKENS = settings.LLM_CONTEXT_WINDOW_TOKENS
 MODEL_TOKEN_HEADROOM = 96
 MIN_GENERATION_TOKENS = 128
@@ -144,6 +162,34 @@ def _message_cost(message: dict) -> int:
     return _estimate_message_tokens(message.get("content", "")) + 6
 
 
+def _should_skip_document_retrieval(message: str) -> bool:
+    normalized = " ".join((message or "").strip().lower().split())
+    if not normalized:
+        return True
+    tokens = re.findall(r"[\w\u0900-\u097F]+", normalized, flags=re.UNICODE)
+    if not tokens:
+        return True
+    return len(tokens) <= 3 and all(token in LOW_INTENT_TERMS for token in tokens)
+
+
+def _should_attempt_document_retrieval(
+    *,
+    message: str | None,
+    mode: str,
+    active_document_ids: list[int] | None,
+    has_image: bool,
+) -> bool:
+    if has_image:
+        return False
+    if message is not None and _should_skip_document_retrieval(message):
+        return False
+    return bool(active_document_ids) or mode in KNOWLEDGE_SEARCH_MODES
+
+
+def _document_context_results(results: list) -> list:
+    return results[:MAX_CONTEXT_RESULTS]
+
+
 def prepare_vllm_payload_messages(
     *,
     system: str,
@@ -188,10 +234,14 @@ def should_show_document_search_status(
     active_document_ids: list[int] | None,
     mode: str,
     has_image: bool,
+    message: str | None = None,
 ) -> bool:
-    if has_image:
-        return False
-    return bool(active_document_ids) or mode in KNOWLEDGE_SEARCH_MODES
+    return _should_attempt_document_retrieval(
+        message=message,
+        mode=mode,
+        active_document_ids=active_document_ids,
+        has_image=has_image,
+    )
 
 
 def derive_answer_metadata(
@@ -736,7 +786,12 @@ async def stream_chat_message(
         direct_text_extract_requested = not has_image and bool(active_doc_ids) and _is_extract_text_request(safe_message)
         if (
             not direct_text_extract_requested
-            and should_show_document_search_status(active_document_ids=active_doc_ids, mode=mode, has_image=has_image)
+            and should_show_document_search_status(
+                active_document_ids=active_doc_ids,
+                mode=mode,
+                has_image=has_image,
+                message=safe_message,
+            )
         ):
             status_message = "Searching selected documents..." if active_doc_ids else "Searching approved knowledge..."
             yield f"data: {json.dumps({'type': 'status', 'message': status_message})}\n\n"
@@ -744,6 +799,12 @@ async def stream_chat_message(
         sources_list = []
         sys_identity = f"{get_system_identity(chat_request.language)}\n\n{mode_instruction(mode)}"
         logger.info("[STREAM] Got system identity")
+        should_search_documents = _should_attempt_document_retrieval(
+            message=safe_message,
+            mode=mode,
+            active_document_ids=active_doc_ids,
+            has_image=has_image,
+        )
 
         if direct_text_extract_requested:
             yield f"data: {json.dumps({'type': 'status', 'message': 'Extracting text from selected upload...'})}\n\n"
@@ -806,7 +867,7 @@ async def stream_chat_message(
             yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
             return
 
-        if not has_image:
+        if should_search_documents:
             try:
                 logger.info("[STREAM] Starting RAG search")
                 from ..services.embedding_service import generate_embeddings
@@ -868,8 +929,9 @@ async def stream_chat_message(
                     ])
 
                     if filtered:
+                        context_results = _document_context_results(filtered)
                         context_blocks = []
-                        for r in filtered:
+                        for r in context_results:
                             doc = db.get(Document, r.payload.get("document_id"))
                             context_blocks.append(f"{_source_prefix(doc, r.payload)}\n{r.payload.get('text', '')}")
                         context = "\n\n---\n\n".join(context_blocks)
@@ -879,7 +941,7 @@ async def stream_chat_message(
                             f"{context}\n--- END DOCUMENT CONTEXT ---"
                         )
                         seen_src: set[tuple] = set()
-                        for r in filtered:
+                        for r in context_results:
                             doc_id = r.payload.get("document_id")
                             section_label = (
                                 r.payload.get("section_label")
