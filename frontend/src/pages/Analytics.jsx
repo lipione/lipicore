@@ -38,6 +38,13 @@ const CAPACITY_EVIDENCE = [
   { label: '40 staff stream burst', value: 'p95 80.19s', detail: '40/40 real answers · slow tail' },
 ];
 
+const SERVICE_LABELS = {
+  database: { label: 'Postgres', icon: 'database' },
+  qdrant: { label: 'Vector DB', icon: 'hub' },
+  redis: { label: 'Redis Queue', icon: 'view_list' },
+  storage: { label: 'Storage', icon: 'hard_drive' },
+};
+
 function ConfBadge({ conf }) {
   const cls = conf >= 98 ? 'bg-green-50 text-green-700'
     : conf >= 95       ? 'bg-yellow-50 text-yellow-700'
@@ -122,10 +129,51 @@ function ModelCapacityCard({ name, model }) {
   );
 }
 
+function healthClass(status) {
+  if (status === 'healthy') return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+  if (status === 'degraded') return 'bg-amber-50 text-amber-800 border-amber-200';
+  return 'bg-slate-50 text-slate-700 border-slate-200';
+}
+
+function serviceDetail(name, service) {
+  if (!service) return 'No signal reported.';
+  if (name === 'redis' && service.queued_jobs !== undefined) return `${service.queued_jobs} ingestion job${service.queued_jobs === 1 ? '' : 's'} queued`;
+  if (name === 'qdrant' && service.collection) return service.collection;
+  if (name === 'storage' && Array.isArray(service.paths)) {
+    const worst = service.paths.reduce((max, item) => Math.max(max, Number(item.used_percent || 0)), 0);
+    return `${Math.round(worst)}% max disk used`;
+  }
+  return service.detail || 'Operational';
+}
+
+function ServiceHealthCard({ name, service }) {
+  const meta = SERVICE_LABELS[name] || { label: name, icon: 'monitor_heart' };
+  const status = service?.status || 'unknown';
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-md">
+      <div className="flex items-start justify-between gap-sm">
+        <div className="flex items-center gap-sm min-w-0">
+          <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center">
+            <span className="material-symbols-outlined text-[17px]">{meta.icon}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-on-surface truncate">{meta.label}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">{serviceDetail(name, service)}</p>
+          </div>
+        </div>
+        <span className={`px-2 py-0.5 border rounded text-[10px] font-bold uppercase ${healthClass(status)}`}>
+          {status}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function Analytics() {
   const navigate = useNavigate();
   const [stats,    setStats]    = useState(null);
   const [modelStatus, setModelStatus] = useState(null);
+  const [applianceHealth, setApplianceHealth] = useState(null);
   const [period,   setPeriod]   = useState('30d');
   const [loading,  setLoading]  = useState(true);
   const [syncTime, setSyncTime] = useState(new Date());
@@ -139,15 +187,18 @@ export default function Analytics() {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const [summaryRes, modelRes] = await Promise.all([
+      const [summaryRes, modelRes, healthRes] = await Promise.all([
         api.get('/analytics/summary'),
         api.get('/chat/models/status'),
+        api.get('/analytics/appliance-health'),
       ]);
       setStats(summaryRes.data);
       setModelStatus(modelRes.data);
+      setApplianceHealth(healthRes.data);
     } catch {
       setStats(null);
       setModelStatus(null);
+      setApplianceHealth(null);
     } finally {
       setLoading(false);
       setSyncTime(new Date());
@@ -218,6 +269,10 @@ export default function Analytics() {
       ['Trust score', stats?.trust_score ?? 0],
       ['Average confidence', stats?.avg_confidence ?? ''],
       ['Average latency ms', stats?.avg_latency_ms ?? ''],
+      ['Appliance health', applianceHealth?.status ?? 'unknown'],
+      ['Queued ingestion jobs', applianceHealth?.ingestion?.queued_jobs ?? ''],
+      ['Documents needing approval', applianceHealth?.ingestion?.needs_approval ?? ''],
+      ['Failed documents', applianceHealth?.ingestion?.failed_documents ?? ''],
     ];
     const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -280,6 +335,61 @@ export default function Analytics() {
             ) : null}
           </div>
         ))}
+      </div>
+
+      {/* Appliance health */}
+      <div className="mb-gutter">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-md mb-md">
+          <div>
+            <h2 className="font-h2 text-h2 text-on-surface">Appliance Health</h2>
+            <p className="text-outline font-body-sm text-body-sm mt-1">
+              Live readiness checks for the dedicated bank server.
+            </p>
+          </div>
+          <span className={`self-start lg:self-auto px-3 py-1.5 border rounded text-[11px] font-bold uppercase tracking-wide ${healthClass(applianceHealth?.status)}`}>
+            {applianceHealth?.status || 'unknown'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-gutter">
+          <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-gutter">
+            {Object.entries(applianceHealth?.services || SERVICE_LABELS).map(([name, service]) => (
+              <ServiceHealthCard
+                key={name}
+                name={name}
+                service={service?.status ? service : null}
+              />
+            ))}
+          </div>
+          <div className="bg-white border border-slate-200 rounded-lg p-lg">
+            <h3 className="font-h2 text-h2 text-on-surface">Document Governance</h3>
+            <p className="text-body-sm text-outline mt-1 mb-md">Approved knowledge readiness by status.</p>
+            <div className="grid grid-cols-3 gap-sm">
+              <div className="rounded border border-slate-100 bg-slate-50 p-sm">
+                <p className="text-[10px] font-bold uppercase text-slate-500">Total</p>
+                <p className="text-2xl font-bold text-on-surface mt-1">{applianceHealth?.documents?.total ?? '—'}</p>
+              </div>
+              <div className="rounded border border-slate-100 bg-slate-50 p-sm">
+                <p className="text-[10px] font-bold uppercase text-slate-500">Approved</p>
+                <p className="text-2xl font-bold text-emerald-700 mt-1">{applianceHealth?.documents?.approved ?? '—'}</p>
+              </div>
+              <div className="rounded border border-slate-100 bg-slate-50 p-sm">
+                <p className="text-[10px] font-bold uppercase text-slate-500">Failed</p>
+                <p className="text-2xl font-bold text-rose-700 mt-1">{applianceHealth?.documents?.failed ?? '—'}</p>
+              </div>
+            </div>
+            <div className="mt-md border border-slate-100 rounded p-sm bg-slate-50">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-semibold text-slate-700">Needs approval</span>
+                <span className="font-bold text-secondary">{applianceHealth?.ingestion?.needs_approval ?? '—'}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm mt-2">
+                <span className="font-semibold text-slate-700">Queued ingestion</span>
+                <span className="font-bold text-secondary">{applianceHealth?.ingestion?.queued_jobs ?? '—'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Model capacity */}

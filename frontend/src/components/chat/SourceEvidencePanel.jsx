@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import api from '../../api/axios';
+
 function sourceLocation(source) {
   const parts = [];
   if (source.section_label || source.section_number) parts.push(source.section_label || source.section_number);
@@ -90,7 +93,84 @@ function confidenceLabel(value) {
   return `${Math.round(Math.max(0, Math.min(numeric, 1)) * 100)}%`;
 }
 
-function SourceCard({ source, index }) {
+function sourcePath(source) {
+  if (!source?.document_id) return null;
+  const params = new URLSearchParams();
+  if (source.page_number !== null && source.page_number !== undefined) {
+    params.set('page_number', source.page_number);
+  }
+  if (source.chunk_index !== null && source.chunk_index !== undefined) {
+    params.set('chunk_index', source.chunk_index);
+  }
+  const query = params.toString();
+  return `/documents/${source.document_id}/source${query ? `?${query}` : ''}`;
+}
+
+function SourceViewerModal({ viewer, onClose }) {
+  if (!viewer.source) return null;
+  const chunks = viewer.data?.chunks || [];
+  const document = viewer.data?.document || viewer.source;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 px-4">
+      <div className="w-full max-w-4xl max-h-[84vh] bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col">
+        <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-200 flex-shrink-0">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-slate-900 truncate">{document.title || document.document_title || 'Source'}</p>
+            <p className="text-xs text-slate-500 truncate">
+              {[document.file_name, sourceLocation(viewer.source)].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+            title="Close"
+          >
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto space-y-3">
+          {viewer.loading && (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="w-4 h-4 border-2 border-slate-200 border-t-secondary rounded-full animate-spin" />
+              Loading source
+            </div>
+          )}
+          {viewer.error && (
+            <div className="rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+              {viewer.error}
+            </div>
+          )}
+          {!viewer.loading && !viewer.error && chunks.length === 0 && (
+            <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+              No source passage available for this citation.
+            </div>
+          )}
+          {chunks.map((chunk) => (
+            <article key={chunk.id || chunk.chunk_index} className="rounded border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase text-slate-500">
+                <span>Chunk {Number.isInteger(chunk.chunk_index) ? chunk.chunk_index + 1 : '—'}</span>
+                {chunk.page_number && <span>Page {chunk.page_number}</span>}
+                {chunk.extraction_confidence !== null && chunk.extraction_confidence !== undefined && (
+                  <span>Extract {confidenceLabel(chunk.extraction_confidence)}</span>
+                )}
+                {chunk.ocr_confidence !== null && chunk.ocr_confidence !== undefined && (
+                  <span>OCR {confidenceLabel(chunk.ocr_confidence)}</span>
+                )}
+              </div>
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
+                {chunk.text}
+              </p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SourceCard({ source, index, onOpenSource }) {
   const passage = source.passage || source.snippet || '';
   const preview = source.snippet || passage.slice(0, 180);
   const canExpand = passage && passage.length > preview.length;
@@ -116,6 +196,16 @@ function SourceCard({ source, index }) {
         <VerificationPill status={source.citation_verification} />
       </div>
       <WarningPills warnings={source.source_warnings || []} />
+      {source.document_id && (
+        <button
+          type="button"
+          onClick={() => onOpenSource(source)}
+          className="mt-3 inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-secondary hover:text-secondary"
+        >
+          <span className="material-symbols-outlined text-[14px]">plagiarism</span>
+          Open source
+        </button>
+      )}
       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-slate-500">
         <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1">
           <span className="font-bold text-slate-700">Doc ID:</span> {source.document_id || '—'}
@@ -168,6 +258,25 @@ function SourceCard({ source, index }) {
 }
 
 export default function SourceEvidencePanel({ sources = [], compact = false }) {
+  const [viewer, setViewer] = useState({ source: null, data: null, loading: false, error: '' });
+
+  const openSource = async (source) => {
+    const path = sourcePath(source);
+    if (!path) return;
+    setViewer({ source, data: null, loading: true, error: '' });
+    try {
+      const response = await api.get(path);
+      setViewer({ source, data: response.data, loading: false, error: '' });
+    } catch (err) {
+      setViewer({
+        source,
+        data: null,
+        loading: false,
+        error: err?.response?.data?.detail || 'Unable to open this source.',
+      });
+    }
+  };
+
   if (!sources.length) {
     return (
       <aside className={compact ? 'hidden' : 'hidden xl:flex w-80 flex-col bg-slate-50 border-l border-slate-200'}>
@@ -187,8 +296,16 @@ export default function SourceEvidencePanel({ sources = [], compact = false }) {
         <p className="text-xs text-slate-500 mt-1">{sources.length} cited source{sources.length === 1 ? '' : 's'}</p>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {sources.map((source, index) => <SourceCard key={`${source.document_id || source.title || 'source'}-${index}`} source={source} index={index} />)}
+        {sources.map((source, index) => (
+          <SourceCard
+            key={`${source.document_id || source.title || 'source'}-${index}`}
+            source={source}
+            index={index}
+            onOpenSource={openSource}
+          />
+        ))}
       </div>
+      <SourceViewerModal viewer={viewer} onClose={() => setViewer({ source: null, data: null, loading: false, error: '' })} />
     </>
   );
 

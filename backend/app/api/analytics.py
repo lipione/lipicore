@@ -9,6 +9,7 @@ from ..models.document import Document
 from ..models.chat import ChatSession, ChatMessage
 from ..models.audit import AuditLog
 from .deps import get_current_analytics_user
+from ..services.appliance_health_service import collect_appliance_health
 
 router = APIRouter()
 
@@ -90,3 +91,11 @@ def get_analytics_summary(
         "avg_confidence":     98.2,
         "avg_latency_ms":     420,
     }
+
+
+@router.get("/appliance-health")
+def get_appliance_health(
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_analytics_user),
+) -> Any:
+    return collect_appliance_health(db=db, bank_id=current_user.bank_id)
