@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     OCR_IMAGE_DPI: int = int(os.getenv("OCR_IMAGE_DPI", "300"))
     OCR_MAX_PAGES: int = int(os.getenv("OCR_MAX_PAGES", "200"))
     OCR_VISION_REVIEW_MAX_PAGES: int = int(os.getenv("OCR_VISION_REVIEW_MAX_PAGES", "3"))
+    OCR_HANDWRITING_FALLBACK_ENABLED: bool = os.getenv("OCR_HANDWRITING_FALLBACK_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    OCR_HANDWRITING_FALLBACK_CONFIDENCE: float = float(os.getenv("OCR_HANDWRITING_FALLBACK_CONFIDENCE", "0.6"))
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_uploads"))
     CHAT_UPLOAD_DIR: str = os.getenv("CHAT_UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_chat_uploads"))

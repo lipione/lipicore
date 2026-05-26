@@ -12,6 +12,8 @@ class OcrPageResponse(BaseModel):
     extraction_confidence: Optional[float] = None
     ocr_confidence: Optional[float] = None
     table_confidence: Optional[float] = None
+    vision_transcription: bool = False
+    vision_model: Optional[str] = None
     vision_review: Optional[str] = None
 
 

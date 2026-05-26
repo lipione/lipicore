@@ -8,6 +8,8 @@ LLM Vision: scanned PDFs, document images, and OCR fallback
 All are called via the same OpenAI-compatible interface so swapping models
 requires only .env changes.
 """
+import base64
+
 import httpx
 from ..core.config import settings
 from .llm_gateway import reserve_model, resolve_model_profile
@@ -83,6 +85,33 @@ def call_vision_llm(prompt: str, image_b64: str) -> str:
         return _parse_response(r.json())
     except Exception as e:
         return f"Failed to analyze image. ({e})"
+
+
+def call_gemma_vision_llm(prompt: str, image_b64: str) -> str:
+    """Gemma image call for low-confidence handwriting transcription."""
+    profile = resolve_model_profile("deep")
+    url = f"{profile.api_base}/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {profile.api_key}"}
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+    ]}]
+    try:
+        r = httpx.post(
+            url,
+            json={"model": profile.model, "messages": messages, "max_tokens": profile.max_tokens, "temperature": 0},
+            headers=headers,
+            timeout=profile.timeout_seconds,
+        )
+        r.raise_for_status()
+        return _parse_response(r.json())
+    except Exception as e:
+        return f"Failed to transcribe image. ({e})"
+
+
+def call_gemma_vision_file(prompt: str, image_path: str) -> str:
+    with open(image_path, "rb") as image_file:
+        return call_gemma_vision_llm(prompt, base64.b64encode(image_file.read()).decode("utf-8"))
 
 
 # ── Async (request-path handlers) ────────────────────────────────────────────

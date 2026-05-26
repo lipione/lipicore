@@ -149,3 +149,34 @@ def test_ocr_warns_when_degraded_pdf_text_layer_was_repaired(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert any("degraded embedded PDF text" in warning for warning in payload["warnings"])
+
+
+def test_ocr_warns_when_gemma_transcribes_low_confidence_handwriting(monkeypatch):
+    token = get_token("ocr-staff@test.local")
+
+    def fake_extract_pages(file_path: str, file_type: str):
+        assert file_type == "jpg"
+        return [
+            {
+                "page_number": 1,
+                "text": "शब्द लेखन\nबाबा काका माला धाता",
+                "extraction_confidence": 0.68,
+                "ocr_confidence": 0.45,
+                "vision_transcription": True,
+                "vision_model": "gemma-4-26b-4bit",
+            }
+        ]
+
+    monkeypatch.setattr(ocr_api, "extract_pages", fake_extract_pages)
+
+    response = client.post(
+        "/api/ocr/extract",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("handwriting.jpg", b"fake-image", "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pages"][0]["vision_transcription"] is True
+    assert payload["pages"][0]["vision_model"] == "gemma-4-26b-4bit"
+    assert any("Gemma vision handwriting transcription" in warning for warning in payload["warnings"])

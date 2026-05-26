@@ -37,13 +37,18 @@ function PageResult({ page }) {
           <p className="text-sm font-bold text-slate-900">{page.label}</p>
           <p className="text-xs text-slate-500 mt-0.5">{page.character_count.toLocaleString()} characters</p>
         </div>
-        {confidenceItems.length > 0 && (
+        {(confidenceItems.length > 0 || page.vision_transcription) && (
           <div className="flex flex-wrap gap-2">
             {confidenceItems.map(([label, value]) => (
               <span key={label} className={`inline-flex rounded border px-2 py-1 text-[11px] font-semibold ${confidenceTone(value)}`}>
                 {label} {confidenceLabel(value)}
               </span>
             ))}
+            {page.vision_transcription && (
+              <span className="inline-flex rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">
+                Gemma transcription
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -75,11 +80,12 @@ export default function OcrExtraction() {
   const totalPages = result?.page_count || 0;
   const totalCharacters = result?.character_count || 0;
   const hasResult = Boolean(result?.full_text);
+  const resultFileName = result?.file_name;
 
   const outputName = useMemo(() => {
-    if (!result?.file_name) return 'ocr-extracted-text.txt';
-    return `${result.file_name.replace(/\.[^.]+$/, '') || 'ocr'}-extracted-text.txt`;
-  }, [result?.file_name]);
+    if (!resultFileName) return 'ocr-extracted-text.txt';
+    return `${resultFileName.replace(/\.[^.]+$/, '') || 'ocr'}-extracted-text.txt`;
+  }, [resultFileName]);
 
   const handleFileChange = (event) => {
     const selected = event.target.files?.[0] || null;

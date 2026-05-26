@@ -70,6 +70,8 @@ def _warnings_for_pages(pages: list[dict], full_text: str) -> list[str]:
         warnings.append("One or more pages had degraded embedded PDF text and were re-extracted with OCR.")
     if any((page.get("ocr_confidence") or 1.0) < 0.75 for page in pages):
         warnings.append("OCR confidence is low on one or more pages; staff review is required before high-risk use.")
+    if any(page.get("vision_transcription") for page in pages):
+        warnings.append("Low-confidence image OCR was replaced with local Gemma vision handwriting transcription; staff review is required before high-risk use.")
     if any((page.get("table_confidence") or 1.0) < 0.75 for page in pages):
         warnings.append("Table extraction confidence is low on one or more pages.")
     return warnings
@@ -193,6 +195,8 @@ async def extract_ocr_text(
                     extraction_confidence=page.get("extraction_confidence"),
                     ocr_confidence=page.get("ocr_confidence"),
                     table_confidence=page.get("table_confidence"),
+                    vision_transcription=bool(page.get("vision_transcription")),
+                    vision_model=page.get("vision_model"),
                 )
             )
 

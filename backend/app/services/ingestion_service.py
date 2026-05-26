@@ -23,6 +23,7 @@ SECTION_RE = re.compile(
 DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
 DEVANAGARI_MARK_AFTER_NON_DEVANAGARI_RE = re.compile(r"(^|[^\u0900-\u097F])[\u093A-\u094D]")
 OCR_LATIN_NOISE_RE = re.compile(r"[A-Za-z%]")
+LATIN_RE = re.compile(r"[A-Za-z]")
 DEGRADED_NEPALI_TEXT_PATTERNS = (
     re.compile(r"वव[षशकदधचजतथन]"),
     re.compile(r"मम[ितधन]"),
@@ -49,6 +50,8 @@ def _page_payload(
     table_confidence: float | None = None,
     page_bbox_json: str | None = None,
     pdf_text_layer_repaired: bool = False,
+    vision_transcription: bool = False,
+    vision_model: str | None = None,
 ) -> dict:
     payload = {
         "page_number": page_number,
@@ -60,6 +63,9 @@ def _page_payload(
     }
     if pdf_text_layer_repaired:
         payload["pdf_text_layer_repaired"] = True
+    if vision_transcription:
+        payload["vision_transcription"] = True
+        payload["vision_model"] = vision_model or settings.LLM_C_MODEL
     return payload
 
 
@@ -92,6 +98,65 @@ def _normalize_common_nepali_ocr_errors(text: str) -> str:
     normalized = re.sub(r"(?<=[\u0900-\u097F])\s+a\s+(?=[\u0900-\u097F])", " वा ", text)
     normalized = re.sub(r"(?<=[०-९])%+(?=[०-९])", "", normalized)
     return normalized
+
+
+HANDWRITING_TRANSCRIPTION_PROMPT = """Transcribe the visible handwritten or printed text in this document image.
+
+Return only the visible text line by line.
+Preserve the original script and wording.
+Do not translate, summarize, explain, or add labels.
+If a word is unclear, write (unclear)."""
+
+
+def _looks_like_failed_image_ocr(result: OcrResult) -> bool:
+    text = (result.text or "").strip()
+    if not text:
+        return True
+    confidence = result.confidence
+    if confidence is not None and confidence >= settings.OCR_HANDWRITING_FALLBACK_CONFIDENCE:
+        return False
+    devanagari_count = len(DEVANAGARI_RE.findall(text))
+    latin_count = len(LATIN_RE.findall(text))
+    symbol_count = len(re.findall(r"[=|~><(){}\\[\\]_/\\\\]", text))
+    if confidence is not None and confidence < settings.OCR_HANDWRITING_FALLBACK_CONFIDENCE:
+        return True
+    return latin_count > max(devanagari_count * 2, 12) and symbol_count >= 3
+
+
+def _usable_vision_transcription(text: str | None) -> bool:
+    if not text:
+        return False
+    normalized = text.strip()
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    failure_markers = (
+        "failed to transcribe",
+        "failed to analyze",
+        "cannot transcribe",
+        "can't transcribe",
+        "unable to transcribe",
+        "no visible text",
+    )
+    return not any(marker in lowered for marker in failure_markers)
+
+
+def _transcribe_image_with_gemma(file_path: str) -> str:
+    from .llm_service import call_gemma_vision_file
+
+    return call_gemma_vision_file(HANDWRITING_TRANSCRIPTION_PROMPT, file_path).strip()
+
+
+def _maybe_replace_low_confidence_image_ocr(file_path: str, result: OcrResult) -> tuple[OcrResult, bool]:
+    if not settings.OCR_HANDWRITING_FALLBACK_ENABLED:
+        return result, False
+    if not _looks_like_failed_image_ocr(result):
+        return result, False
+
+    transcription = _transcribe_image_with_gemma(file_path)
+    if not _usable_vision_transcription(transcription):
+        return result, False
+    return OcrResult(text=transcription, confidence=result.confidence), True
 
 
 def _merge_direct_lines_for_ocr_noise(direct_text: str, ocr_text: str) -> str:
@@ -297,12 +362,15 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
             text += slide_text
     elif ft in ['jpg', 'jpeg', 'png']:
         result = ocr_image_file(file_path)
+        result, vision_transcription = _maybe_replace_low_confidence_image_ocr(file_path, result)
         text = result.text
         pages.append(_page_payload(
             page_number=1,
             text=text,
-            extraction_confidence=0.82,
+            extraction_confidence=0.68 if vision_transcription else 0.82,
             ocr_confidence=result.confidence,
+            vision_transcription=vision_transcription,
+            vision_model=settings.LLM_C_MODEL if vision_transcription else None,
         ))
     if not pages and text.strip():
         pages.append(_page_payload(page_number=None, text=text, extraction_confidence=0.7))
