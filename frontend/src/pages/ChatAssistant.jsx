@@ -343,7 +343,7 @@ export default function ChatAssistant() {
       const activeIds = safeJson(sessR.data.active_document_ids_json, []);
       if (activeIds.length > 0 && sessR.data.id === id) {
         try {
-          const docsR = await api.get('/documents?limit=200');
+          const docsR = await api.get(`/documents?ids=${activeIds.join(',')}&limit=200`);
           const sessionDocs = docsR.data.filter(d =>
             activeIds.includes(d.id) && d.session_id === id && d.document_scope === 'session_upload'
           );

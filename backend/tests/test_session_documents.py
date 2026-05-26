@@ -52,7 +52,7 @@ def setup_test_db():
     SQLModel.metadata.drop_all(engine)
 
 
-def test_staff_can_reload_own_ready_session_upload():
+def test_staff_document_library_hides_session_upload_but_ids_can_reload_it():
     token = get_token("staff@test.local")
 
     with Session(engine) as session:
@@ -95,14 +95,22 @@ def test_staff_can_reload_own_ready_session_upload():
         chat.active_document_ids_json = json.dumps([own_doc.id])
         session.add(chat)
         session.commit()
+        own_doc_id = own_doc.id
 
     response = client.get("/api/documents?limit=200", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
     docs = response.json()
     titles = {doc["title"] for doc in docs}
-    assert "Loan Policy.pdf" in titles
+    assert "Loan Policy.pdf" not in titles
     assert "Draft Global.pdf" not in titles
+
+    reload_response = client.get(f"/api/documents?ids={own_doc_id}&limit=200", headers={"Authorization": f"Bearer {token}"})
+
+    assert reload_response.status_code == 200
+    reload_docs = reload_response.json()
+    assert [doc["title"] for doc in reload_docs] == ["Loan Policy.pdf"]
+    assert reload_docs[0]["document_scope"] == "session_upload"
 
 
 def test_session_rag_prioritizes_active_upload_before_global(monkeypatch):

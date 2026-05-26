@@ -111,8 +111,8 @@ def read_documents(
     Further filtering by department/access_level can be added here.
     """
     query = select(Document).where(Document.bank_id == current_user.bank_id)
+    parsed_ids = []
     if ids:
-        parsed_ids = []
         for raw_id in ids.split(","):
             try:
                 parsed_ids.append(int(raw_id.strip()))
@@ -120,20 +120,26 @@ def read_documents(
                 continue
         if parsed_ids:
             query = query.where(Document.id.in_(parsed_ids))
-    
+
+    library_scope = or_(Document.document_scope != "session_upload", Document.document_scope.is_(None))
+    own_session_upload = and_(
+        Document.document_scope == "session_upload",
+        Document.uploaded_by == current_user.id,
+        Document.status != "disabled",
+    )
+
     if current_user.role == "staff_user":
-        # Staff can see approved library docs plus their own chat-session uploads
-        # so active document cards can be restored after refresh.
-        query = query.where(
-            or_(
-                Document.status == "approved",
-                and_(
-                    Document.document_scope == "session_upload",
-                    Document.uploaded_by == current_user.id,
-                    Document.status != "disabled",
-                ),
-            )
-        )
+        approved_library = and_(library_scope, Document.status == "approved")
+        if parsed_ids:
+            # Chat restores active attachment cards by id, but normal library
+            # listing must not expose session uploads as bank knowledge.
+            query = query.where(or_(approved_library, own_session_upload))
+        else:
+            query = query.where(approved_library)
+    elif parsed_ids:
+        query = query.where(or_(library_scope, own_session_upload))
+    else:
+        query = query.where(library_scope)
         
     docs = db.exec(query.offset(skip).limit(limit)).all()
     return docs
