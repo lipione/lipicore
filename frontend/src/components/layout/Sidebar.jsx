@@ -9,6 +9,7 @@ const NAV_SECTIONS = [
     label: null,
     items: [
       { icon: 'chat',           label: 'Chat Assistant',      to: '/chat',               permission: PERMISSIONS.USE_CHAT },
+      { icon: 'forum',          label: 'Staff Messenger',     to: '/messenger',          permission: PERMISSIONS.USE_MESSENGER },
       { icon: 'account_tree',   label: 'Process Navigator',   to: '/process-navigator',  permission: PERMISSIONS.VIEW_PROCESS_NAVIGATOR },
       { icon: 'document_scanner', label: 'OCR Extraction',     to: '/ocr',                permission: PERMISSIONS.USE_CHAT_FILE_UPLOAD },
     ],

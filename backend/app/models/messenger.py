@@ -68,9 +68,13 @@ class MessengerMessage(SQLModel, table=True):
     bank_id: int = Field(foreign_key="bank.id", index=True)
     conversation_id: int = Field(foreign_key="messenger_conversation.id", index=True)
     sender_id: int = Field(foreign_key="user.id", index=True)
+    reply_to_message_id: Optional[int] = Field(default=None, foreign_key="messenger_message.id", index=True)
     content: str
     status: str = Field(default="sent")
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    edited_at: Optional[datetime] = None
+    pinned_at: Optional[datetime] = Field(default=None, index=True)
+    pinned_by: Optional[int] = Field(default=None, foreign_key="user.id")
     deleted_at: Optional[datetime] = None
 
 

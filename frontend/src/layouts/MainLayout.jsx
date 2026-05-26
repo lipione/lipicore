@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
 import SecureMessengerWidget from '../components/messenger/SecureMessengerWidget';
@@ -10,6 +10,7 @@ export default function MainLayout() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
@@ -40,7 +41,7 @@ export default function MainLayout() {
         <main className="flex-1 overflow-auto mt-16">
           <Outlet context={{ language, setLanguage: handleLanguageChange }} />
         </main>
-        <SecureMessengerWidget />
+        {location.pathname !== '/messenger' && <SecureMessengerWidget />}
       </div>
     </div>
   );

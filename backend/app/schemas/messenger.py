@@ -33,13 +33,27 @@ class MessengerAttachmentResponse(BaseModel):
     download_url: Optional[str] = None
 
 
+class MessengerReplyPreview(BaseModel):
+    id: int
+    sender_name: str
+    content: str
+
+
 class MessengerMessageResponse(BaseModel):
     id: int
     conversation_id: int
     sender: MessengerUserResponse
+    reply_to_message_id: Optional[int] = None
+    reply_to: Optional[MessengerReplyPreview] = None
     content: str
     status: str
     created_at: datetime
+    edited_at: Optional[datetime] = None
+    pinned_at: Optional[datetime] = None
+    pinned_by: Optional[int] = None
+    is_pinned: bool = False
+    read_by_count: int = 0
+    mentions_current_user: bool = False
     attachments: List[MessengerAttachmentResponse] = []
 
 
@@ -51,6 +65,7 @@ class MessengerConversationResponse(BaseModel):
     role: str
     members: List[MessengerUserResponse]
     last_message: Optional[MessengerMessageResponse] = None
+    pinned_messages: List[MessengerMessageResponse] = []
     unread_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -94,6 +109,7 @@ class AnnouncementConversationCreate(BaseModel):
 
 class MessengerMessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
+    reply_to_message_id: Optional[int] = None
 
     @field_validator("content")
     @classmethod
@@ -102,6 +118,24 @@ class MessengerMessageCreate(BaseModel):
         if not cleaned:
             raise ValueError("Message content is required")
         return cleaned
+
+
+class MessengerMessageEdit(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("content")
+    @classmethod
+    def clean_content(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Message content is required")
+        return cleaned
+
+
+class MessengerMessagePageResponse(BaseModel):
+    messages: List[MessengerMessageResponse]
+    next_before_id: Optional[int] = None
+    has_more: bool = False
 
 
 class MessengerUnreadCountResponse(BaseModel):

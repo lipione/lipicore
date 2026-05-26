@@ -20,8 +20,13 @@ export async function fetchMessengerConversations() {
   return data;
 }
 
-export async function fetchMessengerMessages(conversationId) {
-  const { data } = await api.get(`/messenger/conversations/${conversationId}/messages`);
+export async function fetchMessengerMessages(conversationId, params = {}) {
+  const { data } = await api.get(`/messenger/conversations/${conversationId}/messages`, { params });
+  return data;
+}
+
+export async function fetchMessengerMessagePage(conversationId, params = {}) {
+  const { data } = await api.get(`/messenger/conversations/${conversationId}/messages-page`, { params });
   return data;
 }
 
@@ -40,10 +45,31 @@ export async function createCustomConversation(title, memberIds) {
   return data;
 }
 
-export async function sendMessengerMessage(conversationId, content) {
+export async function sendMessengerMessage(conversationId, content, replyToMessageId = null) {
   const { data } = await api.post(`/messenger/conversations/${conversationId}/messages`, {
     content,
+    reply_to_message_id: replyToMessageId,
   });
+  return data;
+}
+
+export async function editMessengerMessage(messageId, content) {
+  const { data } = await api.patch(`/messenger/messages/${messageId}`, { content });
+  return data;
+}
+
+export async function deleteMessengerMessage(messageId) {
+  const { data } = await api.delete(`/messenger/messages/${messageId}`);
+  return data;
+}
+
+export async function pinMessengerMessage(messageId) {
+  const { data } = await api.post(`/messenger/messages/${messageId}/pin`);
+  return data;
+}
+
+export async function unpinMessengerMessage(messageId) {
+  const { data } = await api.delete(`/messenger/messages/${messageId}/pin`);
   return data;
 }
 

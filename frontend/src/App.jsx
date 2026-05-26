@@ -3,6 +3,7 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChatAssistant from './pages/ChatAssistant';
+import Messenger from './pages/Messenger';
 import Documents from './pages/Documents';
 import OcrExtraction from './pages/OcrExtraction';
 import Features from './pages/Features';
@@ -44,6 +45,7 @@ function App() {
         <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
           <Route path="dashboard"      element={<Dashboard />} />
           <Route path="chat"           element={<ChatAssistant />} />
+          <Route path="messenger"      element={<Messenger />} />
           <Route path="documents"      element={<Documents />} />
           <Route path="ocr"            element={<OcrExtraction />} />
           <Route path="document-review" element={<Navigate to="/ocr" replace />} />

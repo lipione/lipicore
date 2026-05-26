@@ -13,6 +13,8 @@ from ..schemas.messenger import (
     MessengerBootstrapResponse,
     MessengerConversationResponse,
     MessengerMessageCreate,
+    MessengerMessageEdit,
+    MessengerMessagePageResponse,
     MessengerMessageResponse,
     MessengerUnreadCountResponse,
     MessengerUserResponse,
@@ -95,10 +97,24 @@ def create_announcement_channel(
 def list_messages(
     conversation_id: int,
     limit: int = 100,
+    before_id: Optional[int] = None,
+    q: Optional[str] = None,
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    return messenger_service.list_messages(db, current_user, conversation_id, limit)
+    return messenger_service.list_messages(db, current_user, conversation_id, limit, before_id, q)
+
+
+@router.get("/conversations/{conversation_id}/messages-page", response_model=MessengerMessagePageResponse)
+def list_messages_page(
+    conversation_id: int,
+    limit: int = 50,
+    before_id: Optional[int] = None,
+    q: Optional[str] = None,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    return messenger_service.list_messages_page(db, current_user, conversation_id, limit, before_id, q)
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessengerMessageResponse)
@@ -108,7 +124,50 @@ def send_message(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    return messenger_service.send_message(db, current_user, conversation_id, payload.content)
+    return messenger_service.send_message(
+        db,
+        current_user,
+        conversation_id,
+        payload.content,
+        payload.reply_to_message_id,
+    )
+
+
+@router.patch("/messages/{message_id}", response_model=MessengerMessageResponse)
+def edit_message(
+    message_id: int,
+    payload: MessengerMessageEdit,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    return messenger_service.edit_message(db, current_user, message_id, payload.content)
+
+
+@router.delete("/messages/{message_id}", response_model=MessengerUnreadCountResponse)
+def delete_message(
+    message_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    return messenger_service.delete_message(db, current_user, message_id)
+
+
+@router.post("/messages/{message_id}/pin", response_model=MessengerMessageResponse)
+def pin_message(
+    message_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    return messenger_service.pin_message(db, current_user, message_id)
+
+
+@router.delete("/messages/{message_id}/pin", response_model=MessengerMessageResponse)
+def unpin_message(
+    message_id: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    return messenger_service.unpin_message(db, current_user, message_id)
 
 
 @router.post("/conversations/{conversation_id}/read", response_model=MessengerUnreadCountResponse)

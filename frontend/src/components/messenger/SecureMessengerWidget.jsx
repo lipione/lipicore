@@ -5,6 +5,7 @@ import {
   CheckCheck,
   ChevronLeft,
   Circle,
+  CornerUpLeft,
   FileText,
   Image as ImageIcon,
   Loader2,
@@ -12,10 +13,14 @@ import {
   Megaphone,
   MessageCircle,
   Paperclip,
+  Pencil,
+  Pin,
+  PinOff,
   Plus,
   Search,
   Send,
   ShieldCheck,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -23,11 +28,15 @@ import {
   bootstrapMessenger,
   createCustomConversation,
   createDirectConversation,
+  deleteMessengerMessage,
+  editMessengerMessage,
+  fetchMessengerMessagePage,
   fetchMessengerDirectory,
-  fetchMessengerMessages,
   fetchMessengerUnreadCount,
   markMessengerConversationRead,
+  pinMessengerMessage,
   sendMessengerMessage,
+  unpinMessengerMessage,
   uploadMessengerAttachment,
 } from '../../api/messenger';
 
@@ -103,7 +112,7 @@ function EmptyState({ title, body }) {
   );
 }
 
-export default function SecureMessengerWidget() {
+export default function SecureMessengerWidget({ standalone = false }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [directoryLoading, setDirectoryLoading] = useState(false);
@@ -118,6 +127,12 @@ export default function SecureMessengerWidget() {
   const [searchTerm, setSearchTerm] = useState('');
   const [composerText, setComposerText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [messageSearchTerm, setMessageSearchTerm] = useState('');
+  const [nextBeforeId, setNextBeforeId] = useState(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
   const [mode, setMode] = useState('inbox');
   const [groupTitle, setGroupTitle] = useState('');
@@ -125,6 +140,7 @@ export default function SecureMessengerWidget() {
   const [mobileListVisible, setMobileListVisible] = useState(true);
   const fileInputRef = useRef(null);
   const messageEndRef = useRef(null);
+  const isOpen = standalone || open;
 
   const filteredConversations = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -191,8 +207,10 @@ export default function SecureMessengerWidget() {
         const firstConversation = bootstrapData.conversations[0];
         setActiveConversation(firstConversation);
         setMobileListVisible(false);
-        const firstMessages = await fetchMessengerMessages(firstConversation.id);
-        setMessages(firstMessages || []);
+        const firstPage = await fetchMessengerMessagePage(firstConversation.id, { limit: 50 });
+        setMessages(firstPage.messages || []);
+        setNextBeforeId(firstPage.next_before_id || null);
+        setHasMoreMessages(Boolean(firstPage.has_more));
         await markMessengerConversationRead(firstConversation.id);
       }
     } catch (err) {
@@ -202,19 +220,49 @@ export default function SecureMessengerWidget() {
     }
   };
 
-  const loadMessages = async (conversation) => {
+  const loadMessages = async (conversation, searchOverride = null) => {
     if (!conversation) return;
     setError('');
     setActiveConversation(conversation);
     setMobileListVisible(false);
     try {
-      const data = await fetchMessengerMessages(conversation.id);
-      setMessages(data || []);
+      const data = await fetchMessengerMessagePage(conversation.id, {
+        limit: 50,
+        q: (searchOverride ?? messageSearchTerm).trim() || undefined,
+      });
+      setMessages(data.messages || []);
+      setNextBeforeId(data.next_before_id || null);
+      setHasMoreMessages(Boolean(data.has_more));
       await markMessengerConversationRead(conversation.id);
       await refreshConversations(conversation.id);
     } catch (err) {
       setError(err.response?.data?.detail || 'Could not load this conversation.');
     }
+  };
+
+  const loadOlderMessages = async () => {
+    if (!activeConversation || !hasMoreMessages || !nextBeforeId || loadingOlder) return;
+    setLoadingOlder(true);
+    setError('');
+    try {
+      const data = await fetchMessengerMessagePage(activeConversation.id, {
+        limit: 50,
+        before_id: nextBeforeId,
+        q: messageSearchTerm.trim() || undefined,
+      });
+      setMessages((items) => [...(data.messages || []), ...items]);
+      setNextBeforeId(data.next_before_id || null);
+      setHasMoreMessages(Boolean(data.has_more));
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not load earlier messages.');
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  const runMessageSearch = async () => {
+    if (!activeConversation) return;
+    await loadMessages(activeConversation);
   };
 
   useEffect(() => {
@@ -224,10 +272,10 @@ export default function SecureMessengerWidget() {
   }, []);
 
   useEffect(() => {
-    if (open) {
+    if (isOpen) {
       loadWidget();
     }
-  }, [open]);
+  }, [isOpen]);
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -239,12 +287,21 @@ export default function SecureMessengerWidget() {
     setSending(true);
     setError('');
     try {
-      const message = selectedFile
+      const message = editingMessage
+        ? await editMessengerMessage(editingMessage.id, composerText.trim())
+        : selectedFile
         ? await uploadMessengerAttachment(activeConversation.id, selectedFile, composerText.trim())
-        : await sendMessengerMessage(activeConversation.id, composerText.trim());
-      setMessages((items) => [...items, message]);
+        : await sendMessengerMessage(activeConversation.id, composerText.trim(), replyTo?.id || null);
+      setMessages((items) => {
+        if (editingMessage) {
+          return items.map((item) => (item.id === message.id ? message : item));
+        }
+        return [...items, message];
+      });
       setComposerText('');
       setSelectedFile(null);
+      setReplyTo(null);
+      setEditingMessage(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       await refreshConversations();
     } catch (err) {
@@ -252,6 +309,44 @@ export default function SecureMessengerWidget() {
     } finally {
       setSending(false);
     }
+  };
+
+  const startEdit = (message) => {
+    setEditingMessage(message);
+    setReplyTo(null);
+    setSelectedFile(null);
+    setComposerText(message.content || '');
+  };
+
+  const deleteMessage = async (message) => {
+    if (!confirm('Delete this message?')) return;
+    setError('');
+    try {
+      await deleteMessengerMessage(message.id);
+      setMessages((items) => items.filter((item) => item.id !== message.id));
+      await refreshConversations(activeConversation?.id);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not delete this message.');
+    }
+  };
+
+  const togglePin = async (message) => {
+    setError('');
+    try {
+      const updated = message.is_pinned
+        ? await unpinMessengerMessage(message.id)
+        : await pinMessengerMessage(message.id);
+      setMessages((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      await refreshConversations(activeConversation?.id);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not update pin.');
+    }
+  };
+
+  const cancelComposerContext = () => {
+    setReplyTo(null);
+    setEditingMessage(null);
+    setComposerText('');
   };
 
   const handleCreateDirect = async (recipientId) => {
@@ -297,51 +392,55 @@ export default function SecureMessengerWidget() {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label="Open secure messenger"
-        onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-950 text-white shadow-2xl shadow-slate-950/30 ring-1 ring-white/10 transition hover:scale-105 hover:bg-slate-900 focus:outline-none focus:ring-4 focus:ring-slate-400/30"
-      >
-        <MessageCircle size={24} />
-        {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[11px] font-black text-slate-950 ring-2 ring-white">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
+      {!standalone && (
+        <button
+          type="button"
+          aria-label="Open secure messenger"
+          onClick={() => setOpen(true)}
+          className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-700 text-white shadow-2xl shadow-emerald-950/25 ring-1 ring-white/10 transition hover:scale-105 hover:bg-emerald-800 focus:outline-none focus:ring-4 focus:ring-emerald-400/30"
+        >
+          <MessageCircle size={24} />
+          {unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[11px] font-black text-slate-950 ring-2 ring-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      )}
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-end bg-slate-950/20 p-0 backdrop-blur-[2px] sm:p-5">
-          <section className="flex h-[100dvh] w-full overflow-hidden bg-white shadow-2xl ring-1 ring-slate-200 sm:h-[min(720px,calc(100vh-40px))] sm:max-w-5xl sm:rounded-lg">
-            <aside className={`${mobileListVisible ? 'flex' : 'hidden'} w-full flex-col border-r border-slate-200 bg-slate-50 sm:flex sm:w-[340px]`}>
+      {isOpen && (
+        <div className={standalone ? 'h-full bg-slate-100 p-3 sm:p-5' : 'fixed inset-0 z-50 flex items-end justify-end bg-slate-950/20 p-0 backdrop-blur-[2px] sm:p-5'}>
+          <section className={`flex w-full overflow-hidden bg-white shadow-2xl ring-1 ring-slate-200 ${standalone ? 'h-full rounded-lg' : 'h-[100dvh] sm:h-[min(720px,calc(100vh-40px))] sm:max-w-5xl sm:rounded-lg'}`}>
+            <aside className={`${mobileListVisible ? 'flex' : 'hidden'} w-full flex-col border-r border-slate-200 bg-slate-50 sm:flex sm:w-[360px]`}>
               <header className="border-b border-slate-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-black text-slate-950">Secure Messenger</h2>
+                      <h2 className="text-base font-black text-slate-950">Staff Messenger</h2>
                       <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 ring-1 ring-emerald-100">
                         <Lock size={11} />
-                        Add-on
+                        Bank-only
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">Private staff chat. No RAG ingestion.</p>
+                    <p className="mt-1 text-xs text-slate-500">Direct, group, and department chat for staff.</p>
                   </div>
-                  <button
-                    type="button"
-                    aria-label="Close secure messenger"
-                    onClick={() => setOpen(false)}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                  >
-                    <X size={18} />
-                  </button>
+                  {!standalone && (
+                    <button
+                      type="button"
+                      aria-label="Close secure messenger"
+                      onClick={() => setOpen(false)}
+                      className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    >
+                      <X size={18} />
+                    </button>
+                  )}
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-1 rounded bg-slate-100 p-1">
                   <button
                     type="button"
                     onClick={() => setMode('inbox')}
-                    className={`rounded px-3 py-2 text-xs font-bold ${mode === 'inbox' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`rounded px-3 py-2 text-xs font-bold ${mode === 'inbox' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
                   >
                     Inbox
                   </button>
@@ -351,7 +450,7 @@ export default function SecureMessengerWidget() {
                       setMode('new');
                       loadDirectory();
                     }}
-                    className={`rounded px-3 py-2 text-xs font-bold ${mode === 'new' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`rounded px-3 py-2 text-xs font-bold ${mode === 'new' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
                   >
                     New
                   </button>
@@ -392,7 +491,7 @@ export default function SecureMessengerWidget() {
                           onClick={() => loadMessages(conversation)}
                           className={`flex w-full items-center gap-3 rounded p-2.5 text-left transition ${
                             activeConversation?.id === conversation.id
-                              ? 'bg-white shadow-sm ring-1 ring-slate-200'
+                              ? 'bg-emerald-50 shadow-sm ring-1 ring-emerald-100'
                               : 'hover:bg-white hover:shadow-sm'
                           }`}
                         >
@@ -513,18 +612,80 @@ export default function SecureMessengerWidget() {
                     </div>
                   </header>
 
-                  <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4">
+                  <div className="flex flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:flex-row sm:items-center">
+                    <label className="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-500 focus-within:border-emerald-400 focus-within:bg-white">
+                      <Search size={14} />
+                      <input
+                        value={messageSearchTerm}
+                        onChange={(event) => setMessageSearchTerm(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') runMessageSearch();
+                        }}
+                        placeholder="Search in conversation"
+                        className="w-full bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400"
+                      />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={runMessageSearch}
+                        className="rounded-full bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
+                      >
+                        Search
+                      </button>
+                      {messageSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMessageSearchTerm('');
+                            loadMessages(activeConversation, '');
+                          }}
+                          className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {activeConversation.pinned_messages?.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setReplyTo(activeConversation.pinned_messages[0])}
+                      className="flex items-start gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2 text-left text-xs text-amber-900"
+                    >
+                      <Pin size={14} className="mt-0.5 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block font-bold">Pinned message</span>
+                        <span className="block truncate">{activeConversation.pinned_messages[0].content}</span>
+                      </span>
+                    </button>
+                  )}
+
+                  <div className="flex-1 overflow-y-auto bg-[#e9edef] px-3 py-4 sm:px-5">
                     {messages.length === 0 ? (
                       <EmptyState title="Start the conversation" body="Messages and files stay inside the Secure Messenger add-on and are not indexed by RAG." />
                     ) : (
                       <div className="space-y-3">
+                        {hasMoreMessages && (
+                          <div className="flex justify-center">
+                            <button
+                              type="button"
+                              onClick={loadOlderMessages}
+                              disabled={loadingOlder}
+                              className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm ring-1 ring-slate-200 disabled:opacity-60"
+                            >
+                              {loadingOlder ? 'Loading...' : 'Load earlier messages'}
+                            </button>
+                          </div>
+                        )}
                         {messages.map((message) => {
                           const mine = message.sender?.id === currentUser?.id;
                           return (
-                            <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                            <div key={message.id} className={`group flex ${mine ? 'justify-end' : 'justify-start'}`}>
                               <div className={`max-w-[82%] rounded-lg px-3 py-2 shadow-sm ring-1 ${
                                 mine
-                                  ? 'bg-slate-950 text-white ring-slate-950'
+                                  ? 'bg-emerald-700 text-white ring-emerald-700'
                                   : 'bg-white text-slate-900 ring-slate-200'
                               }`}
                               >
@@ -535,7 +696,25 @@ export default function SecureMessengerWidget() {
                                   <span className={`text-[10px] ${mine ? 'text-slate-400' : 'text-slate-400'}`}>
                                     {formatTime(message.created_at)}
                                   </span>
+                                  {message.is_pinned && <Pin size={11} className={mine ? 'text-emerald-100' : 'text-amber-600'} />}
+                                  {message.edited_at && (
+                                    <span className={`text-[10px] ${mine ? 'text-emerald-100' : 'text-slate-400'}`}>edited</span>
+                                  )}
                                 </div>
+                                {message.reply_to && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setReplyTo(message.reply_to)}
+                                    className={`mb-2 block w-full rounded border-l-2 px-2 py-1 text-left text-xs ${
+                                      mine
+                                        ? 'border-white/50 bg-white/10 text-emerald-50'
+                                        : 'border-emerald-400 bg-slate-50 text-slate-600'
+                                    }`}
+                                  >
+                                    <span className="block font-bold">{message.reply_to.sender_name}</span>
+                                    <span className="block truncate">{message.reply_to.content}</span>
+                                  </button>
+                                )}
                                 <p className="whitespace-pre-wrap break-words text-sm leading-5">{message.content}</p>
                                 {message.attachments?.length > 0 && (
                                   <div className="mt-2 space-y-1.5">
@@ -563,11 +742,48 @@ export default function SecureMessengerWidget() {
                                     })}
                                   </div>
                                 )}
-                                {mine && (
-                                  <div className="mt-1 flex justify-end text-slate-400">
-                                    <CheckCheck size={13} />
-                                  </div>
-                                )}
+                                <div className={`mt-1 flex items-center justify-end gap-2 ${mine ? 'text-emerald-100' : 'text-slate-400'}`}>
+                                  <button
+                                    type="button"
+                                    aria-label="Reply"
+                                    onClick={() => {
+                                      setEditingMessage(null);
+                                      setReplyTo(message);
+                                    }}
+                                    className="rounded p-0.5 opacity-70 hover:bg-black/10 hover:opacity-100"
+                                  >
+                                    <CornerUpLeft size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label={message.is_pinned ? 'Unpin' : 'Pin'}
+                                    onClick={() => togglePin(message)}
+                                    className="rounded p-0.5 opacity-70 hover:bg-black/10 hover:opacity-100"
+                                  >
+                                    {message.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
+                                  </button>
+                                  {mine && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        aria-label="Edit"
+                                        onClick={() => startEdit(message)}
+                                        className="rounded p-0.5 opacity-70 hover:bg-black/10 hover:opacity-100"
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        aria-label="Delete"
+                                        onClick={() => deleteMessage(message)}
+                                        className="rounded p-0.5 opacity-70 hover:bg-black/10 hover:opacity-100"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                      <CheckCheck size={13} />
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -583,6 +799,23 @@ export default function SecureMessengerWidget() {
                     </div>
                   ) : (
                     <footer className="border-t border-slate-200 bg-white p-3">
+                      {(replyTo || editingMessage) && (
+                        <div className="mb-2 flex items-start gap-2 rounded border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                          {editingMessage ? <Pencil size={14} className="mt-0.5 shrink-0" /> : <CornerUpLeft size={14} className="mt-0.5 shrink-0" />}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold">{editingMessage ? 'Editing message' : `Replying to ${replyTo?.sender?.name || replyTo?.sender_name || 'message'}`}</p>
+                            <p className="truncate">{editingMessage?.content || replyTo?.content}</p>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label="Cancel reply or edit"
+                            onClick={cancelComposerContext}
+                            className="rounded p-1 text-emerald-800 hover:bg-emerald-100"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      )}
                       {selectedFile && (
                         <div className="mb-2 flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                           <Paperclip size={14} />
@@ -611,7 +844,8 @@ export default function SecureMessengerWidget() {
                           type="button"
                           aria-label="Attach file"
                           onClick={() => fileInputRef.current?.click()}
-                          className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+                          disabled={Boolean(editingMessage)}
+                          className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <Paperclip size={18} />
                         </button>
@@ -625,15 +859,15 @@ export default function SecureMessengerWidget() {
                             }
                           }}
                           rows={1}
-                          placeholder={selectedFile ? 'Add a caption' : 'Message'}
-                          className="max-h-28 min-h-10 flex-1 resize-none rounded border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                          placeholder={editingMessage ? 'Edit message' : selectedFile ? 'Add a caption' : 'Message'}
+                          className="max-h-28 min-h-10 flex-1 resize-none rounded-full border border-slate-200 px-4 py-2 text-sm outline-none focus:border-emerald-500"
                         />
                         <button
                           type="button"
                           aria-label="Send message"
                           onClick={handleSend}
                           disabled={sending || (!composerText.trim() && !selectedFile)}
-                          className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded bg-slate-950 text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                          className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                         >
                           {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                         </button>

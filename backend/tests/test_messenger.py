@@ -187,6 +187,113 @@ def test_messenger_custom_group_send_and_unread_count():
     assert unread_response.json()["unread_count"] == 1
 
 
+def test_messenger_reply_edit_pin_search_and_cursor_loading():
+    owner_token = get_token("ops@test.local")
+    member_token = get_token("credit@test.local")
+    credit_id = user_id("credit@test.local")
+    conversation_id = create_direct_conversation(owner_token, credit_id)
+
+    first = client.post(
+        f"/api/messenger/conversations/{conversation_id}/messages",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"content": "Please check the cash counter closing report."},
+    )
+    assert first.status_code == 200
+    first_message_id = first.json()["id"]
+
+    reply = client.post(
+        f"/api/messenger/conversations/{conversation_id}/messages",
+        headers={"Authorization": f"Bearer {member_token}"},
+        json={
+            "content": "Reviewed. @ops please attach the branch voucher.",
+            "reply_to_message_id": first_message_id,
+        },
+    )
+    assert reply.status_code == 200
+    reply_payload = reply.json()
+    assert reply_payload["reply_to"]["id"] == first_message_id
+    assert reply_payload["reply_to"]["content"].startswith("Please check")
+
+    edit = client.patch(
+        f"/api/messenger/messages/{reply_payload['id']}",
+        headers={"Authorization": f"Bearer {member_token}"},
+        json={"content": "Reviewed. @ops please attach the signed branch voucher."},
+    )
+    assert edit.status_code == 200
+    assert edit.json()["status"] == "edited"
+    assert edit.json()["edited_at"] is not None
+
+    pin = client.post(
+        f"/api/messenger/messages/{first_message_id}/pin",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert pin.status_code == 200
+    assert pin.json()["is_pinned"] is True
+
+    bootstrap = client.get(
+        "/api/messenger/bootstrap",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    conversation = next(item for item in bootstrap.json()["conversations"] if item["id"] == conversation_id)
+    assert conversation["pinned_messages"][0]["id"] == first_message_id
+
+    search = client.get(
+        f"/api/messenger/conversations/{conversation_id}/messages-page?q=voucher",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert search.status_code == 200
+    assert len(search.json()["messages"]) == 1
+    assert search.json()["messages"][0]["mentions_current_user"] is True
+
+    page = client.get(
+        f"/api/messenger/conversations/{conversation_id}/messages-page?limit=1",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert page.status_code == 200
+    page_payload = page.json()
+    assert page_payload["has_more"] is True
+    assert page_payload["next_before_id"] is not None
+    assert len(page_payload["messages"]) == 1
+
+
+def test_messenger_delete_is_limited_to_sender_or_admin():
+    owner_token = get_token("ops@test.local")
+    member_token = get_token("credit@test.local")
+    admin_token = get_token("admin@test.local")
+    conversation_id = create_direct_conversation(owner_token, user_id("credit@test.local"))
+
+    sent = client.post(
+        f"/api/messenger/conversations/{conversation_id}/messages",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"content": "Wrong branch report."},
+    )
+    message_id = sent.json()["id"]
+
+    denied = client.delete(
+        f"/api/messenger/messages/{message_id}",
+        headers={"Authorization": f"Bearer {member_token}"},
+    )
+    assert denied.status_code == 403
+
+    deleted = client.delete(
+        f"/api/messenger/messages/{message_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert deleted.status_code == 404
+
+    own_delete = client.delete(
+        f"/api/messenger/messages/{message_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert own_delete.status_code == 200
+
+    messages = client.get(
+        f"/api/messenger/conversations/{conversation_id}/messages",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert messages.json() == []
+
+
 def test_messenger_blocks_cross_bank_group_members():
     owner_token = get_token("ops@test.local")
     other_bank_user_id = user_id("other@test.local")

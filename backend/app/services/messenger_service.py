@@ -150,7 +150,48 @@ def _attachment_response(attachment: MessengerAttachment) -> Dict:
     }
 
 
-def _message_response(db: Session, message: MessengerMessage) -> Dict:
+def _message_mentions_user(message: MessengerMessage, user: User | None) -> bool:
+    if not user:
+        return False
+    content = (message.content or "").lower()
+    if not content:
+        return False
+    mention_tokens = {
+        f"@{part.lower()}"
+        for part in (user.name or "").split()
+        if len(part.strip()) >= 2
+    }
+    if user.email:
+        mention_tokens.add(f"@{user.email.split('@')[0].lower()}")
+    return any(token in content for token in mention_tokens)
+
+
+def _reply_preview(db: Session, message: MessengerMessage) -> Dict | None:
+    if not message.reply_to_message_id:
+        return None
+    replied = db.get(MessengerMessage, message.reply_to_message_id)
+    if not replied or replied.deleted_at is not None:
+        return None
+    sender = db.get(User, replied.sender_id)
+    return {
+        "id": replied.id,
+        "sender_name": sender.name if sender else "Unknown user",
+        "content": replied.content[:240],
+    }
+
+
+def _read_by_count(db: Session, message: MessengerMessage) -> int:
+    memberships = _memberships_for_conversation(db, message.conversation_id)
+    return sum(
+        1
+        for membership in memberships
+        if membership.user_id != message.sender_id
+        and membership.last_read_message_id is not None
+        and membership.last_read_message_id >= (message.id or 0)
+    )
+
+
+def _message_response(db: Session, message: MessengerMessage, current_user: User | None = None) -> Dict:
     sender = db.get(User, message.sender_id)
     attachments = _attachments_for_message(db, message.id)
     return {
@@ -163,9 +204,17 @@ def _message_response(db: Session, message: MessengerMessage) -> Dict:
             "role": "unknown",
             "department": None,
         },
+        "reply_to_message_id": message.reply_to_message_id,
+        "reply_to": _reply_preview(db, message),
         "content": message.content,
         "status": message.status,
         "created_at": message.created_at,
+        "edited_at": message.edited_at,
+        "pinned_at": message.pinned_at,
+        "pinned_by": message.pinned_by,
+        "is_pinned": message.pinned_at is not None,
+        "read_by_count": _read_by_count(db, message),
+        "mentions_current_user": _message_mentions_user(message, current_user),
         "attachments": [_attachment_response(attachment) for attachment in attachments],
     }
 
@@ -177,6 +226,18 @@ def _last_message(db: Session, conversation_id: int) -> Optional[MessengerMessag
         .where(MessengerMessage.deleted_at.is_(None))
         .order_by(MessengerMessage.id.desc())
     ).first()
+
+
+def _pinned_messages(db: Session, conversation_id: int, current_user: User) -> List[Dict]:
+    messages = db.exec(
+        select(MessengerMessage)
+        .where(MessengerMessage.conversation_id == conversation_id)
+        .where(MessengerMessage.deleted_at.is_(None))
+        .where(MessengerMessage.pinned_at.is_not(None))
+        .order_by(MessengerMessage.pinned_at.desc())
+        .limit(3)
+    ).all()
+    return [_message_response(db, message, current_user) for message in messages]
 
 
 def _unread_count_for_membership(db: Session, membership: MessengerMembership) -> int:
@@ -233,7 +294,8 @@ def conversation_response(db: Session, conversation: MessengerConversation, curr
             for membership in memberships
             if membership.user_id in user_map
         ],
-        "last_message": _message_response(db, last) if last else None,
+        "last_message": _message_response(db, last, current_user) if last else None,
+        "pinned_messages": _pinned_messages(db, conversation.id, current_user),
         "unread_count": _unread_count_for_membership(db, current_membership)
         if current_membership else 0,
         "created_at": conversation.created_at,
@@ -548,16 +610,52 @@ def list_messages(
     current_user: User,
     conversation_id: int,
     limit: int = 100,
+    before_id: int | None = None,
+    query: str | None = None,
 ) -> List[Dict]:
+    return list_messages_page(
+        db,
+        current_user,
+        conversation_id,
+        limit=limit,
+        before_id=before_id,
+        query=query,
+    )["messages"]
+
+
+def list_messages_page(
+    db: Session,
+    current_user: User,
+    conversation_id: int,
+    limit: int = 50,
+    before_id: int | None = None,
+    query: str | None = None,
+) -> Dict:
     membership = require_membership(db, conversation_id, current_user)
-    messages = db.exec(
+    page_limit = min(max(limit, 1), 100)
+    statement = (
         select(MessengerMessage)
         .where(MessengerMessage.conversation_id == membership.conversation_id)
         .where(MessengerMessage.deleted_at.is_(None))
-        .order_by(MessengerMessage.created_at)
-        .limit(limit)
+    )
+    if before_id is not None:
+        statement = statement.where(MessengerMessage.id < before_id)
+    clean_query = (query or "").strip()
+    if clean_query:
+        statement = statement.where(MessengerMessage.content.ilike(f"%{clean_query}%"))
+    rows = db.exec(
+        statement
+        .order_by(MessengerMessage.id.desc())
+        .limit(page_limit + 1)
     ).all()
-    return [_message_response(db, message) for message in messages]
+    has_more = len(rows) > page_limit
+    selected = list(reversed(rows[:page_limit]))
+    next_before_id = min((message.id for message in selected if message.id is not None), default=None) if has_more else None
+    return {
+        "messages": [_message_response(db, message, current_user) for message in selected],
+        "next_before_id": next_before_id,
+        "has_more": has_more,
+    }
 
 
 def mark_conversation_read(db: Session, current_user: User, conversation_id: int) -> Dict:
@@ -571,17 +669,49 @@ def mark_conversation_read(db: Session, current_user: User, conversation_id: int
     return {"unread_count": get_total_unread_count(db, current_user)}
 
 
-def send_message(db: Session, current_user: User, conversation_id: int, content: str) -> Dict:
+def _message_in_conversation_or_404(
+    db: Session,
+    *,
+    message_id: int,
+    conversation_id: int | None = None,
+    bank_id: int,
+) -> MessengerMessage:
+    message = db.get(MessengerMessage, message_id)
+    if (
+        not message
+        or message.bank_id != bank_id
+        or message.deleted_at is not None
+        or (conversation_id is not None and message.conversation_id != conversation_id)
+    ):
+        raise HTTPException(status_code=404, detail="Message not found")
+    return message
+
+
+def send_message(
+    db: Session,
+    current_user: User,
+    conversation_id: int,
+    content: str,
+    reply_to_message_id: int | None = None,
+) -> Dict:
     bank_id = require_bank_id(current_user)
     membership = require_membership(db, conversation_id, current_user)
     conversation = _conversation_or_404(db, conversation_id, bank_id)
     if conversation.type == "announcement" and membership.role not in {"owner", "admin"}:
         raise HTTPException(status_code=403, detail="Announcement channel is read-only")
+    if reply_to_message_id is not None:
+        _message_in_conversation_or_404(
+            db,
+            message_id=reply_to_message_id,
+            conversation_id=conversation.id,
+            bank_id=bank_id,
+        )
 
     message = MessengerMessage(
         bank_id=bank_id,
         conversation_id=conversation.id,
         sender_id=current_user.id,
+        reply_to_message_id=reply_to_message_id,
         content=content,
     )
     db.add(message)
@@ -602,7 +732,100 @@ def send_message(db: Session, current_user: User, conversation_id: int, content:
         resource_id=str(message.id),
         metadata={"conversation_id": conversation.id, "conversation_type": conversation.type},
     )
-    return _message_response(db, message)
+    return _message_response(db, message, current_user)
+
+
+def edit_message(db: Session, current_user: User, message_id: int, content: str) -> Dict:
+    bank_id = require_bank_id(current_user)
+    message = _message_in_conversation_or_404(db, message_id=message_id, bank_id=bank_id)
+    require_membership(db, message.conversation_id, current_user)
+    if message.sender_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only edit your own messages")
+    message.content = content
+    message.status = "edited"
+    message.edited_at = _now()
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    log_event(
+        db,
+        bank_id=bank_id,
+        user_id=current_user.id,
+        action="message_edit",
+        resource_type="message",
+        resource_id=str(message.id),
+        metadata={"conversation_id": message.conversation_id},
+    )
+    return _message_response(db, message, current_user)
+
+
+def delete_message(db: Session, current_user: User, message_id: int) -> Dict:
+    bank_id = require_bank_id(current_user)
+    message = _message_in_conversation_or_404(db, message_id=message_id, bank_id=bank_id)
+    require_membership(db, message.conversation_id, current_user)
+    if message.sender_id != current_user.id and current_user.role not in ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages")
+    message.status = "deleted"
+    message.deleted_at = _now()
+    message.content = ""
+    db.add(message)
+    db.commit()
+    log_event(
+        db,
+        bank_id=bank_id,
+        user_id=current_user.id,
+        action="message_delete",
+        resource_type="message",
+        resource_id=str(message.id),
+        metadata={"conversation_id": message.conversation_id},
+    )
+    return {"unread_count": get_total_unread_count(db, current_user)}
+
+
+def pin_message(db: Session, current_user: User, message_id: int) -> Dict:
+    bank_id = require_bank_id(current_user)
+    message = _message_in_conversation_or_404(db, message_id=message_id, bank_id=bank_id)
+    membership = require_membership(db, message.conversation_id, current_user)
+    if membership.role == "readonly":
+        raise HTTPException(status_code=403, detail="Read-only members cannot pin messages")
+    message.pinned_at = _now()
+    message.pinned_by = current_user.id
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    log_event(
+        db,
+        bank_id=bank_id,
+        user_id=current_user.id,
+        action="message_pin",
+        resource_type="message",
+        resource_id=str(message.id),
+        metadata={"conversation_id": message.conversation_id},
+    )
+    return _message_response(db, message, current_user)
+
+
+def unpin_message(db: Session, current_user: User, message_id: int) -> Dict:
+    bank_id = require_bank_id(current_user)
+    message = _message_in_conversation_or_404(db, message_id=message_id, bank_id=bank_id)
+    membership = require_membership(db, message.conversation_id, current_user)
+    if membership.role == "readonly":
+        raise HTTPException(status_code=403, detail="Read-only members cannot unpin messages")
+    message.pinned_at = None
+    message.pinned_by = None
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    log_event(
+        db,
+        bank_id=bank_id,
+        user_id=current_user.id,
+        action="message_unpin",
+        resource_type="message",
+        resource_id=str(message.id),
+        metadata={"conversation_id": message.conversation_id},
+    )
+    return _message_response(db, message, current_user)
 
 
 def _messenger_upload_dir() -> str:
@@ -684,7 +907,7 @@ async def upload_attachment(
             "content_type": attachment.content_type,
         },
     )
-    return _message_response(db, message)
+    return _message_response(db, message, current_user)
 
 
 def get_attachment_for_member(
