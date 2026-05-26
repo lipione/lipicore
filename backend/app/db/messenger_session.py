@@ -13,6 +13,8 @@ def get_messenger_session():
 
 def init_messenger_db():
     from ..models.bank import Bank  # noqa: F401
+    from ..models.chat import ChatMessage, ChatSession  # noqa: F401
+    from ..models.document import Document, DocumentChunk  # noqa: F401
     from ..models.messenger import (  # noqa: F401
         MessengerAttachment,
         MessengerAuditEvent,

@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -34,6 +37,36 @@ def test_dedicated_messenger_entrypoint_exists_without_ai_imports():
         "chat.router",
     ]
     assert not any(term in source.lower() for term in forbidden)
+
+
+def test_dedicated_messenger_entrypoint_registers_model_relationships():
+    env = os.environ.copy()
+    env.update(
+        {
+            "JWT_SECRET": "test-secret",
+            "SUPER_ADMIN_PASSWORD": "test-password",
+            "DATABASE_URL": "sqlite://",
+            "MESSENGER_DATABASE_URL": "sqlite://",
+        }
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from sqlalchemy.orm import configure_mappers; "
+                "import app.messenger_main; "
+                "configure_mappers()"
+            ),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_compose_routes_messenger_as_separate_service():

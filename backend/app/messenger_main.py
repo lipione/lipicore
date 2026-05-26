@@ -1,6 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from .models.bank import Bank  # noqa: F401
+from .models.chat import ChatMessage, ChatSession  # noqa: F401
+from .models.document import Document, DocumentChunk  # noqa: F401
+from .models.token import RevokedToken  # noqa: F401
+from .models.user import User  # noqa: F401
 from .api import messenger
 from .core.config import settings
 from .core.context import request_ip
