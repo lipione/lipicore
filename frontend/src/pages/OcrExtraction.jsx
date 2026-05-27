@@ -46,7 +46,7 @@ function PageResult({ page }) {
             ))}
             {page.vision_transcription && (
               <span className="inline-flex rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">
-                Gemma transcription
+                LipiCore transcription
               </span>
             )}
           </div>
@@ -184,7 +184,7 @@ export default function OcrExtraction() {
                 <span className="material-symbols-outlined text-[20px] text-secondary">visibility</span>
                 <span className="min-w-0">
                   <span className="block text-sm font-bold text-slate-900">Vision Review</span>
-                  <span className="block text-xs leading-snug text-slate-500">Qwen-VL notes for PDF/image pages after OCR.</span>
+                  <span className="block text-xs leading-snug text-slate-500">LipiCore notes for PDF/image pages after OCR.</span>
                 </span>
               </span>
               <input

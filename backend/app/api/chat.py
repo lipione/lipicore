@@ -60,8 +60,8 @@ def _resolve_model_endpoint(model_name: Optional[str]) -> tuple[str, str, str]:
     Returns default (LLM_A) if model_name is None or unknown.
     """
     model_map = {
-        'gemma-4': (settings.LLM_A_API_BASE, settings.LLM_A_MODEL, settings.LLM_A_API_KEY),
-        'gemma-4-26b-4bit': (settings.LLM_C_API_BASE, settings.LLM_C_MODEL, settings.LLM_C_API_KEY),
+        'LipiFast': (settings.LLM_A_API_BASE, settings.LLM_A_MODEL, settings.LLM_A_API_KEY),
+        'LipiCore': (settings.LLM_C_API_BASE, settings.LLM_C_MODEL, settings.LLM_C_API_KEY),
     }
     if model_name in model_map:
         return model_map[model_name]
@@ -73,8 +73,7 @@ def _model_supports_vision(model_name: Optional[str]) -> bool:
     requested = (model_name or "").strip().lower()
     if not requested:
         return False
-    vision_terms = ("vision", "vl", "qwen3-vl", "qwen2.5-vl", "qwen2-vl")
-    return requested == "vision" or any(term in requested for term in vision_terms)
+    return requested in {"vision", "lipicore", "lipi core", "lipi-core", "ocr", "document_image", "image_ocr"}
 
 router = APIRouter()
 

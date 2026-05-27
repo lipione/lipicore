@@ -21,14 +21,19 @@ const DEPARTMENTS = [
 
 const MODEL_LABELS = {
   fast: {
-    label: 'Fast Model',
+    label: 'LipiFast',
     detail: 'Default staff chat and drafting route',
     icon: 'bolt',
   },
   deep: {
-    label: 'Analyst Model',
+    label: 'LipiCore',
     detail: 'Deeper analysis route for heavier prompts',
     icon: 'psychology',
+  },
+  vision: {
+    label: 'LipiCore',
+    detail: 'Document image and OCR review route',
+    icon: 'visibility',
   },
 };
 

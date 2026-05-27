@@ -79,7 +79,7 @@ Current defaults:
 - OCR fallback page cap: `OCR_MAX_PAGES=200`.
 - Legacy Nepali text-layer repair cap: `OCR_TEXT_LAYER_REPAIR_MAX_PAGES=500`.
 - Nepali PDFs with degraded embedded text layers can be repaired page-by-page with OCR when direct extraction corrupts vowel marks or common letters.
-- OCR page Vision Review is optional and uses Qwen-VL only for separate visual notes on PDFs/images, capped by `OCR_VISION_REVIEW_MAX_PAGES=3`.
+- OCR page Vision Review is optional and uses LipiCore only for separate visual notes on PDFs/images, capped by `OCR_VISION_REVIEW_MAX_PAGES=3`.
 - Ingestion/analysis job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.
 - Default worker concurrency: `INGESTION_WORKER_CONCURRENCY=1`.
 - Deep analysis context budget: `LLM_DEEP_CONTEXT_WINDOW_TOKENS`, default 8192 tokens.

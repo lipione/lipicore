@@ -219,7 +219,7 @@ def build_runtime_model_registry() -> dict[str, ModelProfile]:
     return {
         "fast": ModelProfile(
             key="fast",
-            label="Fast Staff Chat",
+            label="LipiFast",
             api_base=settings.LLM_A_API_BASE,
             model=settings.LLM_A_MODEL,
             api_key=settings.LLM_A_API_KEY,
@@ -230,7 +230,7 @@ def build_runtime_model_registry() -> dict[str, ModelProfile]:
         ),
         "deep": ModelProfile(
             key="deep",
-            label="Analyst / Approved Knowledge",
+            label="LipiCore",
             api_base=settings.LLM_C_API_BASE,
             model=settings.LLM_C_MODEL,
             api_key=settings.LLM_C_API_KEY,
@@ -241,7 +241,7 @@ def build_runtime_model_registry() -> dict[str, ModelProfile]:
         ),
         "vision": ModelProfile(
             key="vision",
-            label="Vision OCR / Document Images",
+            label="LipiCore",
             api_base=settings.LLM_VISION_API_BASE,
             model=settings.LLM_VISION_MODEL,
             api_key=settings.LLM_VISION_API_KEY,
@@ -253,13 +253,17 @@ def build_runtime_model_registry() -> dict[str, ModelProfile]:
     }
 
 
+def public_model_name(profile: ModelProfile) -> str:
+    return "LipiFast" if profile.key == "fast" else "LipiCore"
+
+
 def model_registry_snapshot() -> dict[str, dict]:
     return {
         key: {
             "key": profile.key,
             "label": profile.label,
             "api_base": profile.api_base,
-            "model": profile.model,
+            "model": public_model_name(profile),
             "max_tokens": profile.max_tokens,
             "context_window_tokens": profile.context_window_tokens,
             "timeout_seconds": profile.timeout_seconds,
@@ -295,11 +299,13 @@ def resolve_model_profile(model_name: str | None = None) -> ModelProfile:
     requested = (model_name or "").strip().lower()
     registry = build_runtime_model_registry()
     aliases = {
-        "gemma-4": "fast",
-        settings.LLM_A_MODEL.strip().lower(): "fast",
-        "gemma-4-26b-4bit": "deep",
-        "gemma-4-26b": "deep",
-        settings.LLM_C_MODEL.strip().lower(): "deep",
+        "lipifast": "fast",
+        "lipi fast": "fast",
+        "lipi-fast": "fast",
+        "lipicore": "deep",
+        "lipi core": "deep",
+        "lipi-core": "deep",
+        "core": "deep",
         "analysis": "deep",
         "analyst": "deep",
         "approved_knowledge": "deep",
@@ -313,10 +319,6 @@ def resolve_model_profile(model_name: str | None = None) -> ModelProfile:
         "document_image": "vision",
         "image_ocr": "vision",
         "ocr": "vision",
-        "qwen3-vl": "vision",
-        "qwen3-vl-8b": "vision",
-        "qwen/qwen3-vl-8b-instruct": "vision",
-        settings.LLM_VISION_MODEL.strip().lower(): "vision",
     }
     key = requested if requested in registry else aliases.get(requested, "fast")
     return registry[key]

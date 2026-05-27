@@ -75,9 +75,9 @@ function ChatExportButton({ content }) {
 const FILE_ACCEPT = '.pdf,.docx,.txt,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png';
 
 const MODEL_OPTIONS = [
-  { value: null, label: 'Auto', icon: 'auto_awesome', description: 'Backend routes to the best local vLLM tier' },
-  { value: 'gemma-4', label: 'Fast', icon: 'bolt', description: 'Gemma 4 4B on local vLLM' },
-  { value: 'gemma-4-26b-4bit', label: 'Analyst', icon: 'psychology', description: 'Gemma 4 26B on local vLLM' },
+  { value: null, label: 'Auto', icon: 'auto_awesome', description: 'LipiCore routes to the best private tier' },
+  { value: 'LipiFast', label: 'LipiFast', icon: 'bolt', description: 'Fast staff chat and drafting' },
+  { value: 'LipiCore', label: 'LipiCore', icon: 'psychology', description: 'Deeper analysis, policy answers, and document work' },
 ];
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ function isCapacityErrorText(text) {
 
 function formatCapacityFailure(text) {
   if (String(text || '').includes('returned error')) {
-    return '**AI capacity error.** The local model returned an error while generating the answer. Please retry, or choose the Fast model if the Analyst model is busy.';
+    return '**AI capacity error.** LipiCore returned an error while generating the answer. Please retry, or choose LipiFast if LipiCore is busy.';
   }
   if (String(text || '').includes('Error connecting')) {
     return '**AI connection error.** BankAi could not reach the local model worker. Please retry shortly.';

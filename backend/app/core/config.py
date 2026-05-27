@@ -70,24 +70,24 @@ class Settings(BaseSettings):
     MESSENGER_UPLOAD_DIR: str = os.getenv("MESSENGER_UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_messenger_uploads"))
 
     # vLLM backends — each backend can serve one or more models
-    # LLM_A (vllm-b): LipiLLM fast inference
+    # LipiFast route: fast staff responses
     LLM_A_API_BASE: str = os.getenv("LLM_A_API_BASE", "http://localhost:8001")
-    LLM_A_MODEL: str = os.getenv("LLM_A_MODEL", "model-a")
+    LLM_A_MODEL: str = os.getenv("LLM_A_MODEL", "LipiFast")
     LLM_A_API_KEY: str = os.getenv("LLM_A_API_KEY", "no-key")
 
-    # LLM_B (vllm-b): LipiLLM (same as A for now)
+    # LipiFast secondary route: summary, translation, drafting
     LLM_B_API_BASE: str = os.getenv("LLM_B_API_BASE", "http://localhost:8002")
-    LLM_B_MODEL: str = os.getenv("LLM_B_MODEL", "model-b")
+    LLM_B_MODEL: str = os.getenv("LLM_B_MODEL", "LipiFast")
     LLM_B_API_KEY: str = os.getenv("LLM_B_API_KEY", "no-key")
 
-    # LLM_C (vllm-c): Gemma-4 26B for deeper analysis
+    # LipiCore route: deeper analysis and approved-knowledge work
     LLM_C_API_BASE: str = os.getenv("LLM_C_API_BASE", "http://localhost:8003")
-    LLM_C_MODEL: str = os.getenv("LLM_C_MODEL", "gemma-4-26b-4bit")
+    LLM_C_MODEL: str = os.getenv("LLM_C_MODEL", "LipiCore")
     LLM_C_API_KEY: str = os.getenv("LLM_C_API_KEY", "no-key")
 
-    # Vision model endpoint for scanned PDFs, document images, and OCR fallback
+    # LipiCore-compatible endpoint for document images and OCR review notes
     LLM_VISION_API_BASE: str = os.getenv("LLM_VISION_API_BASE", "http://localhost:8007")
-    LLM_VISION_MODEL: str = os.getenv("LLM_VISION_MODEL", "Qwen/Qwen3-VL-8B-Instruct")
+    LLM_VISION_MODEL: str = os.getenv("LLM_VISION_MODEL") or os.getenv("LLM_C_MODEL", "LipiCore")
     LLM_VISION_API_KEY: str = os.getenv("LLM_VISION_API_KEY", "no-key")
 
     LLM_A_MAX_CONCURRENCY: int = int(os.getenv("LLM_A_MAX_CONCURRENCY", "12"))
@@ -105,14 +105,14 @@ class Settings(BaseSettings):
     LLM_DEEP_CONTEXT_WINDOW_TOKENS: int = int(os.getenv("LLM_DEEP_CONTEXT_WINDOW_TOKENS", os.getenv("LLM_CONTEXT_WINDOW_TOKENS", "8192")))
     LLM_VISION_CONTEXT_WINDOW_TOKENS: int = int(os.getenv("LLM_VISION_CONTEXT_WINDOW_TOKENS", os.getenv("LLM_CONTEXT_WINDOW_TOKENS", "8192")))
 
-    # LLM_D (vllm-d): Qwen3.6 27B for report generation
+    # Optional report-generation route for future capacity work
     LLM_D_API_BASE: str = os.getenv("LLM_D_API_BASE", "http://localhost:8004")
     LLM_D_MODEL: str = os.getenv("LLM_D_MODEL", "qwen3.6-27b-4bit")
     LLM_D_API_KEY: str = os.getenv("LLM_D_API_KEY", "no-key")
 
     # Legacy single-LLM fields kept for backward compat (points to A by default)
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "vllm")
-    LLM_MODEL: str = os.getenv("LLM_MODEL") or os.getenv("LLM_A_MODEL", "model-a")
+    LLM_MODEL: str = os.getenv("LLM_MODEL") or os.getenv("LLM_A_MODEL", "LipiFast")
     LLM_API_BASE: str = os.getenv("LLM_API_BASE") or os.getenv("LLM_A_API_BASE", "http://localhost:8001")
     LLM_API_KEY: str = os.getenv("LLM_API_KEY") or os.getenv("LLM_A_API_KEY", "no-key")
 

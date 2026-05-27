@@ -25,10 +25,11 @@ def test_chat_request_rejects_unknown_mode():
         ChatRequest(message="Draft a memo", mode="department_bot")
 
 
-def test_qwen3_vl_is_recognized_as_vision_capable():
-    assert _model_supports_vision("Qwen/Qwen3-VL-8B-Instruct") is True
+def test_public_lipicore_alias_is_recognized_as_vision_capable():
+    assert _model_supports_vision("LipiCore") is True
     assert _model_supports_vision("vision") is True
-    assert _model_supports_vision("gemma-4-26b-4bit") is False
+    assert _model_supports_vision("LipiFast") is False
+    assert _model_supports_vision("legacy-vendor-image-route") is False
 
 
 def test_chat_context_window_defaults_to_8k():

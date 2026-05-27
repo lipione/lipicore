@@ -6,7 +6,7 @@ This document defines conservative deployment tiers. These are capacity targets,
 
 - Backend API: uvicorn with `WEB_CONCURRENCY`, default `2` workers.
 - Ingestion worker: Redis/RQ queue with `INGESTION_WORKER_CONCURRENCY`, default `1`.
-- Current production text route: `LLM_A`, `LLM_B`, and `LLM_C` all share the Gemma 4 26B endpoint, so effective capacity is bounded by one text GPU.
+- Current production text route: `LLM_A`, `LLM_B`, and `LLM_C` all share the LipiCore endpoint, so effective capacity is bounded by one text GPU.
 - Repository capacity profile: fast model route `LLM_A_MAX_CONCURRENCY=12` and deep model route `LLM_C_MAX_CONCURRENCY=4` may be used only when separate endpoints are actually running.
 - Per-user model limit: staff `1`, admin `2`.
 - Model queue timeout: `LLM_QUEUE_TIMEOUT_SECONDS=120`; stale queue tokens are pruned after `LLM_QUEUE_STALE_SECONDS=10`.

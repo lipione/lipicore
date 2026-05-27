@@ -1,9 +1,8 @@
 """
 LLM service — OpenAI-compatible vLLM endpoints.
 
-LLM A: fast staff chat and general tasks
-LLM C: analyst / approved-knowledge work through the gateway
-LLM Vision: scanned PDFs, document images, and OCR fallback
+LipiFast: fast staff chat and general tasks
+LipiCore: analyst, approved-knowledge, document image, and handwriting fallback work
 
 All are called via the same OpenAI-compatible interface so swapping models
 requires only .env changes.
@@ -66,7 +65,7 @@ def call_llm(prompt: str, system: str | None = None) -> str:
 
 
 def call_vision_llm(prompt: str, image_b64: str) -> str:
-    """Vision call via the configured vision model endpoint."""
+    """Document-image call via the configured LipiCore endpoint."""
     profile = resolve_model_profile("vision")
     url = f"{profile.api_base}/v1/chat/completions"
     headers = {"Authorization": f"Bearer {profile.api_key}"}
@@ -87,8 +86,8 @@ def call_vision_llm(prompt: str, image_b64: str) -> str:
         return f"Failed to analyze image. ({e})"
 
 
-def call_gemma_vision_llm(prompt: str, image_b64: str) -> str:
-    """Gemma image call for low-confidence handwriting transcription."""
+def call_lipicore_vision_llm(prompt: str, image_b64: str) -> str:
+    """LipiCore image call for low-confidence handwriting transcription."""
     profile = resolve_model_profile("deep")
     url = f"{profile.api_base}/v1/chat/completions"
     headers = {"Authorization": f"Bearer {profile.api_key}"}
@@ -109,9 +108,9 @@ def call_gemma_vision_llm(prompt: str, image_b64: str) -> str:
         return f"Failed to transcribe image. ({e})"
 
 
-def call_gemma_vision_file(prompt: str, image_path: str) -> str:
+def call_lipicore_vision_file(prompt: str, image_path: str) -> str:
     with open(image_path, "rb") as image_file:
-        return call_gemma_vision_llm(prompt, base64.b64encode(image_file.read()).decode("utf-8"))
+        return call_lipicore_vision_llm(prompt, base64.b64encode(image_file.read()).decode("utf-8"))
 
 
 # ── Async (request-path handlers) ────────────────────────────────────────────

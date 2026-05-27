@@ -22,18 +22,17 @@ The current deployment runs as a private Docker Compose stack with FastAPI, Reac
 - `qdrant`: Vector search.
 - `redis`: Model admission control and document ingestion queue.
 - `minio`: Object storage for uploaded documents.
-- `vllm-c`: Local OpenAI-compatible text/analyst model server. The current production server routes all text lanes to this endpoint.
-- `vllm-vision`: Optional OpenAI-compatible vision/image endpoint for Qwen3-VL on the current production server. OCR text extraction uses open-source Tesseract in the backend container.
-- `vllm-b`: Optional fast text endpoint in the repository compose profile, not active on the current production server.
+- `vllm-c`: Local OpenAI-compatible LipiCore server. The current production server routes all text lanes to this endpoint.
+- `vllm-vision`: Optional OpenAI-compatible LipiCore document-image endpoint. OCR text extraction uses open-source Tesseract in the backend container.
+- `vllm-b`: Optional LipiFast endpoint in the repository compose profile, not active on the current production server.
 
 ## Current Remote Production Profile
 
 The live `/data/bankai` deployment preserves production-specific compose and
 environment files:
 
-- `LLM_A`, `LLM_B`, and `LLM_C` route to `lipicore-vllm-c` /
-  `gemma-4-26b-4bit`.
-- Vision/image routes can use `lipicore-vllm-vision` / `qwen3-vl-8b`; OCR extraction uses Tesseract and does not require the vision model for normal scanned-page text extraction.
+- `LLM_A`, `LLM_B`, and `LLM_C` route to the LipiCore endpoint on the current production profile.
+- Document-image routes can use the optional LipiCore image endpoint; OCR extraction uses Tesseract and does not require the image route for normal scanned-page text extraction.
 - `lipicore-vllm-b` is not running.
 - App upgrades should recreate only app services with `--no-deps` unless a
   maintenance window explicitly includes GPU model restarts.

@@ -1,4 +1,4 @@
-// Model modes map to vLLM-served model names on the backend
+// Model modes map to private Lipi model routes on the backend
 export const MODEL_MODES = [
   {
     id: 'auto',
@@ -10,26 +10,26 @@ export const MODEL_MODES = [
   },
   {
     id: 'fast',
-    label: 'Fast',
+    label: 'LipiFast',
     icon: 'bolt',
-    model: 'gemma-4',
-    description: 'Gemma 4 4B — fast responses on GPU 0',
+    model: 'LipiFast',
+    description: 'Fast staff chat and drafting',
     badge: 'DEFAULT',
   },
   {
     id: 'analyst',
-    label: 'Analyst',
+    label: 'LipiCore',
     icon: 'psychology',
-    model: 'gemma-4-26b-4bit',
-    description: 'Gemma 4 26B — deep reasoning for complex queries',
+    model: 'LipiCore',
+    description: 'Deeper analysis and approved-knowledge work',
     badge: 'ON-DEMAND',
   },
   {
     id: 'report',
     label: 'Report',
     icon: 'article',
-    model: 'gemma-4-26b-4bit',
-    description: 'Gemma 4 26B — long-form drafting and reports',
+    model: 'LipiCore',
+    description: 'LipiCore long-form drafting and reports',
     badge: 'ON-DEMAND',
   },
 ];

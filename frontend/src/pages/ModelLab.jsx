@@ -37,9 +37,9 @@ function benchmarkForModel(model, benchmarks) {
   const match = entries.find(([name]) => {
     const normalized = name.toLowerCase();
     if (normalized.includes(key)) return true;
-    if (key === 'fast') return normalized.includes('fast') || normalized.includes('e4b');
-    if (key === 'deep') return normalized.includes('deep') || normalized.includes('26b');
-    if (key === 'vision') return normalized.includes('vision') || normalized.includes('vl');
+    if (key === 'fast') return normalized.includes('fast') || normalized.includes('lipifast');
+    if (key === 'deep') return normalized.includes('deep') || normalized.includes('lipicore');
+    if (key === 'vision') return normalized.includes('vision') || normalized.includes('lipicore');
     return modelName && normalized.includes(modelName.split('/').pop());
   });
   return match?.[1] || null;
@@ -148,7 +148,7 @@ export default function ModelLab() {
           <p className="text-xs font-bold uppercase text-slate-400">Current upgrade</p>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">Model Lab</h1>
           <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-            Runtime capacity, benchmark evidence, and candidate models for staff chat, approved knowledge, long context, embeddings, reranking, and vision/image analysis.
+            Runtime capacity, benchmark evidence, and candidate routes for staff chat, approved knowledge, long context, embeddings, reranking, and document-image analysis.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

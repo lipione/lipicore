@@ -23,7 +23,7 @@
 - Detailed workflow reference: `docs/long-document-analysis.md`.
 - The visible product surface now emphasizes OCR Extraction, Compliance Workspace, Model Lab, RAG Evaluation, and queued long-document analysis.
 - Fast and analyst model routes now have separate context-window settings: `LLM_FAST_CONTEXT_WINDOW_TOKENS` and `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
-- Current production routes all text lanes to the Gemma 4 26B endpoint. OCR extraction uses open-source Tesseract plus direct parsers by default; Qwen3-VL remains available for separate vision/image analysis where enabled. The optional fast text endpoint is disabled until GPU capacity is rebalanced.
+- Current production routes all text lanes through LipiCore. OCR extraction uses open-source Tesseract plus direct parsers by default; LipiCore remains available for separate document-image analysis where enabled. The optional LipiFast endpoint is disabled until GPU capacity is rebalanced.
 - HA deployment reference under `deploy/ha`.
 - Docker Compose health checks cover Redis, backend, frontend, and nginx.
 - `deploy/upgrade.sh` provides health-gated upgrades, optional backend tests, internal health checks, and public health checks.

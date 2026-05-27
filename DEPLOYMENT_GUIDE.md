@@ -36,8 +36,9 @@ nginx 80/443
         +-- vLLM vision/OCR model route where enabled
 ```
 
-The current production deployment uses clean Gemma 4 for text, Qwen3-VL for
-vision/OCR, no LoRA adapters, and no Ollama service.
+The current production deployment exposes private model routes as LipiFast and
+LipiCore, uses open-source OCR for text extraction, no LoRA adapters, and no
+Ollama service.
 
 ## Current Remote Production Profile
 
@@ -46,9 +47,9 @@ production override:
 
 - `LLM_A_API_BASE`, `LLM_B_API_BASE`, and `LLM_C_API_BASE` all point to
   `http://lipicore-vllm-c:8000`.
-- `LLM_A_MODEL`, `LLM_B_MODEL`, and `LLM_C_MODEL` all use
-  `gemma-4-26b-4bit`.
-- Vision/OCR uses `http://lipicore-vllm-vision:8000` with `qwen3-vl-8b`.
+- `LLM_A_MODEL`, `LLM_B_MODEL`, and `LLM_C_MODEL` are presented to users as
+  LipiCore on the current production profile.
+- Document-image review uses a LipiCore-compatible route where enabled.
 - `lipicore-vllm-b` is not running on the current server profile.
 
 Preserve the production `docker-compose.yml`, `.env`, nginx config, TLS
@@ -61,9 +62,9 @@ directories, and running GPU containers during app-only deployments.
 3. SSH is restricted to the operator port or private network.
 4. `/data/bankai` exists and is owned by the deployment user.
 5. Required model directories exist on the host for the selected profile:
-   - `/data/models/llm/gemma-4-26b-a4b-awq-4bit`
-   - Qwen3-VL weights or cache for the configured vision endpoint
-   - `/data/models/llm/gemma-4-E4B-it` only if the fast 4B route is enabled
+   - LipiCore model files for the selected deep route
+   - LipiCore-compatible model files for the configured document-image route, if enabled
+   - LipiFast model files only if the fast route is enabled
 6. `.env` contains production secrets and public origins.
 
 ## Installation
@@ -112,8 +113,8 @@ Current production text route:
 
 ```text
 Container: lipicore-vllm-c
-Served name: gemma-4-26b-4bit
-Model path: /data/models/llm/gemma-4-26b-a4b-awq-4bit
+Served name: LipiCore
+Model path: deployment-specific LipiCore model directory
 GPU: 1
 External debug port: 8003
 Routes: LLM_A, LLM_B, LLM_C
@@ -123,7 +124,7 @@ Current production vision/OCR route:
 
 ```text
 Container: lipicore-vllm-vision
-Served name: qwen3-vl-8b
+Served name: LipiCore
 GPU: 0
 External debug port: 8007
 ```
@@ -132,8 +133,8 @@ Optional fast tier for future capacity work:
 
 ```text
 Container: lipicore-vllm-b
-Served name: gemma-4
-Model path: /data/models/llm/gemma-4-E4B-it
+Served name: LipiFast
+Model path: deployment-specific LipiFast model directory
 External debug port: 8002
 Status on current production server: not running
 ```
@@ -452,7 +453,7 @@ docker compose ps
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.4 | 2026-05-23 | Current production profile, app-only deployment guidance, text route consolidation on `vllm-c`, Qwen3-VL vision endpoint, and GPU restart guardrails |
+| 1.4 | 2026-05-23 | Current production profile, app-only deployment guidance, LipiCore route consolidation on `vllm-c`, document-image route guidance, and GPU restart guardrails |
 | 1.3 | 2026-05-21 | Queued long-document analysis for heavy OCR/PDF/XLS jobs, stored results, role-scoped job access, and worker/analyst-model operating guidance |
 | 1.2 | 2026-05-19 | Redis/RQ ingestion worker, document lifecycle and chunk permissions, reranking, citation verification, Evaluation Center, source evidence UI, health-gated upgrades |
 | 1.1 | 2026-05-07 | vLLM two-GPU runtime, Redis admission control, Let's Encrypt HTTPS |

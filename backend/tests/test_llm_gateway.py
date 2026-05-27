@@ -7,7 +7,12 @@ def test_model_registry_snapshot_exposes_capabilities():
     assert snapshot["fast"]["capabilities"] == ["fast_chat", "staff_drafting"]
     assert "analyst" in snapshot["deep"]["capabilities"]
     assert "vision_ocr" in snapshot["vision"]["capabilities"]
-    assert snapshot["vision"]["model"] == "Qwen/Qwen3-VL-8B-Instruct"
+    assert snapshot["fast"]["label"] == "LipiFast"
+    assert snapshot["fast"]["model"] == "LipiFast"
+    assert snapshot["deep"]["label"] == "LipiCore"
+    assert snapshot["deep"]["model"] == "LipiCore"
+    assert snapshot["vision"]["label"] == "LipiCore"
+    assert snapshot["vision"]["model"] == "LipiCore"
     assert snapshot["fast"]["enabled"] is True
     assert snapshot["fast"]["context_window_tokens"] >= 8192
     assert snapshot["deep"]["context_window_tokens"] >= snapshot["fast"]["context_window_tokens"]
@@ -24,7 +29,8 @@ def test_route_policy_sends_high_risk_workflows_to_deep_model():
 
 def test_resolve_model_profile_accepts_registry_key_and_alias():
     assert resolve_model_profile("fast").key == "fast"
+    assert resolve_model_profile("LipiFast").key == "fast"
     assert resolve_model_profile("analyst").key == "deep"
-    assert resolve_model_profile("qwen3-vl").key == "vision"
-    assert resolve_model_profile("Qwen/Qwen3-VL-8B-Instruct").key == "vision"
+    assert resolve_model_profile("LipiCore").key == "deep"
+    assert resolve_model_profile("legacy-vendor-image-route").key == "fast"
     assert resolve_model_profile("approved_knowledge").context_window_tokens >= 8192

@@ -3,8 +3,8 @@
   "policy": "Curated model matrix for LipiCore bank-appliance testing. Do not download every model blindly; run remote inventory first, confirm GPU memory and disk budget, then test one tier at a time.",
   "candidates": [
     {
-      "key": "current-gemma-4-e4b",
-      "model_id": "/data/models/llm/gemma-4-E4B-it",
+      "key": "current-lipifast",
+      "model_id": "LipiFast",
       "tier": "fast_chat",
       "runtime_priority": ["vllm"],
       "min_vram_gb_estimate": 8,
@@ -13,8 +13,8 @@
       "risk_notes": "Only useful if current server model path exists and vLLM starts cleanly."
     },
     {
-      "key": "current-gemma-4-26b-awq",
-      "model_id": "/data/models/llm/gemma-4-26b-a4b-awq-4bit",
+      "key": "current-lipicore",
+      "model_id": "LipiCore",
       "tier": "analyst",
       "runtime_priority": ["vllm"],
       "min_vram_gb_estimate": 24,
@@ -43,18 +43,18 @@
       "risk_notes": "FP8 runtime support and quality must be validated on the exact GPU and driver."
     },
     {
-      "key": "gemma-3-27b-it",
-      "model_id": "google/gemma-3-27b-it",
+      "key": "approved-analyst-27b-candidate",
+      "model_id": "Approved analyst 27B candidate",
       "tier": "analyst",
       "runtime_priority": ["vllm"],
       "min_vram_gb_estimate": 32,
       "context_tokens_claim": 131072,
-      "test_reason": "Google official docs list Gemma 3 27B with 128K input; useful analyst comparison against current Gemma tier.",
+      "test_reason": "Useful analyst comparison against the current LipiCore tier.",
       "risk_notes": "License, model availability, and exact runtime support must be checked before bank packaging."
     },
     {
-      "key": "gemma-3-12b-it",
-      "model_id": "google/gemma-3-12b-it",
+      "key": "approved-fast-12b-candidate",
+      "model_id": "Approved fast 12B candidate",
       "tier": "fast_chat",
       "runtime_priority": ["vllm"],
       "min_vram_gb_estimate": 16,
@@ -73,24 +73,24 @@
       "risk_notes": "Exact public model identifier and deployment terms must be verified before download."
     },
     {
-      "key": "qwen3-vl-8b-instruct",
-      "model_id": "Qwen/Qwen3-VL-8B-Instruct",
+      "key": "lipicore-document-image",
+      "model_id": "LipiCore",
       "tier": "vision",
       "runtime_priority": ["vllm"],
       "min_vram_gb_estimate": 16,
       "context_tokens_claim": 8192,
-      "test_reason": "Primary LipiCore vision/OCR route for scanned PDFs, document images, table screenshots, and stamp/signature-like detection.",
+      "test_reason": "Primary LipiCore document-image route for scanned PDFs, document images, table screenshots, and stamp/signature-like detection.",
       "risk_notes": "Must pass OCR/table/Nepali document image benchmarks before bank-facing scanned-document claims."
     },
     {
-      "key": "qwen2-5-vl-7b-instruct",
-      "model_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "key": "alternate-document-image-route",
+      "model_id": "Approved document-image candidate",
       "tier": "vision",
       "runtime_priority": ["vllm"],
       "min_vram_gb_estimate": 16,
       "context_tokens_claim": 8192,
-      "test_reason": "Fallback vision/OCR route if Qwen3-VL 8B has runtime or quality issues on the target server.",
-      "risk_notes": "Older model; benchmark against Qwen3-VL before selecting for bank deployment."
+      "test_reason": "Fallback document-image route if the primary LipiCore image route has runtime or quality issues on the target server.",
+      "risk_notes": "Benchmark against LipiCore before selecting for bank deployment."
     },
     {
       "key": "llama-4-scout",

@@ -71,7 +71,7 @@ def _warnings_for_pages(pages: list[dict], full_text: str) -> list[str]:
     if any((page.get("ocr_confidence") or 1.0) < 0.75 for page in pages):
         warnings.append("OCR confidence is low on one or more pages; staff review is required before high-risk use.")
     if any(page.get("vision_transcription") for page in pages):
-        warnings.append("Low-confidence image OCR was replaced with local Gemma vision handwriting transcription; staff review is required before high-risk use.")
+        warnings.append("Low-confidence image OCR was replaced with LipiCore handwriting transcription; staff review is required before high-risk use.")
     if any((page.get("table_confidence") or 1.0) < 0.75 for page in pages):
         warnings.append("Table extraction confidence is low on one or more pages.")
     return warnings

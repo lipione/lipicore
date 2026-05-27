@@ -16,7 +16,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 ## Core Capabilities
 
 - Staff chat with streaming responses, conversation history, and selected-document context.
-- Local vLLM model routes for text/analyst work and separate vision-capable analysis. OCR extraction uses open-source Tesseract plus direct document parsers by default. The current production server routes all text lanes to Gemma 4 26B 4-bit and keeps the fast 4B lane disabled until GPU capacity is rebalanced.
+- Local vLLM model routes exposed to staff as LipiFast and LipiCore. OCR extraction uses open-source Tesseract plus direct document parsers by default. The current production server routes all text lanes through LipiCore and keeps the LipiFast lane disabled until GPU capacity is rebalanced.
 - Retrieval-augmented generation over uploaded and approved documents.
 - Hybrid retrieval using Qdrant vector search plus PostgreSQL full-text search.
 - Reranking before context construction.
@@ -71,7 +71,7 @@ Current defaults:
 - OCR engine: open-source Tesseract with `OCR_LANGUAGES=eng+nep` by default.
 - OCR fallback cap: `OCR_MAX_PAGES=200`.
 - Degraded Nepali PDF text layers can fall back to OCR on affected pages.
-- Optional Vision Review uses Qwen-VL after OCR for PDF/image review notes only, capped by `OCR_VISION_REVIEW_MAX_PAGES=3`.
+- Optional Vision Review uses LipiCore after OCR for PDF/image review notes only, capped by `OCR_VISION_REVIEW_MAX_PAGES=3`.
 - Job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.
 - Worker concurrency: `INGESTION_WORKER_CONCURRENCY=1`.
 - Deep context budget: `LLM_DEEP_CONTEXT_WINDOW_TOKENS`, default 8192 tokens.

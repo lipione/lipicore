@@ -218,10 +218,10 @@ def _usable_vision_transcription(text: str | None) -> bool:
     return not any(marker in lowered for marker in failure_markers)
 
 
-def _transcribe_image_with_gemma(file_path: str) -> str:
-    from .llm_service import call_gemma_vision_file
+def _transcribe_image_with_lipicore(file_path: str) -> str:
+    from .llm_service import call_lipicore_vision_file
 
-    return call_gemma_vision_file(HANDWRITING_TRANSCRIPTION_PROMPT, file_path).strip()
+    return call_lipicore_vision_file(HANDWRITING_TRANSCRIPTION_PROMPT, file_path).strip()
 
 
 def _maybe_replace_low_confidence_image_ocr(file_path: str, result: OcrResult) -> tuple[OcrResult, bool]:
@@ -230,7 +230,7 @@ def _maybe_replace_low_confidence_image_ocr(file_path: str, result: OcrResult) -
     if not _looks_like_failed_image_ocr(result):
         return result, False
 
-    transcription = _transcribe_image_with_gemma(file_path)
+    transcription = _transcribe_image_with_lipicore(file_path)
     if not _usable_vision_transcription(transcription):
         return result, False
     return OcrResult(text=transcription, confidence=result.confidence), True
@@ -462,7 +462,7 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
             extraction_confidence=0.68 if vision_transcription else 0.82,
             ocr_confidence=result.confidence,
             vision_transcription=vision_transcription,
-            vision_model=settings.LLM_C_MODEL if vision_transcription else None,
+            vision_model="LipiCore" if vision_transcription else None,
         ))
     if not pages and text.strip():
         pages.append(_page_payload(page_number=None, text=text, extraction_confidence=0.7))

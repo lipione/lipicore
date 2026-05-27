@@ -24,11 +24,11 @@ The 2026-05-23 post-deployment remote inventory found:
 - 2 x NVIDIA L40S, 46 GiB each.
 - `/` has about 26 GiB free and `/data` has about 584 GiB free.
 - Running endpoints:
-  - `lipicore-vllm-c` / `gemma-4-26b-4bit` on GPU 1, debug port `8003`.
-  - `lipicore-vllm-vision` / `qwen3-vl-8b` on GPU 0, debug port `8007`.
+  - `lipicore-vllm-c` / LipiCore on GPU 1, debug port `8003`.
+  - Optional document-image route / LipiCore on GPU 0, debug port `8007` where enabled.
 - `lipicore-vllm-b` is not running on the current production profile.
 - GPU memory is already heavily occupied, around 38.9/46 GiB on GPU 0 and 40.7/46 GiB on GPU 1 at the last check. New model tests require a controlled swap window.
-- Keep the Gemma 26B text/analyst tier on GPU 1 unless explicitly testing analyst replacements.
+- Keep the LipiCore text/analyst tier on GPU 1 unless explicitly testing analyst replacements.
 
 Benchmark artifacts are under `reports/model-lab/`.
 
@@ -36,7 +36,7 @@ Benchmark artifacts are under `reports/model-lab/`.
 
 - Current production: `ask_knowledge`, short staff drafts, customer-care responses, `approved_knowledge`, compliance review, document comparison, OCR extraction, and queued long-document analysis route through the configured text endpoints as needed. OCR text extraction itself uses open-source Tesseract plus direct document parsers by default.
 - Future capacity profile: short staff chat may move back to a fast tier after GPU memory and quality tests prove it is stable.
-- Vision/image review routes can use the dedicated Qwen3-VL endpoint where enabled. Do not make strong scanned-document claims until bank-specific OCR/PDF/XLS benchmarks are recorded.
+- Document-image review routes can use the dedicated LipiCore endpoint where enabled. Do not make strong scanned-document claims until bank-specific OCR/PDF/XLS benchmarks are recorded.
 
 ## Vision Endpoint
 
@@ -46,7 +46,7 @@ Benchmark artifacts are under `reports/model-lab/`.
 docker compose --profile vision up -d vllm-vision
 ```
 
-Default settings target `Qwen/Qwen3-VL-8B-Instruct` on GPU 0, port `8007`, 8192-token context, max two concurrent sequences, and persisted Hugging Face cache under `/data/models/hf_cache`. On a two-L40S host, run this instead of the small fast endpoint unless GPU memory tests prove both can safely coexist.
+Default settings target the configured LipiCore image route on GPU 0, port `8007`, 8192-token context, max two concurrent sequences, and persisted model cache under `/data/models/hf_cache`. On a two-L40S host, run this instead of the small fast endpoint unless GPU memory tests prove both can safely coexist.
 
 ## Model Swap Procedure
 

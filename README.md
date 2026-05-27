@@ -80,7 +80,7 @@ For heavy files, users should use the queued long-document workflow instead of n
 ### Prerequisites
 *   Docker and Docker Compose.
 *   NVIDIA container runtime for GPU-backed vLLM services.
-*   Local Gemma model files mounted on the inference host.
+*   Local LipiFast/LipiCore model files mounted on the inference host.
 *   Python 3.12 for local backend development and tests.
 *   Node.js 20+ for local frontend development.
 
@@ -158,9 +158,9 @@ Supported fields include `product_name`, `bank_name`, `logo_url`, `primary_color
 ### Current Production Access
 
 *   **Public UI:** `https://ai.silverlining.com.np`
-*   **Text model route:** all current text routes (`LLM_A`, `LLM_B`, `LLM_C`) point to Gemma 4 26B 4-bit served by `lipicore-vllm-c` on GPU 1.
-*   **Open-source OCR:** Tesseract handles image and scanned-PDF text extraction; Qwen3-VL remains available only for separate vision-capable analysis routes.
-*   **Fast 4B route:** not active in the current production server profile; do not start `lipicore-vllm-b` without a GPU capacity decision.
+*   **Text model route:** all current text routes are presented as LipiCore on the production server.
+*   **Open-source OCR:** Tesseract handles image and scanned-PDF text extraction; LipiCore handles optional document-image review notes where enabled.
+*   **LipiFast route:** not active in the current production server profile; do not start a separate fast endpoint without a GPU capacity decision.
 *   **Queueing:** Redis limits concurrent requests per model and per user.
 *   **Deployed commit:** `615d299` in `/data/bankai`.
 

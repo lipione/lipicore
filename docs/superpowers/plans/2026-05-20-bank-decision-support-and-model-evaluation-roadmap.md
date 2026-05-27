@@ -10,8 +10,8 @@
 
 **Status as of 2026-05-23:** deployed to `/data/bankai` at commit `615d299`.
 Migrations through `012` are applied. Current production routes all text lanes
-to Gemma 4 26B 4-bit on `lipicore-vllm-c`, routes vision/image work to Qwen3-VL
-8B on `lipicore-vllm-vision`, and keeps the optional fast 4B endpoint disabled.
+through LipiCore on `lipicore-vllm-c`, routes document-image work through a
+LipiCore-compatible route where enabled, and keeps the optional LipiFast endpoint disabled.
 
 **Status as of 2026-05-25:** the visible product surface has been narrowed.
 Support, lending, and extraction-review pages are no longer primary product
@@ -19,8 +19,8 @@ pages. The replacement user-facing workflow is OCR Extraction for transient text
 extraction without indexing.
 
 **Status as of 2026-05-25 OCR update:** OCR Extraction now uses open-source
-Tesseract plus direct document parsers by default. Qwen3-VL remains a separate
-vision/image analysis route, not the default OCR text extraction path.
+Tesseract plus direct document parsers by default. LipiCore image review remains
+a separate analysis route, not the default OCR text extraction path.
 
 ---
 
@@ -29,7 +29,7 @@ vision/image analysis route, not the default OCR text extraction path.
 LipiCore already has the right base for a bank staff appliance:
 
 - Staff chat modes and model mode selector.
-- vLLM route registry with Redis admission control; current production routes all text lanes to the 26B endpoint, while OCR text extraction uses open-source Tesseract and vision/image work can route to Qwen3-VL.
+- vLLM route registry with Redis admission control; current production routes all text lanes to LipiCore, while OCR text extraction uses open-source Tesseract and document-image work can route to LipiCore where enabled.
 - Document upload, async ingestion, OCR/table extraction hooks, chunking, embeddings, Qdrant indexing.
 - Approved document lifecycle and chunk-level permission metadata.
 - RAG source evidence panel, citation verifier, and Evaluation Center.
@@ -70,14 +70,14 @@ Use primary docs and model cards before downloading or claiming support:
 
 - vLLM supports high-throughput serving, PagedAttention, continuous batching, quantization, speculative decoding, chunked prefill, streaming, OpenAI-compatible APIs, prefix caching, metrics, and distributed inference. Source: https://docs.vllm.ai/en/v0.7.3/
 - vLLM latest server options include performance modes and structured output config. Source: https://docs.vllm.ai/en/latest/cli/serve/
-- SGLang is worth testing for Qwen/DeepSeek/Gemma/Mistral long-context and prefix-cache-heavy workloads because it supports RadixAttention, prefix caching, chunked prefill, continuous batching, quantization, and OpenAI-compatible APIs. Source: https://docs.sglang.io/
+- SGLang is worth testing for approved long-context and prefix-cache-heavy workloads because it supports RadixAttention, prefix caching, chunked prefill, continuous batching, quantization, and OpenAI-compatible APIs. Source: https://docs.sglang.io/
 - TensorRT-LLM is the enterprise NVIDIA performance path for high-throughput and high-concurrency deployments, especially when banks buy H100/H200/B200/GB200-class hardware. Source: https://nvidia.github.io/TensorRT-LLM/
 - Qwen3.6 supports vLLM and SGLang deployment; Qwen3.6-35B-A3B examples use 262K context with tensor parallelism. Source: https://github.com/QwenLM/Qwen3.6
 - Qwen3-30B-A3B-Instruct-2507 is a strong long-context candidate: 30.5B total, 3.3B active, 262K native context, and 1M-token configuration with high GPU memory requirements. Source: https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507
 - Meta Llama 4 Scout is a multimodal MoE candidate with a very large context window, but license and local runtime behavior must be validated before bank packaging. Source: https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct
 - Mistral 3 offers open Apache-2.0 models from edge sizes to Mistral Large 3; Large 3 is a large MoE meant for serious infrastructure, not pilot appliances. Source: https://mistral.ai/news/mistral-3
 - Mistral Small 3.2 is deprecated in favor of Mistral Small 4 after April 30, 2026, so do not start a new bank benchmark on Small 3.2 unless comparing legacy behavior. Source: https://docs.mistral.ai/models/overview
-- Gemma 3 official Google docs state 4B/12B/27B support 128K input context; Gemma 4 official Google Hugging Face cards now exist and should be verified directly before demo claims. Sources: https://ai.google.dev/gemma/docs/core and https://huggingface.co/google/gemma-4-E4B
+- Approved analyst and fast candidates with larger context windows should be verified directly from primary model cards before demo claims.
 - DeepSeek V3.2 is 671B total and 37B active, MIT licensed, 128K context, and useful as a high-end benchmark/reference model; it is too large for default bank appliance packaging. Sources: https://api-docs.deepseek.com/news/news251201 and https://fe-static.deepseek.com/chat/transparency/deepseek-v3.2-model-card-0414-EN.pdf
 - BGE-M3 and Jina Embeddings v3 are strong multilingual embedding baselines with 8192-token context. Sources: https://huggingface.co/BAAI/bge-m3 and https://huggingface.co/jinaai/jina-embeddings-v3
 - Qwen3 Embedding/Reranker models are strong multilingual retrieval candidates in 0.6B/4B/8B sizes. Source: https://github.com/QwenLM/Qwen3-Embedding
@@ -93,16 +93,16 @@ Do not standardize on a model by reputation. Standardize by bank evaluation scor
 
 Goal: high concurrency, short answers, customer-care drafts, branch staff Q&A, translation, simple summaries.
 
-- Current baseline: optional Gemma 4 E4B/4B-style fast tier exists in compose but is not active on the production two-GPU profile.
-- Test next: Gemma 4 E4B-it, Ministral 3 8B or 14B, Qwen3.5 9B/4B if available in approved model registry, Qwen3-4B-Instruct-2507.
+- Current baseline: optional LipiFast tier exists in compose but is not active on the production two-GPU profile.
+- Test next: approved small-model candidates only in a controlled swap window.
 - Required metrics: first token latency, full answer latency, tokens/sec, GPU memory, 20/40/75 concurrent streams, Nepali/English answer quality, not-found discipline.
 
 ### Analyst Tier
 
 Goal: compliance explanation, policy comparison, risk factors, credit memo draft, complex customer cases.
 
-- Current baseline: Gemma 4 26B 4-bit-style text/analyst tier is active on production and currently handles all text lanes.
-- Test next: Qwen3.6-27B, Qwen3.6-35B-A3B, Qwen3-30B-A3B-Instruct-2507, Gemma 4 26B-A4B-it, Gemma 4 31B-it, Mistral Small 4.
+- Current baseline: LipiCore text/analyst tier is active on production and currently handles all text lanes.
+- Test next: approved analyst candidates selected from Model Lab inventory and bank-specific benchmarks.
 - Required metrics: citation usefulness, answer correctness, reasoning stability, bilingual terminology, output structure, tail latency under queue pressure.
 
 ### Long-Document Tier
@@ -110,7 +110,7 @@ Goal: compliance explanation, policy comparison, risk factors, credit memo draft
 Goal: large policies, circular bundles, loan files, audit reports, multi-document comparison.
 
 - Best test priority: Qwen3-30B-A3B-Instruct-2507 because its official card documents 262K native context and a 1M-token configuration path.
-- Also test: Qwen3.6-35B-A3B, Llama 4 Scout, Gemma 4 31B/26B, DeepSeek V3.2 only on high-end infrastructure.
+- Also test: approved long-context and multimodal candidates only on high-end infrastructure.
 - Required architecture: do not send raw 500-page files directly by default. Use queued long-document jobs, relevance-based excerpt packing, map-reduce where needed, source tables, selective retrieval, and final synthesis.
 
 ### OCR And Vision Tier
@@ -118,8 +118,8 @@ Goal: large policies, circular bundles, loan files, audit reports, multi-documen
 Goal: scanned PDFs, tables, forms, stamps/seals/signature detection, image-based source evidence.
 
 - Current OCR baseline: open-source Tesseract for scanned-page and image text extraction.
-- Current vision baseline: Qwen3-VL 8B is active on production for vision/image-capable analysis.
-- Test: Gemma 4 E4B/26B/31B multimodal, Llama 4 Scout, Qwen3-VL variants, and Qwen3-VL-Reranker where runtime support is stable.
+- Current vision baseline: LipiCore document-image route is active where enabled for image-capable analysis.
+- Test: approved multimodal candidates where runtime support is stable.
 - Keep handwriting and signature verification as detection/flagging, not legal authentication.
 - Required metrics: OCR character error rate, table cell accuracy, page-level confidence, false positive/negative rate for stamp/signature/handwriting flags.
 
@@ -306,7 +306,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [ ] Add side-by-side page viewer: source page, extracted text, table preview, confidence badges.
 - [x] Add human verification action: accept extraction, correct text, mark unreliable, re-run extraction.
 - [x] Add queued long-document analysis jobs for large PDFs, OCR-heavy files, and Excel workbooks.
-- [ ] Add visual-document retrieval experiment using Qwen3-VL-Reranker or ColPali-style page embeddings for scanned PDFs.
+- [ ] Add visual-document retrieval experiment using approved page-embedding or reranking methods for scanned PDFs.
 - [ ] Verification: build a document extraction benchmark with clean PDFs, scanned PDFs, tables, merged Excel cells, forms, and Nepali PDFs.
   - 2026-05-21: Document extraction page model/API/service/frontend queue added. Queued long-document analysis API/service/UI added. Full table structure preservation and visual retrieval experiments remain release gates.
   - 2026-05-23: Legacy extraction-review queue and queued long-document analysis deployed; user-facing OCR Extraction replaced the review page on 2026-05-25.
@@ -345,7 +345,7 @@ Goal: better retrieval for English/Nepali, circulars, policies, product docs, an
 - [x] Add side-by-side model comparison UI with red/yellow/green claim readiness.
 - [ ] Verification: run benchmark matrix before and after each model change; fail release if not-found or source recall regresses.
   - 2026-05-21: Runtime registry, route policy, Model Lab API/page, candidate matrix, and report summarizer added. Full priority queues and automated release gates remain.
-  - 2026-05-23: Model Lab route is deployed and protected; current production profile is 26B text plus Qwen3-VL vision, with fast 4B endpoint disabled.
+  - 2026-05-23: Model Lab route is deployed and protected; current production profile is LipiCore text plus optional LipiCore document-image route, with LipiFast endpoint disabled.
 
 ## Phase 7: Load Handling And Concurrency
 
