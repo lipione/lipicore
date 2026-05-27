@@ -128,6 +128,129 @@ def test_degraded_nepali_pdf_text_layer_uses_ocr_fallback(monkeypatch, tmp_path:
     assert pages[0]["pdf_text_layer_repaired"] is True
 
 
+def test_legacy_nepali_pdf_text_layer_uses_ocr_fallback(monkeypatch, tmp_path: Path):
+    pdf_path = tmp_path / "legacy-nepali.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+
+    legacy_text = (
+        ";DalGwt lgsfodf k7fpg' kg]{ 5 . ;f] ;DaGwdf ˆofS; tyf kqfrf/ gul/g]\n"
+        "z'Ns lnPdf !) k|ltzt yk u/L u|fxssf] vftfdf hDdf ug'{ kg]{5 .\n"
+        "x'Fb}g . -v_ k|rlnt sfg'g adf]lhd clVtof/k|fKt lgsfo jf ;+:yfnfO{"
+    )
+    repaired_text = (
+        "सम्बन्धित निकायमा पठाउनु पर्ने छ। सो सम्बन्धमा फ्याक्स तथा पत्राचार गरिने छैन।\n"
+        "शुल्क लिएमा १० प्रतिशत थप गरी ग्राहकको खातामा जम्मा गर्नु पर्नेछ।\n"
+        "प्रचलित कानून बमोजिम अख्तियारप्राप्त निकाय वा संस्थालाई विवरण दिन बाधा पर्ने छैन।"
+    )
+
+    class FakePage:
+        def extract_text(self):
+            return legacy_text
+
+        def extract_tables(self):
+            raise AssertionError("legacy text-layer pages should not keep table extraction")
+
+    class FakePdf:
+        pages = [FakePage()]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeImage:
+        def close(self):
+            pass
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pdfplumber",
+        SimpleNamespace(open=lambda _path: FakePdf()),
+    )
+    monkeypatch.setattr(
+        ingestion_service,
+        "convert_pdf_pages_to_images",
+        lambda path, *, first_page, last_page: [FakeImage()],
+    )
+    monkeypatch.setattr(
+        ingestion_service,
+        "ocr_pil_image_to_text",
+        lambda _image: ingestion_service.OcrResult(text=repaired_text, confidence=0.91),
+    )
+
+    pages = extract_pages(str(pdf_path), "pdf")
+
+    assert len(pages) == 1
+    assert pages[0]["text"] == repaired_text
+    assert pages[0]["ocr_confidence"] == 0.91
+    assert pages[0]["pdf_text_layer_repaired"] is True
+    assert ";DalGwt" not in pages[0]["text"]
+
+
+def test_legacy_nepali_pdf_text_layer_repair_uses_deeper_page_cap(monkeypatch, tmp_path: Path):
+    pdf_path = tmp_path / "legacy-nepali-long.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+
+    legacy_text = ";DalGwt lgsfodf k7fpg' kg]{ 5 . ;f] ;DaGwdf ˆofS; tyf kqfrf/ gul/g]"
+    repaired_text = "सम्बन्धित निकायमा पठाउनु पर्ने छ। सो सम्बन्धमा फ्याक्स तथा पत्राचार गरिने छैन।"
+
+    class FakePage:
+        def extract_text(self):
+            return legacy_text
+
+        def extract_tables(self):
+            return []
+
+    class FakePdf:
+        pages = [FakePage() for _ in range(257)]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeImage:
+        def close(self):
+            pass
+
+    calls = []
+
+    monkeypatch.setattr(ingestion_service.settings, "OCR_MAX_PAGES", 200)
+    monkeypatch.setattr(ingestion_service.settings, "OCR_TEXT_LAYER_REPAIR_MAX_PAGES", 300)
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pdfplumber",
+        SimpleNamespace(open=lambda _path: FakePdf()),
+    )
+
+    def fake_convert(path, *, first_page, last_page):
+        calls.append((first_page, last_page))
+        return [FakeImage()]
+
+    monkeypatch.setattr(ingestion_service, "convert_pdf_pages_to_images", fake_convert)
+    monkeypatch.setattr(
+        ingestion_service,
+        "ocr_pil_image_to_text",
+        lambda _image: ingestion_service.OcrResult(text=repaired_text, confidence=0.9),
+    )
+
+    pages = extract_pages(str(pdf_path), "pdf")
+
+    assert pages[256]["text"] == repaired_text
+    assert (257, 257) in calls
+
+
+def test_legacy_nepali_detector_ignores_english_text_layer():
+    english_text = (
+        "Bank Guarantee Verification must be published on the bank website and "
+        "customer account details shall be handled according to policy section 12."
+    )
+
+    assert ingestion_service._is_legacy_nepali_pdf_text(english_text) is False
+
+
 def test_clean_nepali_pdf_text_layer_does_not_use_ocr(monkeypatch, tmp_path: Path):
     pdf_path = tmp_path / "clean-nepali.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 fake")

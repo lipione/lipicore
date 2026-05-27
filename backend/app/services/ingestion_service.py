@@ -24,6 +24,20 @@ DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
 DEVANAGARI_MARK_AFTER_NON_DEVANAGARI_RE = re.compile(r"(^|[^\u0900-\u097F])[\u093A-\u094D]")
 OCR_LATIN_NOISE_RE = re.compile(r"[A-Za-z%]")
 LATIN_RE = re.compile(r"[A-Za-z]")
+LEGACY_NEPALI_SYMBOL_RE = re.compile(r"[;\[\]\{\}\|ˆ÷]")
+LEGACY_NEPALI_CLUSTER_RE = re.compile(
+    r"(?:[;:][A-Za-z]|[A-Za-z][\]\[\{\}\|]|[A-Za-z]['ˆ÷]|[A-Za-z]/[A-Za-z]|[A-Za-z][+!@#$%^&*=][A-Za-z]?)"
+)
+LEGACY_NEPALI_TOKEN_RE = re.compile(
+    r"(?:;f|;DaGw|sf|df|kg|k\||u/|g\]|n\]|O\{|lj|tyf|kq|u\||x'|z'|sfg'g|lgsfo|u/L|u\{|"
+    r"ˆof|;DaGw|j\]|cf|clwsf/L|ljQLo|u\|fxs|k\|ltzt|k\|rlnt)",
+    re.IGNORECASE,
+)
+COMMON_ENGLISH_WORD_RE = re.compile(
+    r"\b(?:the|and|for|with|from|bank|customer|account|policy|section|shall|must|website|"
+    r"verification|document|guarantee|published|handled|according|details)\b",
+    re.IGNORECASE,
+)
 DEGRADED_NEPALI_TEXT_PATTERNS = (
     re.compile(r"वव[षशकदधचजतथन]"),
     re.compile(r"मम[ितधन]"),
@@ -88,6 +102,69 @@ def _is_degraded_devanagari_pdf_text(text: str) -> bool:
         return False
     threshold = max(8, devanagari_count // 90)
     return _degraded_devanagari_score(text) >= threshold
+
+
+def _legacy_nepali_text_layer_score(text: str) -> int:
+    sample = (text or "")[:4000]
+    if not sample.strip():
+        return 0
+
+    devanagari_count = len(DEVANAGARI_RE.findall(sample))
+    if devanagari_count >= max(12, len(sample) // 50):
+        return 0
+
+    latin_count = len(LATIN_RE.findall(sample))
+    if latin_count < 25:
+        return 0
+
+    legacy_symbol_count = len(LEGACY_NEPALI_SYMBOL_RE.findall(sample))
+    cluster_count = len(LEGACY_NEPALI_CLUSTER_RE.findall(sample))
+    legacy_token_count = len(LEGACY_NEPALI_TOKEN_RE.findall(sample))
+    tokens = re.findall(r"[A-Za-z][A-Za-z'/{}\[\]|ˆ÷+]*", sample)
+    odd_token_count = 0
+    for token in tokens:
+        if (
+            re.search(r"[;{}\[\]|ˆ÷']", token)
+            or LEGACY_NEPALI_TOKEN_RE.search(token)
+            or (len(token) > 3 and not re.search(r"[aeiouAEIOU]", token))
+        ):
+            odd_token_count += 1
+
+    score = legacy_symbol_count * 2 + cluster_count * 4 + legacy_token_count * 5
+    if tokens:
+        odd_ratio = odd_token_count / len(tokens)
+        if odd_ratio >= 0.35:
+            score += int(odd_ratio * 20)
+        english_ratio = len(COMMON_ENGLISH_WORD_RE.findall(sample)) / len(tokens)
+        if english_ratio >= 0.35 and legacy_symbol_count < 6 and legacy_token_count < 2:
+            score -= 20
+    if legacy_symbol_count / max(len(sample), 1) >= 0.035:
+        score += 8
+    if "ˆ" in sample or "÷" in sample:
+        score += 10
+    return max(score, 0)
+
+
+def _is_legacy_nepali_pdf_text(text: str) -> bool:
+    sample = (text or "")[:4000]
+    latin_count = len(LATIN_RE.findall(sample))
+    if latin_count < 25:
+        return False
+    threshold = max(18, min(80, latin_count // 35))
+    return _legacy_nepali_text_layer_score(sample) >= threshold
+
+
+def _is_usable_legacy_nepali_repair(text: str) -> bool:
+    normalized = (text or "").strip()
+    if not normalized:
+        return False
+    devanagari_count = len(DEVANAGARI_RE.findall(normalized))
+    if devanagari_count < 12:
+        return False
+    if _is_legacy_nepali_pdf_text(normalized):
+        return False
+    latin_count = len(LATIN_RE.findall(normalized))
+    return devanagari_count >= latin_count or devanagari_count >= 40
 
 
 def _ocr_line_noise_score(line: str) -> int:
@@ -179,9 +256,17 @@ def _merge_direct_lines_for_ocr_noise(direct_text: str, ocr_text: str) -> str:
 
 
 def _ocr_pdf_page_if_better(file_path: str, page_number: int, text: str) -> OcrResult | None:
-    if page_number > settings.OCR_MAX_PAGES:
+    is_legacy_nepali_text_layer = _is_legacy_nepali_pdf_text(text)
+    is_degraded_devanagari_text_layer = _is_degraded_devanagari_pdf_text(text)
+    if not (is_legacy_nepali_text_layer or is_degraded_devanagari_text_layer):
         return None
-    if not _is_degraded_devanagari_pdf_text(text):
+
+    max_repair_pages = (
+        settings.OCR_TEXT_LAYER_REPAIR_MAX_PAGES
+        if is_legacy_nepali_text_layer
+        else settings.OCR_MAX_PAGES
+    )
+    if page_number > max_repair_pages:
         return None
 
     images = convert_pdf_pages_to_images(file_path, first_page=page_number, last_page=page_number)
@@ -190,8 +275,15 @@ def _ocr_pdf_page_if_better(file_path: str, page_number: int, text: str) -> OcrR
             result = ocr_pil_image_to_text(image)
         finally:
             image.close()
-        if result.text.strip() and _degraded_devanagari_score(result.text) < _degraded_devanagari_score(text):
-            normalized_ocr_text = _normalize_common_nepali_ocr_errors(result.text)
+
+        normalized_ocr_text = _normalize_common_nepali_ocr_errors(result.text)
+        if is_legacy_nepali_text_layer and _is_usable_legacy_nepali_repair(normalized_ocr_text):
+            return OcrResult(text=normalized_ocr_text, confidence=result.confidence)
+        if (
+            is_degraded_devanagari_text_layer
+            and result.text.strip()
+            and _degraded_devanagari_score(result.text) < _degraded_devanagari_score(text)
+        ):
             return OcrResult(
                 text=_merge_direct_lines_for_ocr_noise(text, normalized_ocr_text),
                 confidence=result.confidence,

@@ -12,7 +12,7 @@ This document defines conservative deployment tiers. These are capacity targets,
 - Model queue timeout: `LLM_QUEUE_TIMEOUT_SECONDS=120`; stale queue tokens are pruned after `LLM_QUEUE_STALE_SECONDS=10`.
 - Upload limits: Document Library `50 MB`, AI Tasks `20 MB`.
 - Chat context: 8192-token model context, with RAG top chunks kept intentionally small.
-- Queued long-document analysis: uses Redis/RQ, open-source Tesseract OCR for scanned pages, plus the deep/analyst model for generated analysis; default OCR cap `OCR_MAX_PAGES=200`, job timeout `INGESTION_JOB_TIMEOUT_SECONDS=1800`, and deep context `LLM_DEEP_CONTEXT_WINDOW_TOKENS=8192`.
+- Queued long-document analysis: uses Redis/RQ, open-source Tesseract OCR for scanned pages, plus the deep/analyst model for generated analysis; default OCR cap `OCR_MAX_PAGES=200`, legacy Nepali text-layer repair cap `OCR_TEXT_LAYER_REPAIR_MAX_PAGES=500`, job timeout `INGESTION_JOB_TIMEOUT_SECONDS=1800`, and deep context `LLM_DEEP_CONTEXT_WINDOW_TOKENS=8192`.
 
 ## Measured Test-Server Evidence
 

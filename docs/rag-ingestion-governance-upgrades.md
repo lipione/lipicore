@@ -14,6 +14,7 @@
 - Document Library now exposes ingestion progress, lifecycle/readiness, and ready-for-chat state more clearly.
 - AI Tasks now includes prompt readiness and review metadata so staff understand what context is being used.
 - Scanned PDF fallback now OCRs up to `OCR_MAX_PAGES` instead of only the first 3 pages.
+- Legacy Nepali PDF text layers are detected and repaired through open-source OCR instead of indexing Preeti/Kantipur-style ASCII glyph text.
 - PDF table extraction uses `pdfplumber` when available.
 - Excel extraction preserves sheet names, workbook dimensions, merged ranges, named table ranges, formulas, cached values, and cell coordinates.
 - Ingestion creates page-level extraction metadata so low OCR/table/layout confidence can be audited or used by future review workflows.

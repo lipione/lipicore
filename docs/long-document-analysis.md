@@ -29,6 +29,7 @@ Use normal chat or Ask Approved Knowledge for short policy questions where index
 3. The worker reuses the extraction pipeline:
    - PDF text and table extraction through `pdfplumber` when available.
    - Open-source Tesseract OCR fallback for scanned PDFs up to `OCR_MAX_PAGES`.
+   - Legacy Nepali PDF text-layer repair rerenders affected pages through OCR up to `OCR_TEXT_LAYER_REPAIR_MAX_PAGES`.
    - Excel extraction preserving sheet names, workbook dimensions, merged ranges, table ranges, formulas/cached values, and cell coordinates.
 4. The worker uses `build_large_file_prompt` to select relevant page/sheet excerpts within `LLM_DEEP_CONTEXT_WINDOW_TOKENS`.
 5. The analyst/deep model generates the result using a system prompt that requires source-backed analysis and forbids autonomous decisions.
@@ -76,6 +77,7 @@ Current defaults:
 - Chat upload limit: 50 MB.
 - OCR engine: open-source Tesseract, configured by `OCR_ENGINE`, `OCR_LANGUAGES`, `OCR_TESSERACT_CONFIG`, and `OCR_IMAGE_DPI`.
 - OCR fallback page cap: `OCR_MAX_PAGES=200`.
+- Legacy Nepali text-layer repair cap: `OCR_TEXT_LAYER_REPAIR_MAX_PAGES=500`.
 - Nepali PDFs with degraded embedded text layers can be repaired page-by-page with OCR when direct extraction corrupts vowel marks or common letters.
 - OCR page Vision Review is optional and uses Qwen-VL only for separate visual notes on PDFs/images, capped by `OCR_VISION_REVIEW_MAX_PAGES=3`.
 - Ingestion/analysis job timeout: `INGESTION_JOB_TIMEOUT_SECONDS=1800`.

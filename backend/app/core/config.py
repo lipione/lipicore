@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     OCR_TESSERACT_CONFIG: str = os.getenv("OCR_TESSERACT_CONFIG", "--psm 6")
     OCR_IMAGE_DPI: int = int(os.getenv("OCR_IMAGE_DPI", "300"))
     OCR_MAX_PAGES: int = int(os.getenv("OCR_MAX_PAGES", "200"))
+    OCR_TEXT_LAYER_REPAIR_MAX_PAGES: int = int(os.getenv("OCR_TEXT_LAYER_REPAIR_MAX_PAGES", "500"))
     OCR_VISION_REVIEW_MAX_PAGES: int = int(os.getenv("OCR_VISION_REVIEW_MAX_PAGES", "3"))
     OCR_HANDWRITING_FALLBACK_ENABLED: bool = os.getenv("OCR_HANDWRITING_FALLBACK_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     OCR_HANDWRITING_FALLBACK_CONFIDENCE: float = float(os.getenv("OCR_HANDWRITING_FALLBACK_CONFIDENCE", "0.6"))
