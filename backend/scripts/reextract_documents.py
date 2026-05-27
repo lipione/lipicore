@@ -78,6 +78,7 @@ def _restore_document_metadata(
     *,
     keep_ready: bool,
 ) -> int:
+    db.expire_all()
     document = db.get(Document, document_id)
     if not document:
         return 0
