@@ -142,5 +142,7 @@ def test_ingestion_creates_review_records_for_extracted_pages():
         queue = low_confidence_queue(session, bank_id=bank.id)
 
     assert len(records) == 2
+    assert records[0].review_status == "pending"
+    assert records[1].review_status == "verified"
     assert [page.page_number for page in queue] == [1]
     assert "low_ocr_confidence" in json.loads(queue[0].flags_json)

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import api from '../api/axios';
+import SourceMetadataStrip from '../components/trust/SourceMetadataStrip';
 
 const SAMPLE_CASES = [
   {
     id: 'policy-source-check',
     question: 'What does the approved policy say about customer complaint escalation?',
     expected_source_titles: ['Customer Complaint Policy'],
+    expected_section_labels: ['Complaint escalation'],
     required_citation_terms: ['complaint'],
     required_answer_terms: ['escalation'],
     source_required: true,
@@ -63,10 +65,14 @@ function CaseResult({ item }) {
           </div>
           <h3 className="text-sm font-bold text-slate-900 mt-2">{item.question}</h3>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
           <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1">
             <p className="font-bold text-slate-900">{pct(item.source_recall)}</p>
             <p className="text-slate-500">Source</p>
+          </div>
+          <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1">
+            <p className="font-bold text-slate-900">{pct(item.location_recall)}</p>
+            <p className="text-slate-500">Location</p>
           </div>
           <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1">
             <p className="font-bold text-slate-900">{pct(item.citation_term_recall)}</p>
@@ -116,6 +122,9 @@ function CaseResult({ item }) {
                   {source.section_label || source.section_number || 'Section unknown'}
                   {source.page_number ? ` · p.${source.page_number}` : ''}
                 </p>
+                <div className="mt-2">
+                  <SourceMetadataStrip source={source} />
+                </div>
                 <p className="text-slate-700 mt-2 whitespace-pre-wrap">{source.snippet || source.passage || ''}</p>
               </div>
             ))}
@@ -200,7 +209,7 @@ export default function EvaluationCenter() {
             <div>
               <h2 className="text-sm font-bold text-slate-900">Evaluation cases</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Use expected sources, citation terms, and gate flags such as source_required, citation_required, and no_general_policy_advice.
+                Use expected sources, section/page expectations, citation terms, and gate flags such as source_required, citation_required, and no_general_policy_advice.
               </p>
             </div>
             <label className="space-y-1.5 block">
@@ -227,10 +236,11 @@ export default function EvaluationCenter() {
           </aside>
 
           <main className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <ScoreCard label="Gate" value={summary ? (summary.gate_passed ? 'Pass' : 'Fail') : '—'} icon="rule" tone={gateTone} />
               <ScoreCard label="Pass rate" value={summary ? pct(summary.pass_rate) : '—'} icon="fact_check" tone="slate" />
               <ScoreCard label="Source recall" value={summary ? pct(summary.source_recall_avg) : '—'} icon="source" tone="slate" />
+              <ScoreCard label="Location recall" value={summary ? pct(summary.location_recall_avg) : '—'} icon="pin_drop" tone="slate" />
               <ScoreCard label="Citation recall" value={summary ? pct(summary.citation_term_recall_avg) : '—'} icon="format_quote" tone="slate" />
             </div>
 

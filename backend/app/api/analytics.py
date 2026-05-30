@@ -9,7 +9,9 @@ from ..models.document import Document
 from ..models.chat import ChatSession, ChatMessage
 from ..models.audit import AuditLog
 from .deps import get_current_analytics_user
+from ..core.config import settings
 from ..services.appliance_health_service import collect_appliance_health
+from ..services.bank_readiness_service import evaluate_bank_readiness
 
 router = APIRouter()
 
@@ -99,3 +101,21 @@ def get_appliance_health(
     current_user: User = Depends(get_current_analytics_user),
 ) -> Any:
     return collect_appliance_health(db=db, bank_id=current_user.bank_id)
+
+
+@router.get("/bank-readiness")
+def read_bank_readiness(
+    current_user: User = Depends(get_current_analytics_user),
+) -> Any:
+    tls_enabled = settings.COOKIE_SECURE and any(
+        origin.startswith("https://") for origin in settings.ALLOWED_ORIGINS
+    )
+    snapshot = {
+        "tls_enabled": tls_enabled,
+        "backup_restore_drill_days_ago": None,
+        "qdrant_snapshot_days_ago": None,
+        "redis_persistence_enabled": False,
+        "model_health_ok": True,
+        "queue_depth": 0,
+    }
+    return evaluate_bank_readiness(snapshot)

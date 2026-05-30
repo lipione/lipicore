@@ -41,6 +41,39 @@ def _normalized_recall(found: set[str], expected: list[str]) -> float:
     return len(found & expected_set) / len(expected_set)
 
 
+def _normalize_location(value: Any) -> str:
+    return " ".join(str(value or "").lower().split())
+
+
+def _score_location_recall(
+    *,
+    sources: list[dict[str, Any]],
+    expected_section_labels: list[str],
+    expected_page_numbers: list[int],
+    expected_chunk_indexes: list[int],
+) -> float:
+    expected: list[tuple[str, str]] = []
+    expected.extend(("section", _normalize_location(label)) for label in expected_section_labels)
+    expected.extend(("page", str(number)) for number in expected_page_numbers)
+    expected.extend(("chunk", str(index)) for index in expected_chunk_indexes)
+    expected = [item for item in expected if item[1]]
+    if not expected:
+        return 1.0
+
+    observed: set[tuple[str, str]] = set()
+    for source in sources or []:
+        section = source.get("section_label") or source.get("section_number")
+        if section:
+            observed.add(("section", _normalize_location(section)))
+        if source.get("page_number") is not None:
+            observed.add(("page", str(source.get("page_number"))))
+        if source.get("chunk_index") is not None:
+            observed.add(("chunk", str(source.get("chunk_index"))))
+
+    matches = sum(1 for item in expected if item in observed)
+    return matches / len(expected)
+
+
 def _term_recall(text: str, terms: list[str]) -> float:
     terms = [term for term in (terms or []) if str(term).strip()]
     if not terms:
@@ -92,6 +125,43 @@ def _has_verified_citations(sources: list[dict[str, Any]]) -> bool:
     return bool(statuses) and all(status == "supported" for status in statuses)
 
 
+def _citation_verification_from_sources(sources: list[dict[str, Any]]) -> dict[str, str]:
+    if not sources:
+        return {"status": "no_sources", "trust_label": "no_sources"}
+    statuses = [str(source.get("citation_verification") or "") for source in sources]
+    if all(status == "supported" for status in statuses):
+        return {"status": "supported", "trust_label": "source_supported"}
+    if any(status == "unsupported" for status in statuses):
+        return {"status": "unsupported", "trust_label": "not_source_supported"}
+    if any(status == "partially_supported" for status in statuses):
+        return {"status": "partially_supported", "trust_label": "partially_source_supported"}
+    return {"status": "unknown", "trust_label": "source_unverified"}
+
+
+def _case_passed(case: Any, result: dict[str, Any]) -> bool:
+    if result.get("failures"):
+        return False
+    if bool(
+        _value(case, "expected_not_found", False)
+        or _value(case, "expect_not_found", False)
+        or _value(case, "not_found_required", False)
+    ):
+        return bool(result.get("not_found_passed") or result.get("expected_not_found_passed"))
+    if _value(case, "source_required", False) and result.get("source_recall", 0) <= 0:
+        return False
+    if _value(case, "citation_required", False) and result.get("citation_term_recall", 0) <= 0:
+        return False
+    trust_label = (result.get("citation_verification") or {}).get("trust_label")
+    if _value(case, "citation_required", False) and trust_label not in (None, "source_supported"):
+        return False
+    if (
+        _value(case, "no_general_policy_advice", False)
+        and not result.get("no_general_policy_advice_passed", True)
+    ):
+        return False
+    return True
+
+
 def _looks_like_policy_advice(answer: str) -> bool:
     normalized = _normalize(answer)
     if not normalized or normalized == _normalize(NOT_FOUND_RESPONSE):
@@ -115,9 +185,20 @@ def evaluate_rag_cases(
         question = str(_value(case, "question", "") or "")
         expected_doc_ids = [int(doc_id) for doc_id in (_value(case, "expected_source_document_ids", []) or [])]
         expected_source_titles = list(_value(case, "expected_source_titles", []) or [])
+        expected_page_numbers = [
+            int(value) for value in (_value(case, "expected_page_numbers", []) or [])
+        ]
+        expected_section_labels = list(_value(case, "expected_section_labels", []) or [])
+        expected_chunk_indexes = [
+            int(value) for value in (_value(case, "expected_chunk_indexes", []) or [])
+        ]
         citation_terms = list(_value(case, "required_citation_terms", []) or [])
         answer_terms = list(_value(case, "required_answer_terms", []) or [])
-        expect_not_found = bool(_value(case, "expect_not_found", False) or _value(case, "not_found_required", False))
+        expect_not_found = bool(
+            _value(case, "expected_not_found", False)
+            or _value(case, "expect_not_found", False)
+            or _value(case, "not_found_required", False)
+        )
         source_required = bool(_value(case, "source_required", False))
         citation_required = bool(_value(case, "citation_required", False))
         no_general_policy_advice = bool(_value(case, "no_general_policy_advice", False))
@@ -164,6 +245,15 @@ def evaluate_rag_cases(
             ]
             failures.append(f"missing expected source titles: {', '.join(missing_titles)}")
 
+        location_recall = _score_location_recall(
+            sources=sources or [],
+            expected_section_labels=expected_section_labels,
+            expected_page_numbers=expected_page_numbers,
+            expected_chunk_indexes=expected_chunk_indexes,
+        )
+        if location_recall < 1:
+            failures.append("missing expected citation locations")
+
         normalized_citations = _citation_text(sources or [])
         citation_term_recall = _term_recall(normalized_citations, citation_terms)
         if citation_term_recall < 1:
@@ -182,19 +272,26 @@ def evaluate_rag_cases(
             if not not_found_passed:
                 failures.append("expected not-found response with no sources")
 
+        citation_verification = _citation_verification_from_sources(sources or [])
+        no_general_policy_advice_passed = "general policy advice without sources" not in failures
+        case_result = {
+            "id": case_id,
+            "question": question,
+            "answer": answer,
+            "sources": sources or [],
+            "source_recall": round(source_recall, 4),
+            "location_recall": round(location_recall, 4),
+            "citation_term_recall": round(citation_term_recall, 4),
+            "answer_term_recall": round(answer_term_recall, 4),
+            "not_found_passed": not_found_passed,
+            "expected_not_found_passed": not_found_passed,
+            "no_general_policy_advice_passed": no_general_policy_advice_passed,
+            "citation_verification": citation_verification,
+            "failures": failures,
+        }
+        case_result["passed"] = _case_passed(case, case_result)
         results.append(
-            {
-                "id": case_id,
-                "question": question,
-                "passed": len(failures) == 0,
-                "answer": answer,
-                "sources": sources or [],
-                "source_recall": round(source_recall, 4),
-                "citation_term_recall": round(citation_term_recall, 4),
-                "answer_term_recall": round(answer_term_recall, 4),
-                "not_found_passed": not_found_passed,
-                "failures": failures,
-            }
+            case_result
         )
 
     total = len(results)
@@ -215,6 +312,7 @@ def evaluate_rag_cases(
             "gate_passed": pass_rate >= pass_threshold,
             "failed_case_ids": [result["id"] for result in results if not result["passed"]],
             "source_recall_avg": avg("source_recall"),
+            "location_recall_avg": avg("location_recall"),
             "citation_term_recall_avg": avg("citation_term_recall"),
             "answer_term_recall_avg": avg("answer_term_recall"),
         },

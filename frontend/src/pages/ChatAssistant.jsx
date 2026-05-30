@@ -5,6 +5,7 @@ import FilePreviewCard from '../components/chat/FilePreviewCard';
 import AnswerTrustBadge from '../components/chat/AnswerTrustBadge';
 import ChatModeSelector, { CHAT_MODES, modeByValue } from '../components/chat/ChatModeSelector';
 import SourceEvidencePanel from '../components/chat/SourceEvidencePanel';
+import NotFoundState from '../components/trust/NotFoundState';
 import useDropZone from '../hooks/useDropZone';
 import { useBranding } from '../contexts/BrandingContext';
 
@@ -147,12 +148,20 @@ function deriveClientAnswerMetadata(message) {
   if (message?.answer_metadata) return message.answer_metadata;
   const sourceCount = message?.sources?.length || 0;
   const sourceVerification = message?.sources?.find(source => source?.citation_verification)?.citation_verification;
+  const trustLabel = sourceVerification === 'supported'
+    ? 'source_supported'
+    : sourceVerification === 'partially_supported'
+      ? 'partially_source_supported'
+      : sourceCount > 0
+        ? 'source_unverified'
+        : 'no_sources';
   if (sourceCount > 0) {
     return {
       mode: 'ask_knowledge',
       answer_type: 'official_source_backed',
       source_count: sourceCount,
       requires_sources: true,
+      trust_label: trustLabel,
       citation_verification: {
         status: sourceVerification || 'no_sources',
       },
@@ -223,6 +232,7 @@ function capacityFailureMetadata(mode, reason) {
     source_count: 0,
     requires_sources: false,
     failure_reason: reason,
+    trust_label: 'no_sources',
     citation_verification: {
       status: 'no_sources',
       supported_sentence_count: 0,
@@ -1056,6 +1066,10 @@ function MsgBubble({ msg, idx, isLast, isLoading, editingId, editText, setEditTe
               ? (msg.content ? <p className="text-body-sm text-on-surface leading-relaxed" data-testid="message-content">{msg.content}</p> : null)
               : <div className="text-body-sm text-on-surface" data-testid="message-content">{renderMarkdown(msg.content)}</div>
             }
+
+            {!isUser && msg.answer_metadata?.answer_type === 'not_found' && (
+              <NotFoundState mode={msg.answer_metadata.mode} />
+            )}
 
             {!isUser && msg.sources && msg.sources.length > 0 && (
               <SourceEvidencePanel sources={msg.sources} compact />

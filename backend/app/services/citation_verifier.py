@@ -9,12 +9,28 @@ TOKEN_RE = re.compile(r"[\w०-९]+", re.UNICODE)
 SENTENCE_RE = re.compile(r"(?<=[.!?।])\s+")
 NliPredictor = Callable[[str, str], dict[str, Any]]
 ENTAILMENT_LABELS = {"entailment", "entailed", "supported", "support"}
+SUPPORT_STOPWORDS = {
+    "the",
+    "this",
+    "that",
+    "these",
+    "those",
+    "and",
+    "for",
+    "from",
+    "with",
+    "within",
+}
 
 
 def _tokens(text: str | None) -> list[str]:
     if not text:
         return []
-    return [token.lower() for token in TOKEN_RE.findall(text) if len(token) > 2]
+    return [
+        token.lower()
+        for token in TOKEN_RE.findall(text)
+        if len(token) > 2 and token.lower() not in SUPPORT_STOPWORDS
+    ]
 
 
 def _token_overlap_score(sentence: str, evidence: str) -> float:
@@ -74,6 +90,7 @@ def verify_answer_against_sources(
     if not answer or not evidence.strip():
         return {
             "status": "no_sources",
+            "trust_label": "no_sources",
             "verification_stage": "lexical",
             "supported_sentence_count": 0,
             "unsupported_sentence_count": 0,
@@ -117,16 +134,29 @@ def verify_answer_against_sources(
 
     if not sentences:
         status = "not_enough_claims"
+    elif unsupported and supported_count == 0:
+        status = "unsupported"
     elif unsupported:
         status = "partially_supported"
     else:
         status = "supported"
 
+    unsupported_sentence_count = len(unsupported)
+    if not sources:
+        trust_label = "no_sources"
+    elif unsupported_sentence_count == 0:
+        trust_label = "source_supported"
+    elif supported_count > 0:
+        trust_label = "partially_source_supported"
+    else:
+        trust_label = "not_source_supported"
+
     return {
         "status": status,
+        "trust_label": trust_label,
         "verification_stage": "lexical+nli" if use_nli and nli_checked else "lexical",
         "supported_sentence_count": supported_count,
-        "unsupported_sentence_count": len(unsupported),
+        "unsupported_sentence_count": unsupported_sentence_count,
         "unsupported_sentences": unsupported[:5],
         "nli_checked_sentence_count": nli_checked,
         "nli_error": nli_error,

@@ -59,6 +59,37 @@ const CITATION_STATES = {
   },
 };
 
+const TRUST_LABEL_COPY = {
+  source_supported: 'Source supported',
+  partially_source_supported: 'Partially source supported',
+  not_source_supported: 'Not source supported',
+  no_sources: 'No sources',
+  source_unverified: 'Source unverified',
+};
+
+function trustLabelState(label) {
+  if (!label) return null;
+  if (label === 'source_supported') {
+    return {
+      label: TRUST_LABEL_COPY[label],
+      icon: 'verified',
+      className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    };
+  }
+  if (label === 'not_source_supported') {
+    return {
+      label: TRUST_LABEL_COPY[label],
+      icon: 'error',
+      className: 'bg-rose-50 text-rose-800 border-rose-200',
+    };
+  }
+  return {
+    label: TRUST_LABEL_COPY[label] || label,
+    icon: 'rule',
+    className: 'bg-amber-50 text-amber-800 border-amber-200',
+  };
+}
+
 function inferAnswerType(message) {
   if (message?.answer_metadata?.answer_type) return message.answer_metadata.answer_type;
   if (message?.sources?.length > 0) return 'official_source_backed';
@@ -80,6 +111,7 @@ export default function AnswerTrustBadge({ message }) {
   const state = TRUST_STATES[answerType] || TRUST_STATES.general_answer;
   const sourceCount = message?.answer_metadata?.source_count ?? message?.sources?.length ?? 0;
   const citation = citationState(message);
+  const trustLabel = trustLabelState(message?.answer_metadata?.trust_label);
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -92,6 +124,12 @@ export default function AnswerTrustBadge({ message }) {
         <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold ${citation.className}`}>
           <span className="material-symbols-outlined text-[14px]">{citation.icon}</span>
           <span>{citation.label}</span>
+        </div>
+      )}
+      {trustLabel && (
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold ${trustLabel.className}`}>
+          <span className="material-symbols-outlined text-[14px]">{trustLabel.icon}</span>
+          <span>{trustLabel.label}</span>
         </div>
       )}
     </div>

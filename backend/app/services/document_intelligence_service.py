@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from ..models.document_intelligence import DocumentExtractionPage
 from ..schemas.document_intelligence import DocumentExtractionPageCreate
+from .extraction_quality_service import build_extraction_quality
 
 
 LOW_CONFIDENCE_THRESHOLD = 0.75
@@ -43,7 +44,13 @@ def create_extraction_page(
     document_id: int,
     data: DocumentExtractionPageCreate,
 ) -> DocumentExtractionPage:
-    flags = build_extraction_flags(
+    quality = build_extraction_quality(
+        extraction_confidence=None,
+        ocr_confidence=data.ocr_confidence,
+        table_confidence=data.table_confidence,
+        text=data.extracted_text,
+    )
+    visual_flags = build_extraction_flags(
         ocr_confidence=data.ocr_confidence,
         table_confidence=data.table_confidence,
         layout_confidence=data.layout_confidence,
@@ -51,6 +58,8 @@ def create_extraction_page(
         has_signature_like_region=data.has_signature_like_region,
         has_stamp_like_region=data.has_stamp_like_region,
     )
+    flags = list(dict.fromkeys([*quality["flags"], *visual_flags]))
+    requires_review = quality["quality_bucket"] == "review_required" or bool(visual_flags)
     record = DocumentExtractionPage(
         bank_id=bank_id,
         document_id=document_id,
@@ -63,7 +72,7 @@ def create_extraction_page(
         page_image_path=data.page_image_path,
         bbox_json=data.bbox_json,
         flags_json=json.dumps(flags),
-        review_status="pending",
+        review_status="pending" if requires_review else "verified",
     )
     db.add(record)
     db.commit()

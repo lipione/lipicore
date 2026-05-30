@@ -65,6 +65,8 @@ Use only after department-level measurements prove demand and capacity.
 - Storage: HA Postgres, Qdrant replication/snapshots, Redis HA, backup restore tests, and disaster recovery runbooks.
 - Operations: centralized logs, metrics, alerting, patch process, rollback process, and bank IT runbook.
 - Proof required: 100-user Locust run, ingestion stress test, backup restore test, and model queue timeout evidence.
+- Bank-readiness evidence: complete `docs/deployment/bank-readiness-checklist.md` before production go-live.
+- A whole-bank claim requires retained evidence for backup restore, RAG evaluation, upload coverage, queue depth, GPU utilization, and rollback readiness.
 - Long-document guidance: use a separate worker pool, queue-depth alerting, and analyst-model capacity policy so heavy analysis does not starve interactive staff chat.
 - Deployment reference: `deploy/ha/README.md`.
 - Current gap: whole-bank streaming concurrency has not been proven. More fast-model replicas or stricter queue policy are required before claiming instant AI for 100+ simultaneous staff.

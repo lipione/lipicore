@@ -31,8 +31,8 @@ The Bank's Own LLM architecture is designed around isolation, security, and the 
 2. Backend stores the original file in MinIO and metadata in PostgreSQL.
 3. Backend enqueues a Redis/RQ ingestion job.
 4. The ingestion worker extracts text, OCR output, PDF tables, spreadsheet sheet/cell metadata, and presentation text.
-5. Extracted content is chunked and embedded.
-6. Chunks are written to PostgreSQL and Qdrant with `bank_id`, document lifecycle, document scope, and permission metadata.
+5. Extracted content is chunked with an adaptive profile selected from file type, document type, OCR confidence, and section-density signals.
+6. Chunks are written to PostgreSQL and Qdrant with `bank_id`, document lifecycle, document scope, permission metadata, and page/section labels such as sheet or slide names where available.
 7. The UI shows queued, extracting, embedding, indexing, ready, or failed status.
 
 ## Data Flow (Queued Long-Document Analysis)

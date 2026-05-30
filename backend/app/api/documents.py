@@ -462,6 +462,8 @@ def read_document_source(
                 "extraction_confidence": chunk.extraction_confidence,
                 "ocr_confidence": chunk.ocr_confidence,
                 "table_confidence": chunk.table_confidence,
+                "source_risk_level": chunk.source_risk_level,
+                "source_risk_flags_json": chunk.source_risk_flags_json,
                 "department": chunk.department,
                 "access_level": chunk.access_level,
                 "document_status": chunk.document_status,

@@ -174,11 +174,18 @@ function ServiceHealthCard({ name, service }) {
   );
 }
 
+function readinessClass(status) {
+  if (status === 'ready') return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+  if (status === 'blocked') return 'bg-rose-50 text-rose-800 border-rose-200';
+  return 'bg-slate-50 text-slate-700 border-slate-200';
+}
+
 export default function Analytics() {
   const navigate = useNavigate();
   const [stats,    setStats]    = useState(null);
   const [modelStatus, setModelStatus] = useState(null);
   const [applianceHealth, setApplianceHealth] = useState(null);
+  const [bankReadiness, setBankReadiness] = useState(null);
   const [period,   setPeriod]   = useState('30d');
   const [loading,  setLoading]  = useState(true);
   const [syncTime, setSyncTime] = useState(new Date());
@@ -192,18 +199,21 @@ export default function Analytics() {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const [summaryRes, modelRes, healthRes] = await Promise.all([
+      const [summaryRes, modelRes, healthRes, readinessRes] = await Promise.all([
         api.get('/analytics/summary'),
         api.get('/chat/models/status'),
         api.get('/analytics/appliance-health'),
+        api.get('/analytics/bank-readiness'),
       ]);
       setStats(summaryRes.data);
       setModelStatus(modelRes.data);
       setApplianceHealth(healthRes.data);
+      setBankReadiness(readinessRes.data);
     } catch {
       setStats(null);
       setModelStatus(null);
       setApplianceHealth(null);
+      setBankReadiness(null);
     } finally {
       setLoading(false);
       setSyncTime(new Date());
@@ -275,6 +285,8 @@ export default function Analytics() {
       ['Average confidence', stats?.avg_confidence ?? ''],
       ['Average latency ms', stats?.avg_latency_ms ?? ''],
       ['Appliance health', applianceHealth?.status ?? 'unknown'],
+      ['Bank readiness', bankReadiness?.status ?? 'unknown'],
+      ['Readiness blockers', bankReadiness?.blockers?.join('; ') ?? ''],
       ['Queued ingestion jobs', applianceHealth?.ingestion?.queued_jobs ?? ''],
       ['Documents needing approval', applianceHealth?.ingestion?.needs_approval ?? ''],
       ['Failed documents', applianceHealth?.ingestion?.failed_documents ?? ''],
@@ -393,6 +405,38 @@ export default function Analytics() {
                 <span className="font-bold text-secondary">{applianceHealth?.ingestion?.queued_jobs ?? '—'}</span>
               </div>
             </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-lg p-lg">
+            <div className="flex items-start justify-between gap-md">
+              <div>
+                <h3 className="font-h2 text-h2 text-on-surface">Bank Readiness</h3>
+                <p className="text-body-sm text-outline mt-1">
+                  Evidence gate for TLS, backups, restore drills, model health, queues, and vector snapshots.
+                </p>
+              </div>
+              <span className={`px-2.5 py-1 border rounded text-[11px] font-bold uppercase ${readinessClass(bankReadiness?.status)}`}>
+                {bankReadiness?.status || 'unknown'}
+              </span>
+            </div>
+            <div className="mt-md grid grid-cols-2 gap-sm">
+              <div className="rounded border border-slate-100 bg-slate-50 p-sm">
+                <p className="text-[10px] font-bold uppercase text-slate-500">Blockers</p>
+                <p className="text-2xl font-bold text-rose-700 mt-1">{bankReadiness?.blockers?.length ?? '—'}</p>
+              </div>
+              <div className="rounded border border-slate-100 bg-slate-50 p-sm">
+                <p className="text-[10px] font-bold uppercase text-slate-500">Warnings</p>
+                <p className="text-2xl font-bold text-amber-700 mt-1">{bankReadiness?.warnings?.length ?? '—'}</p>
+              </div>
+            </div>
+            {(bankReadiness?.blockers?.length || bankReadiness?.warnings?.length) ? (
+              <div className="mt-md space-y-1.5">
+                {[...(bankReadiness.blockers || []), ...(bankReadiness.warnings || [])].slice(0, 4).map(item => (
+                  <span key={item} className="inline-flex mr-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
+                    {item.replaceAll('_', ' ')}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

@@ -36,6 +36,20 @@ Minimal payload shape:
 
 Evaluation output includes pass/fail, source recall, citation term recall, answer term recall, and failed case details. Failed cases should be treated as release blockers for the affected customer workflow.
 
+## Bank-Ready Release Gate
+
+Run `bank-ready-rag-gate.json` before demos, pilots, embedding changes, chunk-profile changes, prompt changes, model route changes, reranker changes, or major document-ingestion changes.
+
+Minimum pass rules:
+
+- Source recall average >= 0.85.
+- Citation term recall average >= 0.80.
+- Location recall average >= 0.75.
+- Not-found cases must pass.
+- No case may return general bank-policy advice when `no_general_policy_advice` is true.
+
+Failures are product issues. Do not explain them away as demo variance.
+
 ## Seed Packs
 
 Available starter packs:

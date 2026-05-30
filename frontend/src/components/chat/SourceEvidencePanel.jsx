@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/axios';
+import SourceMetadataStrip from '../trust/SourceMetadataStrip';
 
 function sourceLocation(source) {
   const parts = [];
@@ -82,6 +83,18 @@ function WarningPills({ warnings = [] }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+function SourceRiskWarning({ source }) {
+  if (!source.source_risk_level || source.source_risk_level === 'low') return null;
+  return (
+    <div className="mt-2">
+      <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+        <span className="material-symbols-outlined text-[12px]">gpp_maybe</span>
+        Source warning: {source.source_risk_level}
+      </span>
     </div>
   );
 }
@@ -196,6 +209,10 @@ function SourceCard({ source, index, onOpenSource }) {
         <VerificationPill status={source.citation_verification} />
       </div>
       <WarningPills warnings={source.source_warnings || []} />
+      <SourceRiskWarning source={source} />
+      <div className="mt-2">
+        <SourceMetadataStrip source={source} />
+      </div>
       {source.document_id && (
         <button
           type="button"

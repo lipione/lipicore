@@ -25,6 +25,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 - Document lifecycle states: `draft`, `approved`, `superseded`, `archived`, and `disabled`.
 - Chunk-level permission metadata copied into PostgreSQL and Qdrant.
 - Redis/RQ ingestion queue with a separate worker process.
+- Adaptive chunk profiles for default text, section-heavy policy/regulatory text, spreadsheets/tables, presentations, and OCR-heavy inputs.
 - Open-source OCR fallback and table-aware extraction for PDFs and spreadsheets.
 - Queued long-document analysis for heavy OCR, large PDFs, and detailed Excel/PDF review.
 - Compliance Workspace for circular/review notes with human sign-off.
@@ -84,7 +85,7 @@ BankAi uses a defensive RAG pipeline rather than sending entire files to the mod
 
 1. Files are uploaded and stored in MinIO.
 2. Metadata is saved in PostgreSQL.
-3. Redis/RQ queues ingestion work for extraction, OCR/table parsing, chunking, embedding, and indexing.
+3. Redis/RQ queues ingestion work for extraction, OCR/table parsing, adaptive chunking, embedding, and indexing.
 4. Chunks are stored with lifecycle and permission metadata.
 5. Retrieval combines Qdrant semantic search and PostgreSQL full-text search.
    Semantic search uses `BAAI/bge-m3` multilingual embeddings with 1024-dimensional vectors so English questions can retrieve relevant Nepali policy chunks more reliably than the previous English-centric MiniLM baseline.
@@ -92,7 +93,7 @@ BankAi uses a defensive RAG pipeline rather than sending entire files to the mod
 7. Answers include source metadata and citation verification results.
 8. Admins/auditors can run RAG evaluation cases against expected sources and required citation terms.
 
-This is stronger than a basic vector-only chatbot because it adds document governance, role filters, reranking, citation evidence, queued long-document analysis, and measurable evaluation. It is still not perfect: citation verification is lexical overlap, not formal entailment, and broad multi-document synthesis still needs stronger map-reduce and evaluation coverage.
+This is stronger than a basic vector-only chatbot because it adds document governance, role filters, adaptive chunk profiles, reranking, citation evidence, queued long-document analysis, and measurable evaluation. It is still not perfect: citation verification is lexical overlap, not formal entailment, and broad multi-document synthesis still needs stronger map-reduce and evaluation coverage.
 
 ## Measured Test Baseline
 

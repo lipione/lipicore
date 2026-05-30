@@ -8,8 +8,12 @@ class RagEvaluationCase(BaseModel):
     question: str
     expected_source_document_ids: list[int] = Field(default_factory=list)
     expected_source_titles: list[str] = Field(default_factory=list)
+    expected_page_numbers: list[int] = Field(default_factory=list)
+    expected_section_labels: list[str] = Field(default_factory=list)
+    expected_chunk_indexes: list[int] = Field(default_factory=list)
     required_citation_terms: list[str] = Field(default_factory=list)
     required_answer_terms: list[str] = Field(default_factory=list)
+    expected_not_found: bool = False
     expect_not_found: bool = False
     not_found_required: bool = False
     source_required: bool = False
@@ -33,8 +37,10 @@ class RagEvaluationCaseResult(BaseModel):
     answer: str
     sources: list[dict[str, Any]]
     source_recall: float
+    location_recall: float = 1.0
     citation_term_recall: float
     answer_term_recall: float
+    citation_verification: dict[str, Any] = Field(default_factory=dict)
     not_found_passed: bool | None
     failures: list[str]
 
@@ -47,6 +53,7 @@ class RagEvaluationSummary(BaseModel):
     gate_passed: bool
     failed_case_ids: list[str]
     source_recall_avg: float
+    location_recall_avg: float = 1.0
     citation_term_recall_avg: float
     answer_term_recall_avg: float
 

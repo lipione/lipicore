@@ -1,6 +1,36 @@
 from app.services.citation_verifier import verify_answer_against_sources
 
 
+def test_verifier_marks_supported_when_all_claims_overlap_sources():
+    answer = "Complaints must be escalated within one business day."
+    sources = [
+        {
+            "passage": "Customer complaints must be escalated within one business day to the branch supervisor."
+        }
+    ]
+
+    result = verify_answer_against_sources(answer=answer, sources=sources)
+
+    assert result["status"] == "supported"
+    assert result["trust_label"] == "source_supported"
+    assert result["unsupported_sentence_count"] == 0
+
+
+def test_verifier_marks_unsupported_when_answer_adds_unsourced_claim():
+    answer = "Complaints must be escalated within one business day. The customer must receive NPR 500 compensation."
+    sources = [
+        {
+            "passage": "Customer complaints must be escalated within one business day to the branch supervisor."
+        }
+    ]
+
+    result = verify_answer_against_sources(answer=answer, sources=sources, min_overlap=0.35)
+
+    assert result["status"] in {"partially_supported", "unsupported"}
+    assert result["trust_label"] in {"partially_source_supported", "not_source_supported"}
+    assert "NPR 500 compensation" in " ".join(result["unsupported_sentences"])
+
+
 def test_citation_verifier_can_use_nli_stage_to_reject_contradiction():
     calls = []
 
@@ -21,7 +51,8 @@ def test_citation_verifier_can_use_nli_stage_to_reject_contradiction():
     )
 
     assert calls
-    assert result["status"] == "partially_supported"
+    assert result["status"] == "unsupported"
+    assert result["trust_label"] == "not_source_supported"
     assert result["verification_stage"] == "lexical+nli"
     assert result["nli_checked_sentence_count"] == 1
     assert result["unsupported_sentence_count"] == 1

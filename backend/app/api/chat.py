@@ -35,6 +35,7 @@ from ..services.rag_service import (
     MIN_SOURCE_RELEVANCE_SCORE,
     NOT_FOUND_RESPONSE,
     SESSION_RETRIEVAL_STATUSES,
+    UNTRUSTED_EVIDENCE_WARNING,
     _build_source,
     _document_visible_to_user,
     _rerank_results,
@@ -199,7 +200,8 @@ def _document_context_prompt(*, context: str, retrieval_query: str, safe_message
     return (
         f"\n\n--- DOCUMENT CONTEXT ---\n"
         f"{interpreted_query}"
-        f"Use the following context from approved documents to answer the user's question.\n\n"
+        f"Use the following context from approved documents to answer the user's question.\n"
+        f"{UNTRUSTED_EVIDENCE_WARNING}\n\n"
         f"{context}\n--- END DOCUMENT CONTEXT ---"
     )
 
@@ -268,6 +270,10 @@ def derive_answer_metadata(
 ) -> dict:
     source_count = len(sources or [])
     requires_sources = mode in SOURCE_REQUIRED_MODES
+    trust_label = (citation_verification or {}).get(
+        "trust_label",
+        "no_sources" if source_count == 0 else "source_unverified",
+    )
 
     if source_count > 0:
         answer_type = "uploaded_file_answer" if mode == "analyze_file" or active_document_ids else "official_source_backed"
@@ -276,7 +282,10 @@ def derive_answer_metadata(
     else:
         answer_type = "general_answer"
 
-    if source_count > 0 and citation_verification and citation_verification.get("status") == "partially_supported":
+    if source_count > 0 and citation_verification and (
+        citation_verification.get("status") in {"partially_supported", "unsupported"}
+        or trust_label in {"partially_source_supported", "not_source_supported"}
+    ):
         answer_type = "unsupported_source"
 
     if answer and requires_sources and source_count == 0:
@@ -288,6 +297,7 @@ def derive_answer_metadata(
         "answer_type": answer_type,
         "source_count": source_count,
         "requires_sources": requires_sources,
+        "trust_label": trust_label,
         "citation_verification": citation_verification or {},
     }
 
@@ -518,6 +528,7 @@ def _direct_extract_verification(sources: list[dict] | None) -> dict:
     source_count = len(sources or [])
     return {
         "status": "supported" if source_count else "no_sources",
+        "trust_label": "source_supported" if source_count else "no_sources",
         "verification_stage": "direct_extract",
         "supported_sentence_count": 0,
         "unsupported_sentence_count": 0,
@@ -734,6 +745,7 @@ async def create_chat_message(
             "llm_received_masked_input": not direct_text_extract,
             "sources_count": len(sources),
             "answer_type": answer_metadata["answer_type"],
+            "trust_label": answer_metadata.get("trust_label"),
             "mode": mode,
             "citation_verification": citation_verification,
             "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
@@ -869,6 +881,7 @@ async def stream_chat_message(
                         "llm_received_masked_input": False,
                         "sources_count": len(sources_list),
                         "answer_type": answer_metadata["answer_type"],
+                        "trust_label": answer_metadata.get("trust_label"),
                         "mode": mode,
                         "citation_verification": citation_verification,
                         "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
@@ -1013,6 +1026,7 @@ async def stream_chat_message(
                         "llm_received_masked_input": False,
                         "sources_count": 0,
                         "answer_type": answer_metadata["answer_type"],
+                        "trust_label": answer_metadata.get("trust_label"),
                         "mode": mode,
                         "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
                         "streamed": True,
@@ -1152,6 +1166,7 @@ async def stream_chat_message(
                     "llm_received_masked_input": True,
                     "sources_count": len(sources_list),
                     "answer_type": answer_metadata["answer_type"],
+                    "trust_label": answer_metadata.get("trust_label"),
                     "mode": mode,
                     "citation_verification": citation_verification,
                     "rewritten_query": retrieval_query if retrieval_query != safe_message else None,

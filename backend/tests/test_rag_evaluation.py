@@ -84,6 +84,8 @@ def test_evaluate_rag_cases_scores_sources_citation_terms_and_answer_terms():
             "id": "aml-str-escalation",
             "question": "What is the STR escalation timeline?",
             "expected_source_document_ids": [10],
+            "expected_page_numbers": [17],
+            "expected_section_labels": ["Section 7.1"],
             "required_citation_terms": ["Section 7.1", "24 hours"],
             "required_answer_terms": ["Suspicious Transaction Reports", "24 hours"],
         }
@@ -103,8 +105,26 @@ def test_evaluate_rag_cases_scores_sources_citation_terms_and_answer_terms():
     assert result["summary"]["gate_passed"] is True
     assert result["cases"][0]["passed"] is True
     assert result["cases"][0]["source_recall"] == 1
+    assert result["cases"][0]["location_recall"] == 1
     assert result["cases"][0]["citation_term_recall"] == 1
     assert result["cases"][0]["answer_term_recall"] == 1
+    assert result["summary"]["location_recall_avg"] == 1
+
+
+def test_rag_evaluation_scores_expected_section_labels():
+    from app.services.rag_evaluation_service import _score_location_recall
+
+    sources = [
+        {"document_title": "Customer Care SOP", "section_label": "Section 2.1", "page_number": 4},
+        {"document_title": "Other", "section_label": "Section 9", "page_number": 20},
+    ]
+
+    assert _score_location_recall(
+        sources=sources,
+        expected_section_labels=["Section 2.1"],
+        expected_page_numbers=[4],
+        expected_chunk_indexes=[],
+    ) == 1.0
 
 
 def test_evaluate_rag_cases_fails_when_citation_points_to_wrong_document():
@@ -267,6 +287,23 @@ def test_evaluate_rag_cases_fails_when_verified_citation_required_but_partial():
     case = result["cases"][0]
     assert case["passed"] is False
     assert "expected verified citations" in case["failures"]
+
+
+def test_rag_evaluation_marks_partially_supported_answer_as_failed_when_citation_required():
+    from app.services.rag_evaluation_service import _case_passed
+
+    case = {
+        "citation_required": True,
+        "source_required": True,
+    }
+    result = {
+        "source_recall": 1.0,
+        "citation_term_recall": 1.0,
+        "answer_term_recall": 1.0,
+        "citation_verification": {"trust_label": "partially_source_supported"},
+    }
+
+    assert _case_passed(case, result) is False
 
 
 def test_evaluate_rag_cases_fails_general_policy_advice_without_sources():

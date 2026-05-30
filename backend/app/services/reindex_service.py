@@ -1,4 +1,5 @@
 import uuid
+import json
 from typing import Iterable
 
 from qdrant_client.models import PointStruct
@@ -13,6 +14,14 @@ from .embedding_service import generate_embeddings
 from .qdrant_service import delete_points_by_document, upload_points
 
 
+def _chunk_source_risk_flags(chunk: DocumentChunk) -> list[str]:
+    try:
+        value = json.loads(chunk.source_risk_flags_json or "[]")
+    except json.JSONDecodeError:
+        return []
+    return value if isinstance(value, list) else []
+
+
 def _chunk_payload(document: Document, chunk: DocumentChunk) -> dict:
     return {
         "bank_id": document.bank_id,
@@ -25,6 +34,8 @@ def _chunk_payload(document: Document, chunk: DocumentChunk) -> dict:
         "ocr_confidence": chunk.ocr_confidence,
         "table_confidence": chunk.table_confidence,
         "page_bbox_json": chunk.page_bbox_json,
+        "source_risk_level": chunk.source_risk_level or "low",
+        "source_risk_flags": _chunk_source_risk_flags(chunk),
         "department": document.department,
         "access_level": document.access_level or 0,
         "document_status": document.status,

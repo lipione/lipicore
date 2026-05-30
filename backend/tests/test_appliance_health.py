@@ -154,3 +154,17 @@ def test_appliance_health_endpoint_requires_analytics_role(monkeypatch):
     assert ok.status_code == 200
     assert ok.json()["status"] == "healthy"
     assert denied.status_code == 403
+
+
+def test_bank_readiness_endpoint_requires_analytics_role():
+    admin_token = get_token("admin@test.local")
+    response = client.get(
+        "/api/analytics/bank-readiness",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "status" in payload
+    assert "blockers" in payload
+    assert "warnings" in payload

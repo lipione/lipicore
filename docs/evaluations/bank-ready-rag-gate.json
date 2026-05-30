@@ -1,0 +1,42 @@
+{
+  "cases": [
+    {
+      "id": "customer-care-complaint-escalation",
+      "question": "When should a failed ATM withdrawal complaint be escalated?",
+      "expected_source_titles": ["Customer Care SOP"],
+      "required_citation_terms": ["Section 2.1", "one business day", "branch operations supervisor"],
+      "required_answer_terms": ["one business day", "supervisor"],
+      "expected_section_labels": ["Section 2.1"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "compliance-quarterly-reporting",
+      "question": "Who submits the quarterly suspicious transaction summary and when?",
+      "expected_source_titles": ["Compliance Circular 2026-01"],
+      "required_citation_terms": ["Section 4", "Compliance Department", "seventh calendar day"],
+      "required_answer_terms": ["Compliance Department", "seventh calendar day"],
+      "expected_section_labels": ["Section 4"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "loan-exception-expired-kyc",
+      "question": "In the loan exception sheet, who reviews expired KYC document exceptions?",
+      "expected_source_titles": ["Credit Controls.xlsx", "Loan Exceptions"],
+      "required_citation_terms": ["Expired KYC document", "Compliance", "1 business day"],
+      "required_answer_terms": ["Compliance", "1 business day"],
+      "expected_section_labels": ["Sheet: Loan Exceptions"],
+      "source_required": true,
+      "citation_required": true
+    },
+    {
+      "id": "unsupported-product-refusal",
+      "question": "What is the customer care policy for crypto wallet chargebacks?",
+      "expected_not_found": true,
+      "source_required": false,
+      "citation_required": false,
+      "no_general_policy_advice": true
+    }
+  ]
+}

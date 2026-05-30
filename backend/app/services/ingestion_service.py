@@ -2,6 +2,7 @@ import os
 import uuid
 import re
 import json
+from dataclasses import dataclass
 from pypdf import PdfReader
 from docx import Document as DocxDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -13,6 +14,7 @@ from ..core.config import settings
 from .embedding_service import generate_embeddings
 from .ocr_service import OcrResult, convert_pdf_pages_to_images, ocr_image_file, ocr_pil_image_to_text
 from .qdrant_service import upload_points
+from .source_risk_service import classify_source_risk
 
 
 SECTION_RE = re.compile(
@@ -46,6 +48,72 @@ DEGRADED_NEPALI_TEXT_PATTERNS = (
 )
 
 
+@dataclass(frozen=True)
+class ChunkProfile:
+    name: str
+    chunk_size: int
+    chunk_overlap: int
+
+
+DEFAULT_CHUNK_PROFILE = ChunkProfile("default_text", 1000, 200)
+REGULATORY_CHUNK_PROFILE = ChunkProfile("regulatory_section", 900, 180)
+SPREADSHEET_CHUNK_PROFILE = ChunkProfile("spreadsheet_table", 1600, 120)
+PRESENTATION_CHUNK_PROFILE = ChunkProfile("presentation_slide", 900, 120)
+OCR_CHUNK_PROFILE = ChunkProfile("ocr_compact", 800, 100)
+
+REGULATORY_DOCUMENT_TYPES = {
+    "policy",
+    "procedure",
+    "manual",
+    "compliance",
+    "circular",
+    "directive",
+    "law",
+    "act",
+    "sop",
+}
+
+
+def _normalize_file_type(file_type: str | None) -> str:
+    return (file_type or "").strip().lower().lstrip(".")
+
+
+def _has_ocr_confidence(pages: list[dict] | None) -> bool:
+    return any(page.get("ocr_confidence") is not None for page in pages or [])
+
+
+def _has_dense_section_markers(pages: list[dict] | None) -> bool:
+    text = "\n".join((page.get("text") or "")[:2500] for page in pages or [])
+    return len(SECTION_RE.findall(text)) >= 2
+
+
+def resolve_chunk_profile(
+    *,
+    file_type: str | None = None,
+    document_type: str | None = None,
+    pages: list[dict] | None = None,
+    chunk_size: int | None = None,
+    chunk_overlap: int | None = None,
+) -> ChunkProfile:
+    if chunk_size is not None or chunk_overlap is not None:
+        size = chunk_size if chunk_size is not None else DEFAULT_CHUNK_PROFILE.chunk_size
+        overlap = chunk_overlap if chunk_overlap is not None else min(DEFAULT_CHUNK_PROFILE.chunk_overlap, size // 5)
+        return ChunkProfile("custom", size, min(overlap, max(size - 1, 0)))
+
+    normalized_file_type = _normalize_file_type(file_type)
+    normalized_document_type = (document_type or "").strip().lower()
+
+    if normalized_file_type in {"xlsx", "xls", "csv"}:
+        return SPREADSHEET_CHUNK_PROFILE
+    if normalized_file_type in {"pptx", "ppt"}:
+        return PRESENTATION_CHUNK_PROFILE
+    if normalized_file_type in {"jpg", "jpeg", "png"} or _has_ocr_confidence(pages):
+        return OCR_CHUNK_PROFILE
+    if normalized_document_type in REGULATORY_DOCUMENT_TYPES or _has_dense_section_markers(pages):
+        return REGULATORY_CHUNK_PROFILE
+    return DEFAULT_CHUNK_PROFILE
+
+
 def _extract_section_label(text: str | None) -> str | None:
     if not text:
         return None
@@ -63,6 +131,8 @@ def _page_payload(
     ocr_confidence: float | None = None,
     table_confidence: float | None = None,
     page_bbox_json: str | None = None,
+    section_label: str | None = None,
+    table_metadata: dict | None = None,
     pdf_text_layer_repaired: bool = False,
     vision_transcription: bool = False,
     vision_model: str | None = None,
@@ -74,6 +144,8 @@ def _page_payload(
         "ocr_confidence": ocr_confidence,
         "table_confidence": table_confidence,
         "page_bbox_json": page_bbox_json,
+        "section_label": section_label,
+        "table_metadata": table_metadata,
     }
     if pdf_text_layer_repaired:
         payload["pdf_text_layer_repaired"] = True
@@ -302,17 +374,20 @@ def _extract_xlsx_pages(file_path: str) -> list[dict]:
             value_sheet = value_wb[sheet.title]
             sheet_lines = [f"\n--- Sheet: {sheet.title} ---"]
             sheet_lines.append(f"Dimension: {sheet.calculate_dimension()}")
+            merged_ranges = [str(cell_range) for cell_range in sheet.merged_cells.ranges]
             if sheet.merged_cells.ranges:
-                merged_ranges = ", ".join(str(cell_range) for cell_range in sheet.merged_cells.ranges)
-                sheet_lines.append(f"Merged ranges: {merged_ranges}")
+                sheet_lines.append(f"Merged ranges: {', '.join(merged_ranges)}")
+            tables_metadata = []
             if sheet.tables:
                 table_parts = []
                 for name, table in sheet.tables.items():
                     ref = getattr(table, "ref", table)
+                    tables_metadata.append({"name": name, "ref": str(ref)})
                     table_parts.append(f"{name}={ref}")
                 tables = ", ".join(table_parts)
                 sheet_lines.append(f"Tables: {tables}")
             formula_lines = []
+            formula_cells = {}
             for row in sheet.iter_rows():
                 cells = []
                 for cell in row:
@@ -321,6 +396,10 @@ def _extract_xlsx_pages(file_path: str) -> list[dict]:
                     value = value_sheet[cell.coordinate].value
                     if isinstance(cell.value, str) and cell.value.startswith("="):
                         formula_lines.append(f"{cell.coordinate} formula={cell.value} cached={value}")
+                        formula_cells[cell.coordinate] = {
+                            "formula": cell.value,
+                            "cached": value,
+                        }
                     cells.append(f"{cell.coordinate}={value if value is not None else cell.value}")
                 if cells:
                     sheet_lines.append(" | ".join(cells))
@@ -333,6 +412,14 @@ def _extract_xlsx_pages(file_path: str) -> list[dict]:
                 text=sheet_text,
                 extraction_confidence=0.98,
                 table_confidence=0.9,
+                section_label=f"Sheet: {sheet.title}",
+                table_metadata={
+                    "sheet_name": sheet.title,
+                    "dimension": sheet.calculate_dimension(),
+                    "merged_ranges": merged_ranges,
+                    "tables": tables_metadata,
+                    "formula_cells": formula_cells,
+                },
             ))
         return pages
     finally:
@@ -450,6 +537,7 @@ def extract_pages(file_path: str, file_type: str) -> list[dict]:
                 page_number=i + 1,
                 text=slide_text,
                 extraction_confidence=0.95,
+                section_label=f"Slide {i + 1}",
             ))
             text += slide_text
     elif ft in ['jpg', 'jpeg', 'png']:
@@ -473,10 +561,23 @@ def extract_text(file_path: str, file_type: str) -> str:
     return "\n".join(page["text"] for page in extract_pages(file_path, file_type))
 
 
-def build_indexable_chunks(pages: list[dict], chunk_size: int = 1000, chunk_overlap: int = 200) -> list[dict]:
-    text_splitter = RecursiveCharacterTextSplitter(
+def build_indexable_chunks(
+    pages: list[dict],
+    chunk_size: int | None = None,
+    chunk_overlap: int | None = None,
+    file_type: str | None = None,
+    document_type: str | None = None,
+) -> list[dict]:
+    profile = resolve_chunk_profile(
+        file_type=file_type,
+        document_type=document_type,
+        pages=pages,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+    )
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=profile.chunk_size,
+        chunk_overlap=profile.chunk_overlap,
         length_function=len,
     )
     indexable_chunks = []
@@ -485,14 +586,18 @@ def build_indexable_chunks(pages: list[dict], chunk_size: int = 1000, chunk_over
         if not page_text:
             continue
         for chunk_text in text_splitter.split_text(page_text):
+            risk = classify_source_risk(chunk_text)
             indexable_chunks.append({
                 "text": chunk_text,
                 "page_number": page.get("page_number"),
-                "section_label": _extract_section_label(chunk_text),
+                "section_label": page.get("section_label") or _extract_section_label(chunk_text),
                 "extraction_confidence": page.get("extraction_confidence"),
                 "ocr_confidence": page.get("ocr_confidence"),
                 "table_confidence": page.get("table_confidence"),
                 "page_bbox_json": page.get("page_bbox_json"),
+                "table_metadata": page.get("table_metadata"),
+                "source_risk_level": risk["risk_level"],
+                "source_risk_flags": risk["flags"],
             })
     return indexable_chunks
 
@@ -506,10 +611,17 @@ def create_extraction_review_records(
 ) -> list:
     from ..models.document_intelligence import DocumentExtractionPage
     from .document_intelligence_service import build_extraction_flags
+    from .extraction_quality_service import build_extraction_quality
 
     records = []
     for page in pages:
-        flags = build_extraction_flags(
+        quality = build_extraction_quality(
+            extraction_confidence=page.get("extraction_confidence"),
+            ocr_confidence=page.get("ocr_confidence"),
+            table_confidence=page.get("table_confidence"),
+            text=page.get("text"),
+        )
+        visual_flags = build_extraction_flags(
             ocr_confidence=page.get("ocr_confidence"),
             table_confidence=page.get("table_confidence"),
             layout_confidence=page.get("layout_confidence"),
@@ -517,6 +629,8 @@ def create_extraction_review_records(
             has_signature_like_region=bool(page.get("has_signature_like_region")),
             has_stamp_like_region=bool(page.get("has_stamp_like_region")),
         )
+        flags = list(dict.fromkeys([*quality["flags"], *visual_flags]))
+        requires_review = quality["quality_bucket"] == "review_required" or bool(visual_flags)
         record = DocumentExtractionPage(
             bank_id=bank_id,
             document_id=document_id,
@@ -529,7 +643,7 @@ def create_extraction_review_records(
             page_image_path=page.get("page_image_path"),
             bbox_json=page.get("page_bbox_json"),
             flags_json=json.dumps(flags),
-            review_status="pending",
+            review_status="pending" if requires_review else "verified",
         )
         db.add(record)
         records.append(record)
@@ -621,7 +735,11 @@ def process_document(document_id: int):
             db.commit()
 
             # 2. Split into page-aware chunks
-            chunks = build_indexable_chunks(pages)
+            chunks = build_indexable_chunks(
+                pages,
+                file_type=doc.file_type,
+                document_type=doc.document_type,
+            )
 
             if not chunks:
                 doc.status = "failed"
@@ -657,6 +775,8 @@ def process_document(document_id: int):
                     ocr_confidence=chunk.get("ocr_confidence"),
                     table_confidence=chunk.get("table_confidence"),
                     page_bbox_json=chunk.get("page_bbox_json"),
+                    source_risk_level=chunk.get("source_risk_level", "low"),
+                    source_risk_flags_json=json.dumps(chunk.get("source_risk_flags", [])),
                     department=doc.department,
                     access_level=doc.access_level or 0,
                     document_scope=doc.document_scope,
@@ -679,6 +799,8 @@ def process_document(document_id: int):
                         "ocr_confidence": chunk.get("ocr_confidence"),
                         "table_confidence": chunk.get("table_confidence"),
                         "page_bbox_json": chunk.get("page_bbox_json"),
+                        "source_risk_level": chunk.get("source_risk_level", "low"),
+                        "source_risk_flags": chunk.get("source_risk_flags", []),
                         "department": doc.department,
                         "access_level": doc.access_level or 0,
                         "document_status": doc.status,
