@@ -1209,7 +1209,7 @@ def test_streaming_chat_blocks_keyword_only_incomplete_policy_citations_before_m
     response = client.post(
         f"/api/chat/sessions/{chat_id}/stream",
         headers={"Authorization": f"Bearer {token}"},
-        json={"message": "What collateral approval requires reviewers?", "mode": "ask_knowledge"},
+        json={"message": "According to the approved policy, what collateral approval requires reviewers?", "mode": "ask_knowledge"},
     )
 
     assert response.status_code == 200
@@ -1221,6 +1221,116 @@ def test_streaming_chat_blocks_keyword_only_incomplete_policy_citations_before_m
         saved_sources = json.loads(saved.sources_json)
         assert saved_sources[0]["document_title"] == "Collateral Policy"
         assert saved_sources[0]["citation_incomplete_reasons"] == ["missing_clause_number"]
+
+
+def test_streaming_ask_knowledge_falls_back_to_general_for_broad_query_with_incomplete_policy_citation(monkeypatch):
+    class FakeLease:
+        queued_ahead = 0
+        profile = SimpleNamespace(
+            api_base="http://fake-llm.local",
+            api_key="test",
+            model="fake-model",
+            timeout_seconds=1,
+        )
+
+    class FakeReservation:
+        async def __aenter__(self):
+            return FakeLease()
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class FakeStreamResponse:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def aiter_lines(self):
+            yield 'data: {"choices":[{"delta":{"content":"Banking fraud is dishonest activity involving bank accounts, transactions, or services."}}]}'
+            yield "data: [DONE]"
+
+    class FakeAsyncClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        def stream(self, *_args, **_kwargs):
+            return FakeStreamResponse()
+
+    async def fake_model_status():
+        return {}
+
+    monkeypatch.setattr(chat_api, "generate_embeddings", lambda _texts: [[0.1, 0.2, 0.3]])
+    monkeypatch.setattr(chat_api, "model_status", fake_model_status)
+    monkeypatch.setattr(chat_api, "reserve_model", lambda **_kwargs: FakeReservation())
+    monkeypatch.setattr(chat_api.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(
+        chat_api,
+        "_search",
+        lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                payload={
+                    "document_id": 18,
+                    "text": "Banking fraud can include unauthorized transactions and deceptive account activity.",
+                    "page_number": 3,
+                    "pdf_page_number": 3,
+                    "printed_page_number": "2",
+                    "document_heading": "Banking Fraud Policy",
+                    "citation_incomplete_reasons": ["missing_clause_number"],
+                },
+                score=0.95,
+            )
+        ],
+    )
+    monkeypatch.setattr(chat_api, "_filter_results", lambda results, *_args, **_kwargs: results)
+    monkeypatch.setattr(chat_api, "_high_confidence_results", lambda results: results)
+
+    with Session(engine) as session:
+        staff = session.query(User).filter(User.email == "staff@test.local").first()
+        bank = session.query(Bank).filter(Bank.code == "TEST01").first()
+        chat = ChatSession(bank_id=bank.id, user_id=staff.id, title="Broad Fraud Question")
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+        session.add(Document(
+            id=18,
+            bank_id=bank.id,
+            uploaded_by=staff.id,
+            title="Banking Fraud Policy",
+            file_name="banking-fraud-policy.pdf",
+            file_type="pdf",
+            file_path="banking-fraud-policy.pdf",
+            document_type="policy",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        ))
+        session.commit()
+        chat_id = chat.id
+
+    token = get_token("staff@test.local")
+    response = client.post(
+        f"/api/chat/sessions/{chat_id}/stream",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "Tell me about banking fraud", "mode": "ask_knowledge"},
+    )
+
+    assert response.status_code == 200
+    assert "Banking fraud is dishonest activity" in response.text
+    assert rag_service.POLICY_CITATION_INCOMPLETE_RESPONSE not in response.text
+    with Session(engine) as session:
+        saved = session.query(ChatMessage).filter(ChatMessage.session_id == chat_id, ChatMessage.role == "assistant").first()
+        saved_sources = json.loads(saved.sources_json)
+        assert saved_sources == []
 
 
 def test_streaming_chat_persists_verified_sources_after_model_response(monkeypatch):

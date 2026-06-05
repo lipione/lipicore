@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from app.api.chat import (
     MODEL_CONTEXT_LIMIT_TOKENS,
     _model_supports_vision,
+    _requires_source_backed_answer,
     derive_answer_metadata,
     general_fallback_system_identity,
     mode_instruction,
@@ -30,6 +31,21 @@ def test_public_lipicore_alias_is_recognized_as_vision_capable():
     assert _model_supports_vision("vision") is True
     assert _model_supports_vision("LipiFast") is False
     assert _model_supports_vision("legacy-vendor-image-route") is False
+
+
+def test_source_backed_intent_keeps_broad_ask_knowledge_questions_general():
+    assert _requires_source_backed_answer(
+        mode="ask_knowledge",
+        message="Tell me about banking fraud",
+    ) is False
+    assert _requires_source_backed_answer(
+        mode="ask_knowledge",
+        message="According to the approved policy, tell me about banking fraud",
+    ) is True
+    assert _requires_source_backed_answer(
+        mode="approved_knowledge",
+        message="Tell me about banking fraud",
+    ) is True
 
 
 def test_chat_context_window_defaults_to_8k():

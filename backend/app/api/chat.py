@@ -84,6 +84,26 @@ CHAT_UPLOAD_DIR = settings.CHAT_UPLOAD_DIR
 
 KNOWLEDGE_SEARCH_MODES = {"ask_knowledge", "approved_knowledge", "analyze_file", "compare"}
 SOURCE_REQUIRED_MODES = {"approved_knowledge", "analyze_file", "compare"}
+SOURCE_BACKED_QUERY_RE = re.compile(
+    r"\b("
+    r"according to|as per|approved|policy|policies|source|sources|cite|citation|"
+    r"document|documents|circular|circulars|directive|directives|sop|manual|"
+    r"rule|rules|regulation|regulations|regulatory|nrb|act|law|laws|"
+    r"section|sections|clause|clauses|article|articles|quote|quoted|exact"
+    r")\b"
+    r"|\bunder\s+(?:the\s+)?(?:act|law|policy|rule|regulation|directive|circular|section|clause|nrb)\b"
+    r"|\bwhat\s+does\b.{0,60}\bsay\b",
+    flags=re.IGNORECASE,
+)
+SOURCE_BACKED_NEPALI_TERMS = {
+    "नीति",
+    "स्रोत",
+    "दफा",
+    "ऐन",
+    "नियम",
+    "परिपत्र",
+    "निर्देशन",
+}
 LOW_INTENT_TERMS = {
     "hello",
     "helo",
@@ -186,6 +206,23 @@ def _should_attempt_document_retrieval(
     if message is not None and _should_skip_document_retrieval(message):
         return False
     return bool(active_document_ids) or mode in KNOWLEDGE_SEARCH_MODES
+
+
+def _requires_source_backed_answer(
+    *,
+    mode: str,
+    message: str | None,
+    retrieval_query: str | None = None,
+) -> bool:
+    if mode in SOURCE_REQUIRED_MODES:
+        return True
+
+    combined = " ".join(part for part in [message, retrieval_query] if part).strip().lower()
+    if not combined:
+        return False
+    if SOURCE_BACKED_QUERY_RE.search(combined):
+        return True
+    return any(term in combined for term in SOURCE_BACKED_NEPALI_TERMS)
 
 
 def _document_context_prompt(*, context: str, retrieval_query: str, safe_message: str) -> str:
@@ -700,7 +737,19 @@ async def create_chat_message(
             user_department=current_user.department,
             model_name=chat_request.model_override or select_model_key_for_workflow(mode),
         )
-        if answer == NOT_FOUND_RESPONSE and mode not in SOURCE_REQUIRED_MODES:
+        if answer == POLICY_CITATION_INCOMPLETE_RESPONSE and not _requires_source_backed_answer(
+            mode=mode,
+            message=safe_message,
+            retrieval_query=retrieval_query,
+        ):
+            answer = await async_call_llm(
+                safe_message,
+                system=general_fallback_system_identity(chat_request.language, mode),
+                user_id=current_user.id,
+                role=current_user.role,
+            )
+            sources = []
+        elif answer == NOT_FOUND_RESPONSE and mode not in SOURCE_REQUIRED_MODES:
             answer = await async_call_llm(
                 safe_message,
                 system=general_fallback_system_identity(chat_request.language, mode),
@@ -935,58 +984,66 @@ async def stream_chat_message(
         yield f"data: {json.dumps({'type': 'status', 'message': 'Generating response...'})}\n\n"
 
         if not has_image and _policy_citation_gate_blocks(retrieval_query, sources_list):
-            sources_list = _policy_citation_blocking_sources(sources_list)
-            full_response = POLICY_CITATION_INCOMPLETE_RESPONSE
-            yield f"data: {json.dumps({'token': full_response})}\n\n"
-            suggestions = []
-            citation_verification = _citation_incomplete_verification(sources_list)
-            sources_list = attach_source_verification(sources_list, citation_verification)
-            answer_metadata = derive_answer_metadata(
+            if not _requires_source_backed_answer(
                 mode=mode,
-                sources=sources_list,
-                active_document_ids=active_doc_ids,
-                answer=full_response,
-                citation_verification=citation_verification,
-            )
-            try:
-                ai_msg = ChatMessage(
-                    bank_id=current_user.bank_id,
-                    session_id=session_id,
-                    user_id=current_user.id,
-                    role="assistant",
-                    content=full_response,
-                    sources_json=json.dumps(sources_list),
-                    suggestions_json=json.dumps(suggestions),
+                message=safe_message,
+                retrieval_query=retrieval_query,
+            ):
+                sources_list = []
+                sys_identity = general_fallback_system_identity(chat_request.language, mode)
+            else:
+                sources_list = _policy_citation_blocking_sources(sources_list)
+                full_response = POLICY_CITATION_INCOMPLETE_RESPONSE
+                yield f"data: {json.dumps({'token': full_response})}\n\n"
+                suggestions = []
+                citation_verification = _citation_incomplete_verification(sources_list)
+                sources_list = attach_source_verification(sources_list, citation_verification)
+                answer_metadata = derive_answer_metadata(
+                    mode=mode,
+                    sources=sources_list,
+                    active_document_ids=active_doc_ids,
+                    answer=full_response,
+                    citation_verification=citation_verification,
                 )
-                db.add(ai_msg)
-                db.commit()
-                _update_session_summary(session, safe_message, full_response, db)
-                log_audit_event(
-                    db=db,
-                    action="chat_query",
-                    resource_type="chat",
-                    resource_id=str(session_id),
-                    bank_id=current_user.bank_id,
-                    user_id=current_user.id,
-                    metadata={
-                        "query": safe_message,
-                        "pii_detected": safe_message != chat_request.message,
-                        "masking_mode": "redact",
-                        "llm_received_masked_input": False,
-                        "sources_count": len(sources_list),
-                        "answer_type": answer_metadata["answer_type"],
-                        "trust_label": answer_metadata.get("trust_label"),
-                        "mode": mode,
-                        "citation_verification": citation_verification,
-                        "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
-                        "streamed": True,
-                        "citation_gate_blocked": True,
-                    },
-                )
-            except Exception as e:
-                logger.error(f"[STREAM] Error saving citation-incomplete message: {e}")
-            yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
-            return
+                try:
+                    ai_msg = ChatMessage(
+                        bank_id=current_user.bank_id,
+                        session_id=session_id,
+                        user_id=current_user.id,
+                        role="assistant",
+                        content=full_response,
+                        sources_json=json.dumps(sources_list),
+                        suggestions_json=json.dumps(suggestions),
+                    )
+                    db.add(ai_msg)
+                    db.commit()
+                    _update_session_summary(session, safe_message, full_response, db)
+                    log_audit_event(
+                        db=db,
+                        action="chat_query",
+                        resource_type="chat",
+                        resource_id=str(session_id),
+                        bank_id=current_user.bank_id,
+                        user_id=current_user.id,
+                        metadata={
+                            "query": safe_message,
+                            "pii_detected": safe_message != chat_request.message,
+                            "masking_mode": "redact",
+                            "llm_received_masked_input": False,
+                            "sources_count": len(sources_list),
+                            "answer_type": answer_metadata["answer_type"],
+                            "trust_label": answer_metadata.get("trust_label"),
+                            "mode": mode,
+                            "citation_verification": citation_verification,
+                            "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
+                            "streamed": True,
+                            "citation_gate_blocked": True,
+                        },
+                    )
+                except Exception as e:
+                    logger.error(f"[STREAM] Error saving citation-incomplete message: {e}")
+                yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
+                return
 
         if not has_image and mode in SOURCE_REQUIRED_MODES and not sources_list:
             full_response = NOT_FOUND_RESPONSE
