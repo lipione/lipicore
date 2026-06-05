@@ -7,7 +7,7 @@ from sqlmodel import Session
 from sqlmodel import SQLModel
 
 from app.models.bank import Bank
-from app.models.chat import ChatSession
+from app.models.chat import ChatMessage, ChatSession
 from app.models.document import Document, DocumentChunk
 from app.models.document_intelligence import DocumentExtractionPage
 from app.models.user import User
@@ -226,7 +226,10 @@ def test_global_rag_returns_cited_sources(monkeypatch):
                     "document_id": 3,
                     "text": "Section 4.2 requires branch staff to verify KYC documents before account opening.",
                     "page_number": 12,
+                    "document_heading": "Chapter 4: Account Opening",
+                    "clause_number": "Section 4.2",
                     "section_label": "Section 4.2",
+                    "citation_incomplete_reasons": [],
                     "chunk_index": 7,
                 },
                 score=0.91,
@@ -295,6 +298,301 @@ def test_global_rag_returns_cited_sources(monkeypatch):
     assert sources[0]["relevance_score"] >= rag_service.MIN_SOURCE_RELEVANCE_SCORE
 
 
+def test_global_rag_returns_clause_heading_and_both_page_numbers(monkeypatch):
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 3,
+                    "text": "Clause 5.1(a) says secured SME DSR must not exceed 60%.",
+                    "page_number": 42,
+                    "pdf_page_number": 42,
+                    "printed_page_number": "38",
+                    "document_heading": "Chapter 5: SME Lending",
+                    "clause_number": "Clause 5.1(a)",
+                    "section_label": "Clause 5.1(a)",
+                    "chunk_index": 7,
+                    "citation_confidence": 0.95,
+                    "citation_incomplete_reasons": [],
+                },
+                score=0.95,
+            )
+        ]
+
+    def fake_call_llm(prompt):
+        assert "Heading: Chapter 5: SME Lending" in prompt
+        assert "Clause: Clause 5.1(a)" in prompt
+        assert "PDF page: 42" in prompt
+        assert "Printed page: 38" in prompt
+        return "Secured SME DSR must not exceed 60%."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Citation Bank", code="CITE01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="citation@test.local", password_hash="x", name="Citation User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        doc = Document(
+            id=3,
+            bank_id=bank.id,
+            uploaded_by=user.id,
+            title="Credit Policy 2024",
+            file_name="credit-policy.pdf",
+            file_type="pdf",
+            file_path="credit-policy.pdf",
+            document_type="policy",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        )
+        session.add(doc)
+        session.commit()
+
+        answer, sources = rag_service.generate_rag_response(
+            "What is the secured SME DSR limit?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert "60%" in answer
+    assert sources[0]["document_heading"] == "Chapter 5: SME Lending"
+    assert sources[0]["clause_number"] == "Clause 5.1(a)"
+    assert sources[0]["page_number"] == 42
+    assert sources[0]["pdf_page_number"] == 42
+    assert sources[0]["printed_page_number"] == "38"
+    assert sources[0]["document_status"] == "approved"
+    assert sources[0]["version_state"] == "approved"
+    assert sources[0]["source_status"] == "approved/approved"
+    assert sources[0]["citation_complete"] is True
+
+
+def test_policy_rag_blocks_answer_when_required_citation_fields_are_missing(monkeypatch):
+    llm_called = False
+
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 12,
+                    "text": "DSR must not exceed 60% for secured SME loans.",
+                    "page_number": 42,
+                    "chunk_index": 1,
+                    "citation_incomplete_reasons": ["missing_document_heading", "missing_clause_number"],
+                },
+                score=0.95,
+            )
+        ]
+
+    def fake_call_llm(_prompt):
+        nonlocal llm_called
+        llm_called = True
+        return "DSR must not exceed 60%."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Incomplete Citation Bank", code="ICIT01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="incomplete@test.local", password_hash="x", name="Incomplete User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        doc = Document(
+            id=12,
+            bank_id=bank.id,
+            uploaded_by=user.id,
+            title="Credit Policy",
+            file_name="credit-policy.pdf",
+            file_type="pdf",
+            file_path="credit-policy.pdf",
+            document_type="policy",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        )
+        session.add(doc)
+        session.commit()
+
+        answer, sources = rag_service.generate_rag_response(
+            "What is the SME DSR policy?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert answer == rag_service.POLICY_CITATION_INCOMPLETE_RESPONSE
+    assert len(sources) == 1
+    assert sources[0]["document_title"] == "Credit Policy"
+    assert sources[0]["citation_complete"] is False
+    assert sources[0]["citation_incomplete_reasons"] == ["missing_document_heading", "missing_clause_number"]
+    assert llm_called is False
+
+
+@pytest.mark.asyncio
+async def test_async_policy_rag_blocks_answer_when_required_citation_fields_are_missing(monkeypatch):
+    llm_called = False
+
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                    payload={
+                        "document_id": 13,
+                        "text": "Collateral procedures require two approvals.",
+                        "page_number": 9,
+                        "document_heading": "Chapter 9: Collateral Procedures",
+                        "chunk_index": 1,
+                        "citation_incomplete_reasons": ["missing_clause_number"],
+                    },
+                score=0.95,
+            )
+        ]
+
+    async def fake_async_call_llm(*_args, **_kwargs):
+        nonlocal llm_called
+        llm_called = True
+        return "Collateral procedures require two approvals."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "async_call_llm", fake_async_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Async Incomplete Citation Bank", code="AICIT01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="async-incomplete@test.local", password_hash="x", name="Async Incomplete User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        doc = Document(
+            id=13,
+            bank_id=bank.id,
+            uploaded_by=user.id,
+            title="Collateral Procedure",
+            file_name="collateral-procedure.pdf",
+            file_type="pdf",
+            file_path="collateral-procedure.pdf",
+            document_type="procedure",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        )
+        session.add(doc)
+        session.commit()
+
+        answer, sources = await rag_service.async_generate_rag_response(
+            "What approvals are required by collateral procedures?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert answer == rag_service.POLICY_CITATION_INCOMPLETE_RESPONSE
+    assert len(sources) == 1
+    assert sources[0]["document_title"] == "Collateral Procedure"
+    assert sources[0]["citation_complete"] is False
+    assert sources[0]["citation_incomplete_reasons"] == ["missing_clause_number"]
+    assert llm_called is False
+
+
+def test_policy_rag_blocks_mixed_complete_and_incomplete_policy_sources(monkeypatch):
+    llm_called = False
+
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 14,
+                    "text": "Chapter 5: SME Lending\nClause 5.1(a) DSR is 60%.",
+                    "page_number": 8,
+                    "document_heading": "Chapter 5: SME Lending",
+                    "clause_number": "Clause 5.1(a)",
+                    "citation_incomplete_reasons": [],
+                    "chunk_index": 1,
+                },
+                score=0.96,
+            ),
+            SimpleNamespace(
+                    payload={
+                        "document_id": 15,
+                        "text": "DSR exceptions may be approved by Credit Committee.",
+                        "page_number": 9,
+                        "document_heading": "Chapter 5: SME Lending",
+                        "citation_incomplete_reasons": ["missing_clause_number"],
+                        "chunk_index": 2,
+                    },
+                score=0.94,
+            ),
+        ]
+
+    def fake_call_llm(_prompt):
+        nonlocal llm_called
+        llm_called = True
+        return "Should not be called."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Mixed Citation Bank", code="MCIT01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="mixed-citation@test.local", password_hash="x", name="Mixed Citation User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        for doc_id, title in ((14, "Complete Credit Policy"), (15, "Incomplete Credit Policy")):
+            session.add(Document(
+                id=doc_id,
+                bank_id=bank.id,
+                uploaded_by=user.id,
+                title=title,
+                file_name=f"{title.lower().replace(' ', '-')}.pdf",
+                file_type="pdf",
+                file_path=f"{title.lower().replace(' ', '-')}.pdf",
+                document_type="policy",
+                status="approved",
+                version_state="approved",
+                document_scope="global_knowledge",
+            ))
+        session.commit()
+
+        answer, sources = rag_service.generate_rag_response(
+            "What are the DSR values?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert answer == rag_service.POLICY_CITATION_INCOMPLETE_RESPONSE
+    assert [source["document_title"] for source in sources] == ["Incomplete Credit Policy"]
+    assert sources[0]["citation_incomplete_reasons"] == ["missing_clause_number"]
+    assert llm_called is False
+
+
 def test_global_rag_sources_include_freshness_warnings_and_confidence(monkeypatch):
     def fake_embeddings(_texts):
         return [[0.1, 0.2, 0.3]]
@@ -306,6 +604,9 @@ def test_global_rag_sources_include_freshness_warnings_and_confidence(monkeypatc
                     "document_id": 30,
                     "text": "Section 9 says expired circulars require compliance review before use.",
                     "page_number": 3,
+                    "document_heading": "Chapter 9: Circular Governance",
+                    "clause_number": "Section 9",
+                    "citation_incomplete_reasons": [],
                     "chunk_index": 2,
                     "extraction_confidence": 0.72,
                     "ocr_confidence": 0.61,
@@ -403,6 +704,356 @@ def test_build_source_includes_source_risk_metadata():
 
     assert source["source_risk_level"] == "high"
     assert source["source_risk_flags"] == ["prompt_injection_instruction"]
+
+
+def test_build_source_requires_explicit_policy_citation_metadata_and_preserves_pdf_page_zero():
+    doc = Document(
+        id=11,
+        bank_id=1,
+        uploaded_by=1,
+        file_name="zero-page-policy.pdf",
+        file_type="pdf",
+        file_path="zero-page-policy.pdf",
+        document_type="policy",
+        status="approved",
+        version_state="approved",
+    )
+    complete_result = SimpleNamespace(
+        score=0.94,
+        payload={
+            "text": "Clause 1.1 requires staff to verify account ownership.",
+            "page_number": 0,
+            "pdf_page_number": 0,
+            "document_heading": "Chapter 1: Account Controls",
+            "clause_number": "Clause 1.1",
+            "citation_incomplete_reasons": [],
+        },
+    )
+    missing_metadata_result = SimpleNamespace(
+        score=0.91,
+        payload={
+            "text": "Clause 1.1 requires staff to verify account ownership.",
+            "page_number": 0,
+        },
+    )
+
+    complete_source = rag_service._build_source(doc, 0.94, complete_result)
+    incomplete_source = rag_service._build_source(doc, 0.91, missing_metadata_result)
+
+    assert complete_source["pdf_page_number"] == 0
+    assert complete_source["citation_complete"] is True
+    assert incomplete_source["pdf_page_number"] == 0
+    assert incomplete_source["citation_complete"] is False
+    assert incomplete_source["citation_incomplete_reasons"] == ["missing_citation_metadata"]
+
+
+def test_build_source_fails_closed_for_malformed_policy_citation_reasons_and_blank_fields():
+    doc = Document(
+        id=12,
+        bank_id=1,
+        uploaded_by=1,
+        file_name="malformed-citation-policy.pdf",
+        file_type="pdf",
+        file_path="malformed-citation-policy.pdf",
+        document_type="policy",
+        status="approved",
+        version_state="approved",
+    )
+    malformed_reasons_result = SimpleNamespace(
+        score=0.92,
+        payload={
+            "text": "Clause 2.1 requires maker-checker review.",
+            "page_number": 5,
+            "document_heading": "Chapter 2: Controls",
+            "clause_number": "Clause 2.1",
+            "citation_incomplete_reasons": "{bad-json",
+        },
+    )
+    blank_fields_result = SimpleNamespace(
+        score=0.92,
+        payload={
+            "text": "Clause 2.1 requires maker-checker review.",
+            "page_number": 5,
+            "document_heading": "   ",
+            "clause_number": "   ",
+            "citation_incomplete_reasons": [],
+        },
+    )
+
+    malformed_source = rag_service._build_source(doc, 0.92, malformed_reasons_result)
+    blank_fields_source = rag_service._build_source(doc, 0.92, blank_fields_result)
+
+    assert malformed_source["citation_complete"] is False
+    assert malformed_source["citation_incomplete_reasons"] == ["invalid_citation_incomplete_reasons"]
+    assert blank_fields_source["citation_complete"] is False
+    assert blank_fields_source["citation_incomplete_reasons"] == [
+        "missing_document_heading",
+        "missing_clause_number",
+    ]
+
+
+def test_build_source_synthesizes_missing_reasons_when_stored_policy_reasons_are_empty():
+    doc = Document(
+        id=91,
+        bank_id=1,
+        uploaded_by=1,
+        title="Stale Citation Policy",
+        file_name="stale-citation.pdf",
+        file_type="pdf",
+        file_path="stale-citation.pdf",
+        document_type="policy",
+        status="approved",
+        version_state="approved",
+    )
+    stale_empty_reasons_result = SimpleNamespace(
+        score=0.92,
+        payload={
+            "document_id": 91,
+            "text": "Policy text without usable citation metadata.",
+            "pdf_page_number": "",
+            "document_heading": "",
+            "clause_number": "",
+            "citation_incomplete_reasons": [],
+        },
+    )
+
+    source = rag_service._build_source(doc, 0.92, stale_empty_reasons_result)
+
+    assert source["citation_complete"] is False
+    assert source["citation_incomplete_reasons"] == [
+        "missing_pdf_page_number",
+        "missing_document_heading",
+        "missing_clause_number",
+    ]
+
+
+def test_build_source_rejects_blank_pdf_page_without_losing_zero_fallback():
+    doc = Document(
+        id=13,
+        bank_id=1,
+        uploaded_by=1,
+        file_name="blank-page-policy.pdf",
+        file_type="pdf",
+        file_path="blank-page-policy.pdf",
+        document_type="policy",
+        status="approved",
+        version_state="approved",
+    )
+    blank_page_result = SimpleNamespace(
+        score=0.92,
+        payload={
+            "text": "Clause 3.1 requires collateral review.",
+            "pdf_page_number": "   ",
+            "document_heading": "Chapter 3: Collateral",
+            "clause_number": "Clause 3.1",
+            "citation_incomplete_reasons": [],
+        },
+    )
+    zero_fallback_result = SimpleNamespace(
+        score=0.92,
+        payload={
+            "text": "Clause 3.1 requires collateral review.",
+            "page_number": 0,
+            "pdf_page_number": "   ",
+            "document_heading": "Chapter 3: Collateral",
+            "clause_number": "Clause 3.1",
+            "citation_incomplete_reasons": [],
+        },
+    )
+
+    blank_page_source = rag_service._build_source(doc, 0.92, blank_page_result)
+    zero_fallback_source = rag_service._build_source(doc, 0.92, zero_fallback_result)
+
+    assert blank_page_source["pdf_page_number"] is None
+    assert blank_page_source["citation_complete"] is False
+    assert zero_fallback_source["pdf_page_number"] == 0
+    assert zero_fallback_source["citation_complete"] is True
+
+
+def test_streaming_chat_blocks_keyword_only_incomplete_policy_citations_before_model_call(monkeypatch):
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fail_reserve_model(*_args, **_kwargs):
+        raise AssertionError("citation gate should stop before model reservation")
+
+    monkeypatch.setattr(chat_api, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(chat_api, "reserve_model", fail_reserve_model)
+
+    with Session(engine) as session:
+        staff = session.query(User).filter(User.email == "staff@test.local").first()
+        bank = session.query(Bank).filter(Bank.code == "TEST01").first()
+        chat = ChatSession(bank_id=bank.id, user_id=staff.id, title="Streaming Citation Gate")
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+        session.add(Document(
+            id=16,
+            bank_id=bank.id,
+            uploaded_by=staff.id,
+            title="Collateral Policy",
+            file_name="collateral-policy.pdf",
+            file_type="pdf",
+            file_path="collateral-policy.pdf",
+            document_type="policy",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        ))
+        session.add(DocumentChunk(
+            bank_id=bank.id,
+            document_id=16,
+            chunk_index=1,
+            chunk_text="Collateral approval requires two reviewers.",
+            page_number=6,
+            document_heading="Chapter 6: Collateral Approval",
+            citation_incomplete_reasons_json="[\"missing_clause_number\"]",
+            qdrant_point_id="stream-keyword-citation",
+            document_status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        ))
+        session.commit()
+        chat_id = chat.id
+
+    token = get_token("staff@test.local")
+    response = client.post(
+        f"/api/chat/sessions/{chat_id}/stream",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "What collateral approval requires reviewers?", "mode": "ask_knowledge"},
+    )
+
+    assert response.status_code == 200
+    assert rag_service.POLICY_CITATION_INCOMPLETE_RESPONSE in response.text
+    assert "citation_incomplete" in response.text
+    with Session(engine) as session:
+        saved = session.query(ChatMessage).filter(ChatMessage.session_id == chat_id, ChatMessage.role == "assistant").first()
+        assert saved.content == rag_service.POLICY_CITATION_INCOMPLETE_RESPONSE
+        saved_sources = json.loads(saved.sources_json)
+        assert saved_sources[0]["document_title"] == "Collateral Policy"
+        assert saved_sources[0]["citation_incomplete_reasons"] == ["missing_clause_number"]
+
+
+def test_streaming_chat_persists_verified_sources_after_model_response(monkeypatch):
+    class FakeLease:
+        queued_ahead = 0
+        profile = SimpleNamespace(
+            api_base="http://fake-llm.local",
+            api_key="test",
+            model="fake-model",
+            timeout_seconds=1,
+        )
+
+    class FakeReservation:
+        async def __aenter__(self):
+            return FakeLease()
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class FakeStreamResponse:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def aiter_lines(self):
+            yield 'data: {"choices":[{"delta":{"content":"Collateral approval requires two reviewers."}}]}'
+            yield "data: [DONE]"
+
+    class FakeAsyncClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        def stream(self, *_args, **_kwargs):
+            return FakeStreamResponse()
+
+    monkeypatch.setattr(chat_api, "generate_embeddings", lambda _texts: [[0.1, 0.2, 0.3]])
+    async def fake_model_status():
+        return {}
+
+    monkeypatch.setattr(chat_api, "model_status", fake_model_status)
+    monkeypatch.setattr(chat_api, "reserve_model", lambda **_kwargs: FakeReservation())
+    monkeypatch.setattr(chat_api.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(
+        chat_api,
+        "verify_answer_against_sources",
+        lambda **_kwargs: {
+            "status": "supported",
+            "trust_label": "source_supported",
+            "unsupported_sentence_count": 0,
+            "unsupported_sentences": [],
+        },
+    )
+    monkeypatch.setattr(
+        chat_api,
+        "_search",
+        lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                payload={
+                    "document_id": 17,
+                    "text": "Collateral approval requires two reviewers.",
+                    "page_number": 6,
+                    "pdf_page_number": 6,
+                    "printed_page_number": "4",
+                    "document_heading": "Chapter 6: Collateral Approval",
+                    "clause_number": "Clause 6.1",
+                    "citation_incomplete_reasons": [],
+                },
+                score=0.95,
+            )
+        ],
+    )
+    monkeypatch.setattr(chat_api, "_filter_results", lambda results, *_args, **_kwargs: results)
+    monkeypatch.setattr(chat_api, "_high_confidence_results", lambda results: results)
+
+    with Session(engine) as session:
+        staff = session.query(User).filter(User.email == "staff@test.local").first()
+        bank = session.query(Bank).filter(Bank.code == "TEST01").first()
+        chat = ChatSession(bank_id=bank.id, user_id=staff.id, title="Streaming Verified Sources")
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+        session.add(Document(
+            id=17,
+            bank_id=bank.id,
+            uploaded_by=staff.id,
+            title="Collateral Policy",
+            file_name="collateral-policy.pdf",
+            file_type="pdf",
+            file_path="collateral-policy.pdf",
+            document_type="policy",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        ))
+        session.commit()
+        chat_id = chat.id
+
+    token = get_token("staff@test.local")
+    response = client.post(
+        f"/api/chat/sessions/{chat_id}/stream",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "What collateral approval requires reviewers?", "mode": "ask_knowledge"},
+    )
+
+    assert response.status_code == 200
+    assert "Collateral approval requires two reviewers." in response.text
+    with Session(engine) as session:
+        saved = session.query(ChatMessage).filter(ChatMessage.session_id == chat_id, ChatMessage.role == "assistant").first()
+        saved_sources = json.loads(saved.sources_json)
+        assert saved_sources[0]["document_title"] == "Collateral Policy"
+        assert saved_sources[0]["citation_verification"] == "supported"
 
 
 def test_chat_extract_text_intent_uses_uploaded_file_pages(monkeypatch):
@@ -609,6 +1260,9 @@ def test_hybrid_rag_uses_keyword_match_when_vector_search_misses(monkeypatch):
             chunk_index=2,
             chunk_text="Section 7.1 Suspicious Transaction Report must be escalated to Compliance within 24 hours.",
             page_number=17,
+            document_heading="Chapter 7: Suspicious Transaction Reporting",
+            clause_number="Section 7.1",
+            citation_incomplete_reasons_json="[]",
             qdrant_point_id="keyword-only",
             document_status="approved",
             version_state="approved",
@@ -640,6 +1294,10 @@ def test_hybrid_rag_reranks_exact_keyword_match_above_weaker_vector_match(monkey
                 payload={
                     "document_id": 6,
                     "text": "This generic risk policy discusses transaction monitoring in broad terms.",
+                    "page_number": 4,
+                    "document_heading": "Chapter 3: Risk Monitoring",
+                    "clause_number": "Section 3.1",
+                    "citation_incomplete_reasons": [],
                     "chunk_index": 1,
                 },
                 score=0.7,
@@ -708,6 +1366,9 @@ def test_hybrid_rag_reranks_exact_keyword_match_above_weaker_vector_match(monkey
             chunk_index=4,
             chunk_text="Section 9.3 Cash Transaction Threshold is NPR 1,000,000.",
             page_number=22,
+            document_heading="Chapter 9: Cash Transactions",
+            clause_number="Section 9.3",
+            citation_incomplete_reasons_json="[]",
             qdrant_point_id="keyword-rerank",
             document_status="approved",
             version_state="approved",
@@ -738,6 +1399,11 @@ def test_postgres_keyword_search_uses_sqlalchemy_execute_api():
                     "chunk_index": 3,
                     "chunk_text": "Section 10.2 Customer care must verify identity before account support.",
                     "page_number": 11,
+                    "printed_page_number": "9",
+                    "document_heading": "Chapter 10: Customer Care",
+                    "clause_number": "Section 10.2",
+                    "citation_confidence": 0.93,
+                    "citation_incomplete_reasons_json": "{bad-json",
                     "document_scope": "global_knowledge",
                     "session_id": None,
                     "rank": 0.8,
@@ -766,3 +1432,23 @@ def test_postgres_keyword_search_uses_sqlalchemy_execute_api():
     assert fake_session.executed_params["document_scope"] == "global_knowledge"
     assert results[0].payload["retrieval_source"] == "postgres_fts"
     assert results[0].payload["section_label"] == "Section 10.2"
+    assert results[0].payload["pdf_page_number"] == 11
+    assert results[0].payload["printed_page_number"] == "9"
+    assert results[0].payload["document_heading"] == "Chapter 10: Customer Care"
+    assert results[0].payload["clause_number"] == "Section 10.2"
+    assert results[0].payload["citation_confidence"] == 0.93
+    assert results[0].payload["citation_incomplete_reasons"] == "{bad-json"
+    doc = Document(
+        id=8,
+        bank_id=1,
+        uploaded_by=1,
+        file_name="customer-care.pdf",
+        file_type="pdf",
+        file_path="customer-care.pdf",
+        document_type="procedure",
+        status="approved",
+        version_state="approved",
+    )
+    source = rag_service._build_source(doc, results[0].score, results[0])
+    assert source["citation_complete"] is False
+    assert source["citation_incomplete_reasons"] == ["invalid_citation_incomplete_reasons"]

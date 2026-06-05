@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import api from '../../api/axios';
+import { confidenceLabel, hasCitationValue, sourcePdfPage } from '../../utils/sourceCitation';
 import SourceMetadataStrip from '../trust/SourceMetadataStrip';
 
 function sourceLocation(source) {
   const parts = [];
-  if (source.section_label || source.section_number) parts.push(source.section_label || source.section_number);
-  if (source.page_number) parts.push(`p.${source.page_number}`);
+  const pdfPage = sourcePdfPage(source);
+  if (source.document_heading) parts.push(source.document_heading);
+  if (source.clause_number) parts.push(source.clause_number);
+  if (!source.document_heading && (source.section_label || source.section_number)) {
+    parts.push(source.section_label || source.section_number);
+  }
+  if (hasCitationValue(pdfPage)) parts.push(`PDF p.${pdfPage}`);
+  if (hasCitationValue(source.printed_page_number)) parts.push(`printed p.${source.printed_page_number}`);
   if (!parts.length && Number.isInteger(source.chunk_index)) parts.push(`chunk ${source.chunk_index + 1}`);
   return parts.join(' · ');
 }
@@ -21,6 +28,16 @@ const VERIFICATION_STYLES = {
     icon: 'rule',
     className: 'bg-amber-50 text-amber-800 border-amber-200',
   },
+  unsupported: {
+    label: 'Unsupported',
+    icon: 'gpp_bad',
+    className: 'bg-rose-50 text-rose-800 border-rose-200',
+  },
+  citation_incomplete: {
+    label: 'Citation incomplete',
+    icon: 'rule_settings',
+    className: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
   no_sources: {
     label: 'Unchecked',
     icon: 'info',
@@ -29,6 +46,11 @@ const VERIFICATION_STYLES = {
   not_enough_claims: {
     label: 'Low claims',
     icon: 'notes',
+    className: 'bg-slate-50 text-slate-700 border-slate-200',
+  },
+  unknown: {
+    label: 'Unknown',
+    icon: 'help',
     className: 'bg-slate-50 text-slate-700 border-slate-200',
   },
 };
@@ -56,8 +78,17 @@ const WARNING_STYLES = {
   },
 };
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
 function VerificationPill({ status }) {
-  const state = VERIFICATION_STYLES[status] || VERIFICATION_STYLES.no_sources;
+  const state = VERIFICATION_STYLES[status] || VERIFICATION_STYLES.unknown;
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${state.className}`}>
       <span className="material-symbols-outlined text-[12px]">{state.icon}</span>
@@ -99,18 +130,12 @@ function SourceRiskWarning({ source }) {
   );
 }
 
-function confidenceLabel(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return null;
-  return `${Math.round(Math.max(0, Math.min(numeric, 1)) * 100)}%`;
-}
-
 function sourcePath(source) {
   if (!source?.document_id) return null;
   const params = new URLSearchParams();
-  if (source.page_number !== null && source.page_number !== undefined) {
-    params.set('page_number', source.page_number);
+  const pdfPage = sourcePdfPage(source);
+  if (hasCitationValue(pdfPage)) {
+    params.set('page_number', pdfPage);
   }
   if (source.chunk_index !== null && source.chunk_index !== undefined) {
     params.set('chunk_index', source.chunk_index);
@@ -120,24 +145,85 @@ function sourcePath(source) {
 }
 
 function SourceViewerModal({ viewer, onClose }) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const openerRef = useRef(null);
+
+  const closeModal = useCallback(() => {
+    const opener = openerRef.current;
+    onClose();
+    window.setTimeout(() => opener?.focus?.(), 0);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!viewer.source) return undefined;
+    openerRef.current = document.activeElement;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeModal();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = Array.from(dialogRef.current?.querySelectorAll(FOCUSABLE_SELECTOR) || [])
+        .filter((element) => element.offsetParent !== null || element === document.activeElement);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closeModal, viewer.source]);
+
+  useEffect(() => {
+    if (viewer.source) closeButtonRef.current?.focus();
+  }, [viewer.source]);
+
   if (!viewer.source) return null;
   const chunks = viewer.data?.chunks || [];
   const document = viewer.data?.document || viewer.source;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 px-4">
-      <div className="w-full max-w-4xl max-h-[84vh] bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+        className="w-full max-w-4xl max-h-[84vh] bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col"
+      >
         <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-200 flex-shrink-0">
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-900 truncate">{document.title || document.document_title || 'Source'}</p>
-            <p className="text-xs text-slate-500 truncate">
+            <p id={titleId} className="text-sm font-bold text-slate-900 truncate">{document.title || document.document_title || 'Source'}</p>
+            <p id={descriptionId} className="text-xs text-slate-500 truncate">
               {[document.file_name, sourceLocation(viewer.source)].filter(Boolean).join(' · ')}
             </p>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
-            onClick={onClose}
+            onClick={closeModal}
             className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+            aria-label="Close source viewer"
             title="Close"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -160,23 +246,30 @@ function SourceViewerModal({ viewer, onClose }) {
               No source passage available for this citation.
             </div>
           )}
-          {chunks.map((chunk) => (
-            <article key={chunk.id || chunk.chunk_index} className="rounded border border-slate-200 bg-slate-50 p-4">
-              <div className="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase text-slate-500">
-                <span>Chunk {Number.isInteger(chunk.chunk_index) ? chunk.chunk_index + 1 : '—'}</span>
-                {chunk.page_number && <span>Page {chunk.page_number}</span>}
-                {chunk.extraction_confidence !== null && chunk.extraction_confidence !== undefined && (
-                  <span>Extract {confidenceLabel(chunk.extraction_confidence)}</span>
-                )}
-                {chunk.ocr_confidence !== null && chunk.ocr_confidence !== undefined && (
-                  <span>OCR {confidenceLabel(chunk.ocr_confidence)}</span>
-                )}
-              </div>
-              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
-                {chunk.text}
-              </p>
-            </article>
-          ))}
+          {chunks.map((chunk) => {
+            const pdfPage = sourcePdfPage(chunk);
+            return (
+              <article key={chunk.id || chunk.chunk_index} className="rounded border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase text-slate-500">
+                  <span>Chunk {Number.isInteger(chunk.chunk_index) ? chunk.chunk_index + 1 : '—'}</span>
+                  {hasCitationValue(pdfPage) ? <span>PDF page {pdfPage}</span> : null}
+                  {hasCitationValue(chunk.printed_page_number) ? <span>Printed page {chunk.printed_page_number}</span> : null}
+                  {chunk.document_heading ? <span>{chunk.document_heading}</span> : null}
+                  {chunk.clause_number ? <span>{chunk.clause_number}</span> : null}
+                  {chunk.document_status && chunk.version_state ? <span>Status {chunk.document_status}/{chunk.version_state}</span> : null}
+                  {chunk.extraction_confidence !== null && chunk.extraction_confidence !== undefined && (
+                    <span>Extract {confidenceLabel(chunk.extraction_confidence)}</span>
+                  )}
+                  {chunk.ocr_confidence !== null && chunk.ocr_confidence !== undefined && (
+                    <span>OCR {confidenceLabel(chunk.ocr_confidence)}</span>
+                  )}
+                </div>
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
+                  {chunk.text}
+                </p>
+              </article>
+            );
+          })}
         </div>
       </div>
     </div>

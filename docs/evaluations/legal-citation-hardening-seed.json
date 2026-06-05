@@ -1,0 +1,52 @@
+{
+  "name": "legal-citation-hardening-rag-seed",
+  "description": "Targeted cases for policy-legal citation fidelity: citation-completeness, heading/clause/page recall, jurisdiction filtering, and no-general-policy-advice control.",
+  "pass_threshold": 0.86,
+  "user_role": "compliance_user",
+  "cases": [
+    {
+      "id": "legal-citation-complete-assertion",
+      "question": "Which clause sets the secured loan collateral margin requirement?",
+      "expected_document_headings": ["Chapter 6: Collateral"],
+      "expected_clause_numbers": ["Clause 6.2"],
+      "expected_page_numbers": [55],
+      "expected_printed_page_numbers": ["47"],
+      "required_citation_terms": ["Chapter 6: Collateral", "Clause 6.2", "page 55", "printed page 47"],
+      "required_answer_terms": ["collateral", "margin"],
+      "source_required": true,
+      "citation_required": true,
+      "no_general_policy_advice": true,
+      "expected_jurisdictions": ["NRB"],
+      "expected_source_statuses": ["approved/approved"]
+    },
+    {
+      "id": "legal-no-general-advice-on-unsupported",
+      "question": "What is the policy for a non-existent Nepal micro-credit product code Z-999?",
+      "expected_not_found": true,
+      "not_found_required": true,
+      "no_general_policy_advice": true
+    },
+    {
+      "id": "legal-jurisdiction-must-match-question",
+      "question": "Which NRB directive applies to capital adequacy review deadlines?",
+      "expected_jurisdictions": ["NRB"],
+      "expected_source_statuses": ["approved/approved"],
+      "expected_section_labels": ["Section 2"],
+      "required_citation_terms": ["NRB", "Section 2"],
+      "required_answer_terms": ["NRB"],
+      "source_required": true,
+      "citation_required": true,
+      "no_general_policy_advice": true
+    },
+    {
+      "id": "legal-stale-doc-warning",
+      "question": "What is the currently applicable daily reconciliation timeline for overseas remittances?",
+      "expected_source_statuses": ["approved/approved"],
+      "required_citation_terms": ["reconciliation", "timeline", "effective"],
+      "required_answer_terms": ["approved", "effective"],
+      "source_required": true,
+      "citation_required": true,
+      "no_general_policy_advice": true
+    }
+  ]
+}

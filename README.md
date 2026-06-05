@@ -1,123 +1,60 @@
-# BankAi: White-Label Bank GPT Appliance
+# LipiCore Bank Staff AI Appliance
 
-BankAi is an airgapped, white-label internal AI assistant for banks. It is deployed with the bank's own infrastructure, runs private models locally, and gives staff a familiar GPT-style workspace for approved bank knowledge, document analysis, summarization, drafting, translation, and comparison.
+LipiCore is a private, white-label AI appliance for bank staff. It runs in bank-controlled infrastructure, uses local model endpoints, indexes approved internal documents, and returns staff-ready answers with source evidence, governance metadata, and audit records.
 
-This is not a generic SaaS chatbot. The product direction is a dedicated bank appliance: one deployment per institution, bank-controlled data, bank-branded UI, local model runtime, auditable usage, and source-backed answers from approved documents.
+The product is designed for customer care, branch operations, compliance, document review, and internal knowledge workflows. It is not an autonomous decision engine. Lending, compliance, regulatory, operational, and customer-impact decisions remain with authorized bank staff.
 
-## Product Boundary
+## What It Does
 
-BankAi/LipiCore is a secure staff-assistance and decision-support system. It is not an autonomous decision engine. Final lending, compliance, regulatory, operational, and customer-impact decisions remain with authorized bank staff.
+- **Chat over approved knowledge:** Staff ask questions against approved bank documents with page, section, chunk, and passage-level source evidence.
+- **Policy citation fidelity:** Policy, procedure, circular, directive, SOP, law, act, and compliance answers cite document heading, clause number, PDF page, printed page when available, and source status; incomplete policy citations are blocked for review instead of presented as final answers.
+- **Session uploads:** Users can upload files inside a chat session without leaking those files into other sessions.
+- **Document Library:** Bank documents are uploaded, extracted, chunked, embedded, indexed, governed, approved, superseded, archived, or disabled.
+- **Queued ingestion:** Redis/RQ workers process extraction, OCR, table parsing, chunking, embeddings, Qdrant indexing, and long-document jobs outside the API request path.
+- **Hybrid retrieval:** PostgreSQL full-text retrieval and Qdrant vector retrieval are merged, reranked, access-filtered, and citation-verified.
+- **Long-document analysis:** Large PDFs, OCR-heavy files, and detailed Excel reviews run as background jobs with stored results.
+- **OCR extraction:** Staff can extract OCR/text from files without adding those files to the approved knowledge base.
+- **Evaluation Center:** Analytics-capable roles can run RAG evaluation packs before demos, pilots, model changes, prompt changes, ingestion changes, or embedding changes.
+- **Bank readiness analytics:** Operational readiness combines document governance, evaluation status, ingestion health, queue state, and deployment evidence.
+- **Internal banking workspace:** Super Admin can turn employee search, Staff Inbox, CEO messages, notifications/alerts, forex/time/date utilities, knowledge-gap queues, policy-change tracking, audit packs, and banking workflow helpers on or off per bank.
+- **Staff Messenger:** Internal bank-scoped messaging and attachments are available as a separate add-on and are not indexed into RAG.
+- **White-label branding:** Product name, bank name, colors, welcome text, support contact, disclaimer, and allowed assistant modes are configurable per bank.
 
-The first product use case is a **Bank Staff AI Helpdesk** for customer-care, branch, operations, compliance/helpdesk, and product/policy teams. It helps staff search approved knowledge, analyze internal files, summarize, draft, compare, and translate inside bank-controlled infrastructure.
+## Non-Claims
 
-## Key Features
+LipiCore does not claim to:
 
-### Enterprise Chat Experience
-*   **White-label branding:** Product name, bank name, colors, welcome text, support contact, disclaimer, and allowed assistant modes are configurable per bank.
-*   **Asynchronous Document Ingestion:** Upload PDF, DOCX, XLSX, PPTX, CSV, TXT, and image-heavy files without blocking chat. Processing runs through a Redis/RQ worker.
-*   **Queued Long-Document Analysis:** Large PDFs, OCR-heavy documents, and detailed Excel/PDF reviews can be queued as background jobs, packed into relevant excerpts, and reviewed later from the Document Library.
-*   **Real-time Progress Tracking:** Document Library cards show queued, extracting, embedding, indexing, and ready states.
-*   **Conversational Memory:** 10-message sliding window memory ensuring contextual follow-up awareness.
-*   **Stop & Regenerate:** Full control over generation with the ability to stop long-running streams or regenerate previous responses.
+- approve or reject loans;
+- replace compliance officers, supervisors, auditors, or authorized reviewers;
+- guarantee regulatory correctness independent of the bank's approved and current documents;
+- perfectly understand handwritten notes, signatures, seals, complex charts, or every scanned table;
+- provide whole-bank HA/SLA guarantees without the corresponding HA architecture and retained test evidence;
+- outperform public frontier models in general knowledge.
 
-### Advanced RAG & Governance
-*   **Session-Bound Isolation:** Secure context routing ensuring that documents uploaded in one chat session are never leaked to another.
-*   **Source Evidence:** Assistant answers show source documents, snippets, full passages, page/section/chunk metadata, relevance, and citation-verification status.
-*   **RAG Evaluation Center:** Admin and audit roles can run JSON evaluation sets to test source recall, citation term recall, answer term recall, and not-found behavior.
-*   **Document Governance:** Knowledge documents support draft, approved, superseded, archived, and disabled lifecycle states.
-*   **Predictive Follow-ups:** Dynamically generated follow-up questions at the end of every response to guide user investigation.
-*   **Audit Logging:** Comprehensive logging of queries, file uploads, and AI responses for bank review and governance.
-*   **Large File Governance:** Long-document jobs keep staff analysis separate from normal chat, store result metadata, and keep final interpretation with bank staff.
+## Stack
 
-### Security & Privacy
-*   **Data Sovereignty:** Fully air-gapped capable; runs with local vLLM model servers and self-hosted vector databases (Qdrant).
-*   **PII Masking:** Automatic detection and masking of sensitive Personally Identifiable Information (PII) before LLM processing.
-*   **RBAC:** Role-Based Access Control for staff, admin, audit, data audit, bank admin, and super admin users with bank-level partitioning.
+- **Frontend:** React, Vite, Tailwind CSS, Material Symbols, Playwright tests.
+- **Backend:** FastAPI, SQLModel, PostgreSQL, Alembic.
+- **Retrieval:** Qdrant vectors plus PostgreSQL full-text search.
+- **Embeddings:** `BAAI/bge-m3`, 1024 dimensions, normalized vectors by default.
+- **Workers:** Redis/RQ for ingestion and long-document analysis.
+- **Storage:** MinIO-compatible object storage for uploaded files.
+- **Models:** OpenAI-compatible local vLLM endpoints routed as fast/deep routes (legacy labels `LipiFast` and `LipiCore`) with optional vision/OCR routes.
+- **Deployment:** Docker Compose for pilots; HA reference architecture under `deploy/ha/`.
 
-### Explicit Non-Claims
-BankAi/LipiCore does not currently claim to:
+## Current Retrieval Defaults
 
-*   Make lending decisions or approve/reject credit.
-*   Replace compliance officers, supervisors, or authorized bank reviewers.
-*   Guarantee regulatory correctness independent of the bank's approved and current documents.
-*   Fully understand every scanned PDF, complex table, seal, signature, or handwritten note.
-*   Provide a blanket production HA/SLA guarantee without the corresponding HA deployment architecture.
-*   Be generally better than GPT-4, GPT-5, Claude, Gemini, or other public frontier models.
+- Default text chunk profile: 1000 characters with 200 overlap.
+- Regulatory/profiled documents: 900 characters with 180 overlap.
+- OCR-heavy pages: 800 characters with 100 overlap.
+- Spreadsheets: 1600 characters with 120 overlap.
+- Presentations: 900 characters with 120 overlap.
+- Chat memory: recent conversation context is packed into the prompt; retrieval remains source-governed through approved/session document filters.
 
----
-
-## Tech Stack
-
-*   **Frontend:** React (Vite), Tailwind CSS, Material Symbols.
-*   **Backend:** FastAPI (Python 3.12), SQLModel, PostgreSQL 15.
-*   **Vector Engine:** Qdrant (Semantic Search & Session Filtering).
-*   **LLM Orchestration:** vLLM with Redis-backed admission control for private local inference.
-*   **Ingestion Queue:** Redis/RQ worker for extraction, OCR/table parsing, embeddings, and indexing.
-*   **Long-Document Queue:** Reuses Redis/RQ for large-file extraction, context packing, analyst-model generation, and persisted results.
-*   **Storage:** MinIO (S3-compatible persistent storage).
-*   **Streaming:** Server-Sent Events (SSE) for both generation and document status tracking.
-*   **OCR Extraction Workspace:** Upload supported files and extract text through open-source Tesseract OCR and direct parsers without adding them to the approved knowledge base.
-*   **Governance Workspaces:** Compliance Workspace, Model Lab, Evaluation Center, audit logs, and admin controls.
-
----
-
-## Architecture
-
-BankAi uses a decoupled **Worker-Observer** architecture for document processing:
-1.  **Ingestion:** Files are uploaded to an async worker that handles OCR, chunking, and embedding.
-2.  **Streaming:** The UI subscribes to an SSE status stream to update progress cards in real-time.
-3.  **Retrieval:** Context is retrieved from Qdrant using `BAAI/bge-m3` multilingual embeddings and a session-aware metadata filter.
-4.  **Reranking & Verification:** Retrieved candidates are reranked, filtered by relevance, and later checked by the citation verifier.
-5.  **Admission Control:** Redis coordinates per-model and per-user concurrency so GPU memory is protected under load.
-6.  **Generation:** Response is streamed token-by-token from the local vLLM runtime.
-
-For heavy files, users should use the queued long-document workflow instead of normal chat. The workflow creates a background job, extracts PDF/OCR/Excel content, packs relevant excerpts into the analyst-model context, and stores the result for staff review. See [Queued Long-Document Analysis](docs/long-document-analysis.md).
-
----
-
-## Deployment
-
-### Prerequisites
-*   Docker and Docker Compose.
-*   NVIDIA container runtime for GPU-backed vLLM services.
-*   Local LipiFast/LipiCore model files mounted on the inference host.
-*   Python 3.12 for local backend development and tests.
-*   Node.js 20+ for local frontend development.
-
-### Quick Start
-
-1.  **Clone the Repository:**
-    ```bash
-    git clone <repo-url>
-    cd BankAi
-    ```
-
-2.  **Environment Setup:**
-    ```bash
-    cp .env.example .env
-    # Configure secrets, public origin, model paths, and TLS settings for your host.
-    ```
-
-3.  **Run with the health-gated upgrade script:**
-    ```bash
-    ./deploy/upgrade.sh
-    ```
-
-4.  **Database Migration:**
-    If you are updating from a previous version, run Alembic migrations:
-    ```bash
-    docker exec bankai-backend alembic upgrade head
-    ```
-
-For a health-only server check:
-
-```bash
-./deploy/upgrade.sh --check-only
-```
-
-### Local Development Checks
+## Local Development
 
 Backend:
+
 ```bash
 cd backend
 python3.12 -m venv .venv
@@ -127,6 +64,7 @@ JWT_SECRET=test-secret SUPER_ADMIN_PASSWORD=test-password pytest -q
 ```
 
 Frontend:
+
 ```bash
 cd frontend
 npm install
@@ -134,37 +72,56 @@ npm run lint
 npm run build
 ```
 
-### White-Label Branding API
+Compose stack:
 
-The frontend reads public branding from:
-```http
-GET /api/config/branding
-GET /api/config/branding?bank_code=<BANK_CODE>
+```bash
+cp .env.example .env
+./deploy/upgrade.sh
 ```
 
-Bank admins and super admins can update branding:
-```http
-PATCH /api/config/branding/{bank_id}
+Run migrations after schema changes:
+
+```bash
+docker compose exec backend alembic upgrade head
 ```
 
-Supported fields include `product_name`, `bank_name`, `logo_url`, `primary_color`, `accent_color`, `welcome_message`, `support_contact`, `disclaimer`, and `allowed_modes`.
+## Main URLs
 
-### Access Points
-*   **Frontend UI:** `http://localhost:3000`
-*   **API Documentation:** `http://localhost:8000/docs`
-*   **MinIO Console:** `http://localhost:9001`
-*   **RAG Evaluation Center:** `/evaluations`
+- Frontend: `http://localhost:3000`
+- Backend API docs: `http://localhost:8000/docs`
+- Qdrant: `http://localhost:6333`
+- MinIO console: `http://localhost:9001`
+- RAG evaluations: `/evaluations`
+- Model Lab: `/model-lab`
+- Employee Search: `/employees`
+- Forex, Time & Dates: `/market-time`
+- Notifications & Alerts: `/notifications`
+- CEO's Message: `/ceo-messages`
+- Super Admin feature controls: `/admin/features`
 
-### Current Production Access
+## Documentation
 
-*   **Public UI:** `https://ai.silverlining.com.np`
-*   **Text model route:** all current text routes are presented as LipiCore on the production server.
-*   **Open-source OCR:** Tesseract handles image and scanned-PDF text extraction; LipiCore handles optional document-image review notes where enabled.
-*   **LipiFast route:** not active in the current production server profile; do not start a separate fast endpoint without a GPU capacity decision.
-*   **Queueing:** Redis limits concurrent requests per model and per user.
-*   **Deployed commit:** `615d299` in `/data/bankai`.
+Start with [docs/README.md](docs/README.md).
 
----
+- [Architecture](docs/architecture.md)
+- [Deployment and operations](docs/deployment.md)
+- [Security architecture](docs/security.md)
+- [Internal banking workspace](docs/internal-banking-workspace.md)
+- [Long-document analysis](docs/long-document-analysis.md)
+- [RAG evaluation sets](docs/evaluations/README.md)
+- [Bank readiness checklist](docs/deployment/bank-readiness-checklist.md)
+- [Production sizing tiers](docs/sizing/production-tiers.md)
+- [HA reference architecture](deploy/ha/README.md)
 
-## ⚖️ Disclaimer
-This system is designed for private banking infrastructure. Production deployments should enforce TLS/SSL, strict network isolation, formal backup/restore procedures, and enterprise IAM integration where required. Single-host Docker Compose is suitable for pilots and controlled trials, not a standalone high-availability guarantee.
+## Release Discipline
+
+Before a bank demo, pilot, or production release:
+
+1. Run migrations.
+2. Run backend tests and frontend lint/build.
+3. Upload representative PDF, scanned PDF, DOCX, XLSX, PPTX, TXT/CSV, and image files.
+4. Run the bank-specific RAG evaluation gate.
+5. Check model health, Redis queue depth, ingestion worker logs, GPU memory, and storage growth.
+6. Confirm backup and restore evidence for PostgreSQL, MinIO, and Qdrant.
+
+Single-host Docker Compose is suitable for pilots and controlled trials. Whole-bank deployments require HA PostgreSQL, Qdrant replication/snapshots, Redis HA or accepted queue-loss policy, object-storage durability, backend/frontend replicas, model capacity planning, monitoring, and restore drills.

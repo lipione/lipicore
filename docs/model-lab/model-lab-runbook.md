@@ -1,40 +1,12 @@
 # LipiCore Model Lab Runbook
 
-This runbook is for finding the best local model stack for the bank staff AI appliance. It is not a license to download every model on the internet. Run inventory first, confirm disk/GPU budget, then test a controlled matrix.
+Use this runbook when evaluating or changing local model endpoints for LipiCore. The goal is controlled evidence: speed, quality, source discipline, clause/page citation behavior, Nepali/English behavior, OCR/image usefulness, and GPU capacity under realistic bank workloads.
 
-## Current Remote Access Status
+Do not treat Model Lab as a reason to download or swap models casually. Run inventory first, confirm disk/GPU headroom, test one candidate at a time, and preserve the current known-good endpoint until a candidate passes.
 
-From this Codex workspace:
+## Step 1: Capture Runtime Inventory
 
-- Public health endpoint is reachable: `https://ai.silverlining.com.np/health`.
-- Remote production path is `/data/bankai`.
-- The latest deployed commit is `615d299`.
-- The active production model containers are `lipicore-vllm-c` and
-  `lipicore-vllm-vision`.
-- Do not include passwords or private keys in this file. Use the approved
-  operator access path for inventory and model-swap windows.
-
-Inventory command shape:
-
-```bash
-ssh-add /path/to/server_key
-python tools/model_lab/remote_inventory.py \
-  --host 202.51.2.50 \
-  --port <ssh-port> \
-  --user <ssh-user> \
-  --output reports/model-lab/remote_inventory.txt
-```
-
-After inventory, confirm the current production vision endpoint separately on
-the remote server if the inventory output does not include port `8007`:
-
-```bash
-curl -s http://127.0.0.1:8007/v1/models
-```
-
-## Step 1: Remote Inventory
-
-Run the read-only inventory before downloading or changing model services:
+Run inventory before any model change:
 
 ```bash
 python tools/model_lab/remote_inventory.py \
@@ -43,48 +15,43 @@ python tools/model_lab/remote_inventory.py \
   --output reports/model-lab/remote_inventory.txt
 ```
 
-The script checks:
+The script is read-only. It records OS, CPU, memory, disk, GPU state, Docker containers/images, local model directories, and likely OpenAI-compatible `/v1/models` endpoints.
 
-- OS, CPU, memory, disk.
-- NVIDIA GPU state.
-- Docker containers and images.
-- Existing model directories under `/data/models`, `/models`, and common Hugging Face cache paths.
-- OpenAI-compatible `/v1/models` endpoints on likely local model ports.
-
-It does not stop containers, delete files, or mutate the server.
-
-## Step 2: Select Candidate Models
-
-Use:
+Also capture:
 
 ```bash
-tools/model_lab/model_candidate_matrix.json
+nvidia-smi
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep 'lipicore-vllm'
+curl -s http://127.0.0.1:8002/v1/models || true
+curl -s http://127.0.0.1:8003/v1/models || true
+curl -s http://127.0.0.1:8007/v1/models || true
 ```
 
-Start with three lanes:
+## Step 2: Choose A Test Lane
 
-- Fast staff chat: no active LipiFast endpoint on the current production profile; test a small approved candidate only in a controlled swap window.
-- Analyst/long-doc: current LipiCore baseline plus approved long-context candidates. Test through queued long-document jobs for realistic extraction, context-packing, and queue pressure.
-- Document-image: current LipiCore image-capable baseline for image-heavy analysis. OCR text extraction is handled by open-source Tesseract and should be benchmarked separately from image-review prompts.
-- Retrieval: BGE-M3, Jina embeddings v3, Qwen3 embedding/reranker.
+Use one lane per experiment:
 
-Do not change embeddings in production without creating a parallel Qdrant collection or migration plan.
+- **Fast staff chat:** short customer-care, branch, and drafting prompts. Optimize for first-token latency and concise answers.
+- **Analyst/deep:** policy, compliance, comparison, and longer reasoning prompts. Optimize for source discipline, heading/clause/page citation behavior, and lower error rate.
+- **Long-document:** queued PDF/OCR/Excel analysis. Test through the queued workflow, not only synthetic long prompts.
+- **Document-image:** image-heavy or page-review prompts. Keep this separate from normal OCR text extraction, which uses direct parsers and Tesseract.
+- **Retrieval:** embedding or reranker experiments. Use a parallel Qdrant collection; do not mutate production embeddings in place.
 
-## Step 3: Serve One Candidate At A Time
+## Step 3: Prepare Endpoints
 
-Keep the current text and vision services as baseline. Add a candidate endpoint on a separate port, for example `8004`, only if GPU memory allows; otherwise pause one model inside a maintenance window and benchmark before replacing anything.
-
-Example endpoint file:
+Copy the example endpoint file:
 
 ```bash
 cp tools/model_lab/endpoints.example.json reports/model-lab/endpoints.remote.json
 ```
 
-Edit `reports/model-lab/endpoints.remote.json` to match actual reachable model endpoints.
+Edit `reports/model-lab/endpoints.remote.json` with the actual endpoint URLs and served model names.
 
-## Step 4: Benchmark
+If the host does not have spare GPU memory, do not start another model. Schedule a maintenance window, pause only the approved service, benchmark the candidate, then restore the baseline if it fails.
 
-Run a small smoke test first:
+## Step 4: Run Benchmarks
+
+Smoke test:
 
 ```bash
 python tools/model_lab/benchmark_openai.py \
@@ -96,7 +63,7 @@ python tools/model_lab/benchmark_openai.py \
   --max-tokens 256
 ```
 
-Then run concurrency sweeps:
+Concurrency sweep:
 
 ```bash
 python tools/model_lab/benchmark_openai.py \
@@ -113,34 +80,41 @@ Outputs:
 - `model_benchmark_report.json`
 - `model_benchmark_results.csv`
 
-## Step 5: Decision Rules
+## Step 5: Run Product Gates
 
-A candidate can replace baseline only if it improves the target lane without breaking safety:
+Before promoting a candidate:
 
-- Source/refusal behavior does not regress.
-- Nepali/English answer quality is acceptable.
-- p95 first-token latency stays acceptable for staff chat.
-- Deep model queue does not time out under expected concurrency.
-- Long-context mode is tested through realistic queued large-file jobs, not just advertised maximum context.
-- License and airgapped packaging are acceptable.
+1. Run the bank-specific RAG evaluation gate in `/evaluations`.
+2. Test not-found/refusal behavior.
+3. Test English and Nepali output if the bank expects both.
+4. Test one source-backed customer-care or branch prompt.
+5. Test one compliance/policy prompt.
+6. Verify policy-like answers include heading, clause, PDF page, printed page where available, and correct `citation_incomplete` handling when required citation fields are missing.
+7. For long-document claims, queue a clean PDF, scanned PDF, Excel workbook, and bilingual/Nepali document where relevant.
 
-## Recommended First Test Matrix
+## Decision Rules
 
-1. Current LipiCore text baseline at realistic staff concurrency.
-2. Open-source Tesseract OCR on scanned PDF/image text extraction, plus current LipiCore image route on separate image-heavy analysis tasks.
-3. Candidate fast endpoint only after freeing GPU memory.
-4. Current deep vs Qwen3-30B-A3B-Instruct-2507 FP8 if GPU memory is tight.
-5. Current embedding model vs BGE-M3 in a parallel retrieval collection.
-6. Add Qwen3 reranker only if source recall is good but citation precision is weak.
+Reject a candidate if:
+
+- error rate is above 2 percent;
+- p95 first-token latency misses the lane target;
+- source/refusal behavior regresses;
+- heading, clause, PDF page, printed page, or citation-incomplete behavior regresses for policy-like answers;
+- Nepali output is corrupted or mixed-script when Nepali was requested;
+- the model ignores source-required instructions;
+- GPU memory leaves no operational headroom;
+- licensing or airgapped packaging is not acceptable.
+
+Promote only with saved benchmark artifacts under `reports/model-lab/<date>-<model>-<scenario>/`.
 
 ## Final Report Shape
 
-The final model report should include:
+Each model decision should include:
 
-- Hardware: GPU, VRAM, driver, disk, RAM.
-- Runtime: vLLM/SGLang/TensorRT-LLM version and launch flags.
-- Model: exact path or Hugging Face ID, quantization, context, max sequences.
-- Workload: prompt suite, RAG eval suite, concurrency, token caps.
-- Large-file workload: clean PDF, scanned PDF, Excel workbook, bilingual circular, selected excerpt metadata, and job duration.
-- Results: p50/p95 first-token, p50/p95 full latency, error rate, qualitative answer notes.
-- Decision: keep, reject, or promote to pilot.
+- hardware: GPU, VRAM, driver, disk, RAM;
+- runtime: vLLM/SGLang/TensorRT-LLM version and launch flags;
+- model: exact path or model ID, quantization, context length, max sequences;
+- workload: prompt suite, RAG eval suite, concurrency, token caps;
+- large-file workload: file types, selected excerpt metadata, job duration, source usefulness;
+- results: p50/p95 first-token, p50/p95 total latency, error rate, qualitative notes;
+- decision: keep, reject, or promote to pilot.

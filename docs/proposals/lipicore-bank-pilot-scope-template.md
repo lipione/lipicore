@@ -17,6 +17,7 @@ Validate LipiCore as a secure internal AI assistant for bank staff. The pilot sh
 | Documents | 200-500 approved documents |
 | Document types | Customer-care scripts, product FAQs, loan docs, deposit docs, insurance docs, SOPs, circulars, escalation manuals |
 | Large-file sample | 5-10 representative large PDFs, scanned PDFs, and Excel workbooks for queued analysis testing |
+| Optional internal workspace sample | Employee directory records, one CEO message, one notification, one exchange-rate batch, and one Staff Inbox work item if those features are in scope |
 | Duration | 30 calendar days after document approval and user onboarding |
 | Deployment | Pilot server or controlled bank environment; not a whole-bank HA claim |
 | Languages | English and Nepali staff usage, evaluated on pilot questions |
@@ -31,6 +32,8 @@ General staff chat. Uses approved bank knowledge when available, cites sources, 
 
 Strict source-backed answers only from approved bank documents. If no approved source supports the answer, LipiCore should refuse and guide staff to a supervisor or policy owner.
 
+Policy-like answers should show document heading, clause number, PDF page, printed page where available, and citation status. Missing required heading, clause, or PDF page metadata should produce a citation-incomplete review response.
+
 ### 3. Analyze Internal File
 
 Staff upload a document and ask questions, summarize, extract key points, compare, or draft responses. Outputs are for staff review.
@@ -38,6 +41,10 @@ Staff upload a document and ask questions, summarize, extract key points, compar
 ### 4. Queue Long-Document Analysis
 
 Staff queue large PDFs, OCR-heavy files, or detailed Excel workbooks for background analysis. Results are stored for later review and should cite page, section, sheet, or cell labels where extraction supports them.
+
+### 5. Internal Banking Workspace
+
+Optional feature-flagged employee tools: Employee Search, Notifications & Alerts, CEO's Message, Staff Inbox, Forex/Time/Dates, knowledge-gap tracking, policy-change watch, audit evidence packs, and banking workflow helpers. Only include these in the pilot if the bank names owners for feature controls, employee data, notifications, CEO messages, and exchange-rate updates.
 
 ## Demo Flow
 
@@ -47,15 +54,17 @@ Use this sequence for bank demos:
 2. **Ask Approved Knowledge:** Ask a policy/compliance question. Open the source evidence panel and show the exact document passage. Then ask an unsupported question and show source-backed refusal.
 3. **Analyze Internal File:** Upload a policy, circular, FAQ, or case note. Show ingestion progress, ask for summary or draft response, and review the cited source evidence.
 4. **Queue Long-Document Analysis:** Open a ready large file in Document Library, queue a detailed analysis prompt, show job status, and open the completed result.
+5. **Internal Workspace:** If enabled, show Employee Search, latest exchange rates/local banking time, a CEO message, and a notification acknowledgement.
 
 ## Success Metrics
 
 | Metric | Target evidence |
 | --- | --- |
 | Answer accuracy | Pass rate on bank-approved evaluation questions |
-| Citation usefulness | Staff can open source passages and verify key claims |
+| Citation usefulness | Staff can open source passages and verify key claims by heading, clause, PDF page, and printed page where available |
 | Response time | Measured p50/p95 response time for pilot server |
 | Long-document turnaround | Measured job duration and success rate for large PDF/OCR/XLS samples |
+| Internal workspace adoption | Usage and feedback for enabled employee search, notifications, CEO messages, Staff Inbox, and market/time utilities |
 | Escalation reduction | Fewer routine policy/product questions escalated to senior staff |
 | Staff acceptance | Staff mark answers useful or edit drafts less frequently |
 | Safety | Unsupported policy questions produce source-backed refusal |
@@ -67,6 +76,7 @@ Use this sequence for bank demos:
 - Staff user list with departments and roles.
 - Approved document bundle.
 - Document freshness owner for policy/circular updates.
+- Workspace owners for employee directory data, notifications, CEO messages, Staff Inbox, and exchange-rate updates if those features are enabled.
 - 50-100 real staff questions for evaluation.
 - UAT participants and review schedule.
 - Network, server, access, and security requirements.
@@ -79,6 +89,7 @@ Use this sequence for bank demos:
 - Staff onboarding session.
 - Admin orientation.
 - Evaluation Center setup with pilot questions.
+- Super Admin feature-control review for optional internal workspaces.
 - Weekly pilot review.
 - End-of-pilot report with usage, accuracy, citation, latency, and escalation findings.
 

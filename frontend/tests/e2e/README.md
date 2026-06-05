@@ -4,6 +4,8 @@ End-to-end tests for the BankAi session-aware Retrieval-Augmented Generation (RA
 
 These tests do not yet cover queued long-document analysis. Large PDF/OCR/XLS workflows need a separate E2E fixture because they rely on background jobs and longer worker/model timing.
 
+These tests also do not yet fully cover the policy citation-fidelity gate. Manual verification should inspect source panels for document heading, clause number, PDF page, printed page where available, citation verification, and `citation_incomplete` behavior for policy-like answers.
+
 ## Quick Start
 
 ```bash
@@ -31,6 +33,7 @@ npm run test:e2e:ui
 - Ask "What is the loan amount?"
 - Verify response contains "5,000,000"
 - Verify source attribution
+- Inspect source metadata where available
 
 ### 2. Multi-Turn Questions  
 - Upload document
@@ -43,6 +46,7 @@ npm run test:e2e:ui
 - Ask about compliance requirements
 - Verify accurate extraction
 - Confirm proper citation
+- Confirm source panel metadata and trust badge state
 
 ## Requirements
 
@@ -92,6 +96,7 @@ Results stored in: `test-results/` directory
 | Upload fails | Check /api/documents endpoint |
 | Response missing data | Verify test document contains expected content |
 | Source not showing | Check Qdrant vector database status |
+| Citation metadata missing | Confirm the fixture contains heading/clause/page markers and inspect chunk metadata |
 
 ## Documentation
 
@@ -107,6 +112,7 @@ See `../../E2E_TEST_GUIDE.md` for comprehensive testing guide including:
 ✓ Session-aware document upload  
 ✓ RAG priority search (session docs first)  
 ✓ Source attribution  
+✓ Source metadata panel smoke coverage
 ✓ Multi-turn question answering  
 ✓ Context persistence across questions  
 ✓ Document status tracking (Uploading → Processing → Ready)  
@@ -116,6 +122,8 @@ Not yet covered:
 - Queueing `/api/long-document-analysis`.
 - Polling long-document job status.
 - Viewing stored large-file analysis results.
+- Policy citation-incomplete refusal fixtures.
+- Internal workspace feature-flag flows.
 
 ## Performance Notes
 

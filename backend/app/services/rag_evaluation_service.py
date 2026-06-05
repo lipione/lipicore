@@ -51,11 +51,17 @@ def _score_location_recall(
     expected_section_labels: list[str],
     expected_page_numbers: list[int],
     expected_chunk_indexes: list[int],
+    expected_document_headings: list[str] | None = None,
+    expected_clause_numbers: list[str] | None = None,
+    expected_printed_page_numbers: list[str] | None = None,
 ) -> float:
     expected: list[tuple[str, str]] = []
     expected.extend(("section", _normalize_location(label)) for label in expected_section_labels)
     expected.extend(("page", str(number)) for number in expected_page_numbers)
     expected.extend(("chunk", str(index)) for index in expected_chunk_indexes)
+    expected.extend(("heading", _normalize_location(label)) for label in expected_document_headings or [])
+    expected.extend(("clause", _normalize_location(number)) for number in expected_clause_numbers or [])
+    expected.extend(("printed_page", _normalize_location(number)) for number in expected_printed_page_numbers or [])
     expected = [item for item in expected if item[1]]
     if not expected:
         return 1.0
@@ -67,8 +73,16 @@ def _score_location_recall(
             observed.add(("section", _normalize_location(section)))
         if source.get("page_number") is not None:
             observed.add(("page", str(source.get("page_number"))))
+        if source.get("pdf_page_number") is not None:
+            observed.add(("page", str(source.get("pdf_page_number"))))
         if source.get("chunk_index") is not None:
             observed.add(("chunk", str(source.get("chunk_index"))))
+        if source.get("document_heading"):
+            observed.add(("heading", _normalize_location(source.get("document_heading"))))
+        if source.get("clause_number"):
+            observed.add(("clause", _normalize_location(source.get("clause_number"))))
+        if source.get("printed_page_number"):
+            observed.add(("printed_page", _normalize_location(source.get("printed_page_number"))))
 
     matches = sum(1 for item in expected if item in observed)
     return matches / len(expected)
@@ -82,6 +96,15 @@ def _term_recall(text: str, terms: list[str]) -> float:
     return hits / len(terms)
 
 
+def _score_exact_metadata_recall(observed: set[str], expected: list[str]) -> float:
+    normalized_expected = {_normalize(v) for v in expected if _normalize(v)}
+    if not normalized_expected:
+        return 1.0
+    if not observed:
+        return 0.0
+    return len(normalized_expected & {value for value in observed}) / len(normalized_expected)
+
+
 def _citation_text(sources: list[dict[str, Any]]) -> str:
     chunks: list[str] = []
     for source in sources or []:
@@ -89,8 +112,16 @@ def _citation_text(sources: list[dict[str, Any]]) -> str:
             str(source.get(key) or "")
             for key in ("document_title", "file_name", "section_label", "snippet")
         )
+        chunks.extend(
+            str(source.get(key) or "")
+            for key in ("document_heading", "clause_number", "source_status", "document_status")
+        )
         if source.get("page_number") is not None:
             chunks.append(f"page {source.get('page_number')}")
+        if source.get("pdf_page_number") is not None:
+            chunks.append(f"pdf page {source.get('pdf_page_number')}")
+        if source.get("printed_page_number"):
+            chunks.append(f"printed page {source.get('printed_page_number')}")
     return _normalize(" ".join(chunks))
 
 
@@ -192,6 +223,13 @@ def evaluate_rag_cases(
         expected_chunk_indexes = [
             int(value) for value in (_value(case, "expected_chunk_indexes", []) or [])
         ]
+        expected_document_headings = list(_value(case, "expected_document_headings", []) or [])
+        expected_clause_numbers = list(_value(case, "expected_clause_numbers", []) or [])
+        expected_printed_page_numbers = [
+            str(value) for value in (_value(case, "expected_printed_page_numbers", []) or [])
+        ]
+        expected_jurisdictions = list(_value(case, "expected_jurisdictions", []) or [])
+        expected_source_statuses = list(_value(case, "expected_source_statuses", []) or [])
         citation_terms = list(_value(case, "required_citation_terms", []) or [])
         answer_terms = list(_value(case, "required_answer_terms", []) or [])
         expect_not_found = bool(
@@ -250,9 +288,26 @@ def evaluate_rag_cases(
             expected_section_labels=expected_section_labels,
             expected_page_numbers=expected_page_numbers,
             expected_chunk_indexes=expected_chunk_indexes,
+            expected_document_headings=expected_document_headings,
+            expected_clause_numbers=expected_clause_numbers,
+            expected_printed_page_numbers=expected_printed_page_numbers,
         )
         if location_recall < 1:
             failures.append("missing expected citation locations")
+
+        jurisdictions = {_normalize((source.get("jurisdiction") or "").lower()) for source in (sources or [])}
+        source_statuses = {
+            _normalize(str(source.get("source_status") or ""))
+            for source in (sources or [])
+        }
+        jurisdiction_recall = _score_exact_metadata_recall(jurisdictions, expected_jurisdictions)
+        source_status_recall = _score_exact_metadata_recall(source_statuses, expected_source_statuses)
+        if jurisdiction_recall < 1:
+            missing = [value for value in expected_jurisdictions if _normalize(value) not in jurisdictions]
+            failures.append(f"missing expected jurisdiction hits: {', '.join(missing)}")
+        if source_status_recall < 1:
+            missing = [value for value in expected_source_statuses if _normalize(value) not in source_statuses]
+            failures.append(f"missing expected source_status hits: {', '.join(missing)}")
 
         normalized_citations = _citation_text(sources or [])
         citation_term_recall = _term_recall(normalized_citations, citation_terms)
@@ -281,6 +336,8 @@ def evaluate_rag_cases(
             "sources": sources or [],
             "source_recall": round(source_recall, 4),
             "location_recall": round(location_recall, 4),
+            "jurisdiction_recall": round(jurisdiction_recall, 4),
+            "source_status_recall": round(source_status_recall, 4),
             "citation_term_recall": round(citation_term_recall, 4),
             "answer_term_recall": round(answer_term_recall, 4),
             "not_found_passed": not_found_passed,
@@ -312,7 +369,9 @@ def evaluate_rag_cases(
             "gate_passed": pass_rate >= pass_threshold,
             "failed_case_ids": [result["id"] for result in results if not result["passed"]],
             "source_recall_avg": avg("source_recall"),
-            "location_recall_avg": avg("location_recall"),
+        "location_recall_avg": avg("location_recall"),
+            "jurisdiction_recall_avg": avg("jurisdiction_recall"),
+            "source_status_recall_avg": avg("source_status_recall"),
             "citation_term_recall_avg": avg("citation_term_recall"),
             "answer_term_recall_avg": avg("answer_term_recall"),
         },

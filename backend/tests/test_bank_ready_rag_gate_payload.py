@@ -16,6 +16,7 @@ def test_bank_ready_rag_gate_payload_has_required_cases():
         "customer-care-complaint-escalation",
         "compliance-quarterly-reporting",
         "loan-exception-expired-kyc",
+        "policy-clause-page-citation",
         "unsupported-product-refusal",
     } <= case_ids
 
@@ -29,12 +30,27 @@ def test_bank_ready_rag_gate_source_cases_have_location_expectations():
         assert case["expected_source_titles"]
         assert case["required_citation_terms"]
         assert case["required_answer_terms"]
-        assert case["expected_section_labels"]
+        assert any(
+            case.get(key)
+            for key in (
+                "expected_section_labels",
+                "expected_page_numbers",
+                "expected_document_headings",
+                "expected_clause_numbers",
+                "expected_printed_page_numbers",
+            )
+        )
 
 
 def test_bank_ready_rag_gate_payload_matches_api_schema():
     payload = json.loads(GATE_PATH.read_text())
     request = RagEvaluationRequest(**payload)
+    clause_case = next(
+        (case for case in request.cases if case.id == "policy-clause-page-citation"),
+        None,
+    )
 
-    assert len(request.cases) == 4
+    assert len(request.cases) == 6
     assert request.cases[0].expected_section_labels == ["Section 2.1"]
+    assert clause_case is not None
+    assert clause_case.expected_clause_numbers == ["Clause 5.1(a)"]

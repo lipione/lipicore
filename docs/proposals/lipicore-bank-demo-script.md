@@ -28,9 +28,10 @@ Use this opening:
 
 1. Ask a policy question that exists in approved documents.
 2. Open the source evidence panel.
-3. Show document title, page/section/chunk, source passage, and citation status.
+3. Show document title, document heading, clause number, PDF page, printed page where available, source passage, and citation status.
 4. Ask a question that is not covered by approved documents.
 5. Show the refusal: LipiCore should say it cannot find support in approved documents.
+6. If using an intentionally incomplete policy citation sample, show that LipiCore marks the answer `citation_incomplete` instead of presenting final policy advice.
 
 **Buyer message:** This is the safe mode for policy, circular, SOP, compliance, and internal procedure questions.
 
@@ -70,8 +71,20 @@ Use this opening:
 
 **Buyer message:** Staff can quickly extract text from internal files while keeping data inside the bank-controlled environment.
 
+## Flow 6: Internal Banking Workspace
+
+**Purpose:** Show day-to-day employee tools that can be enabled per bank.
+
+1. Open Super Admin feature controls and show that Employee Search, Notifications & Alerts, CEO's Message, Staff Inbox, and Forex/Time/Dates can be toggled per bank.
+2. Open Employee Search and filter by department, branch, role, or expertise.
+3. Open Forex/Time/Dates and show local banking time, business date, and the latest bank-published exchange-rate batch.
+4. Open Notifications or CEO's Message and show read/acknowledgement behavior.
+5. Explain that rates are bank-published operational rates, usually updated by Treasury/admin users 2-3 times per business day.
+
+**Buyer message:** LipiCore can become a controlled employee work surface, not only a chat tool, while allowing the bank to roll features out gradually.
+
 ## Close
 
 Use this close:
 
-> The first pilot should focus on customer care and branch support: 20-50 users, 200-500 approved documents, and a 30-day evaluation. We will measure answer accuracy, citation usefulness, response time, staff acceptance, and escalation reduction.
+> The first pilot should focus on customer care and branch support: 20-50 users, 200-500 approved documents, and a 30-day evaluation. We will measure answer accuracy, heading/clause/page citation usefulness, response time, staff acceptance, internal workspace adoption where enabled, and escalation reduction.

@@ -319,6 +319,22 @@ def resolve_model_profile(model_name: str | None = None) -> ModelProfile:
         "document_image": "vision",
         "image_ocr": "vision",
         "ocr": "vision",
+        # Gemma/Google-family aliases for compatibility with external model naming.
+        "gemma": "fast",
+        "gemma2": "fast",
+        "gemma-2": "fast",
+        "gemma3": "deep",
+        "gemma-3": "deep",
+        "gemma3n": "deep",
+        "gemma-3n": "deep",
+        "gemma4": "deep",
+        "gemma-4": "deep",
+        "gemma3n-4b": "deep",
+        "gemma-3n-4b": "deep",
+        "gemma4-27b": "deep",
+        "gemma-4-27b": "deep",
+        "embeddinggemma": "deep",
+        "shieldgemma": "deep",
     }
     key = requested if requested in registry else aliases.get(requested, "fast")
     return registry[key]

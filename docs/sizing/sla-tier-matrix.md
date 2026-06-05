@@ -42,3 +42,5 @@ Production monitoring must cover:
 Only the Whole-bank HA tier can support a formal availability SLA. Pilot and Department tiers can have support-response commitments, but should not be sold as highly available unless the bank funds and accepts the required architecture.
 
 Long-document analysis turnaround should be treated as a separate queue-based service target, not as the same SLA as interactive chat. It depends on OCR/page count, workbook size, worker capacity, and analyst-model queue load.
+
+Internal workspace modules such as Employee Search, Notifications, CEO Messages, Staff Inbox, and Forex/Time/Dates should be measured as API/database workflows. Their latency and availability evidence should be tracked separately from model first-token/total-latency claims.

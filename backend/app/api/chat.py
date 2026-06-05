@@ -28,30 +28,32 @@ from ..models.chat import ChatSession, ChatMessage
 from ..schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatRequest, ChatMessageResponse
 from .deps import get_current_analytics_user, get_current_user
 from ..services.rag_service import (
-    GLOBAL_RETRIEVAL_STATUSES,
-    GLOBAL_RETRIEVAL_VERSION_STATES,
-    MAX_CANDIDATE_RESULTS,
-    MAX_CONTEXT_RESULTS,
-    MIN_SOURCE_RELEVANCE_SCORE,
     NOT_FOUND_RESPONSE,
-    SESSION_RETRIEVAL_STATUSES,
-    UNTRUSTED_EVIDENCE_WARNING,
-    _build_source,
-    _document_visible_to_user,
-    _rerank_results,
+    POLICY_CITATION_INCOMPLETE_RESPONSE,
+    _build_context,
+    _build_sources,
+    _filter_results,
+    _high_confidence_results,
+    _policy_citation_blocking_sources,
+    _policy_citation_gate_blocks,
+    _search,
     generate_rag_response,
     async_generate_rag_response,
     get_system_identity,
+    MAX_CONTEXT_RESULTS,
     RAG_PROMPT_TEMPLATE,
+    UNTRUSTED_EVIDENCE_WARNING,
 )
 from ..services.audit_service import log_audit_event
 from ..services.guardrail_service import detect_prompt_injection, detect_and_mask_pii
 from ..services.query_rewrite_service import rewrite_query_for_retrieval
 from ..services.llm_service import async_call_llm
+from ..services.embedding_service import generate_embeddings
 from ..services.llm_gateway import model_status, reserve_model, resolve_model_profile, select_model_key_for_workflow
 from ..services.ingestion_queue import enqueue_document_ingestion
 from ..services.ingestion_service import extract_pages
 from ..services.citation_verifier import attach_source_verification, verify_answer_against_sources
+from ..services.feature_flag_service import is_feature_enabled
 from ..core.config import settings
 
 
@@ -186,10 +188,6 @@ def _should_attempt_document_retrieval(
     return bool(active_document_ids) or mode in KNOWLEDGE_SEARCH_MODES
 
 
-def _document_context_results(results: list) -> list:
-    return results[:MAX_CONTEXT_RESULTS]
-
-
 def _document_context_prompt(*, context: str, retrieval_query: str, safe_message: str) -> str:
     interpreted_query = ""
     if retrieval_query and retrieval_query.strip().lower() != (safe_message or "").strip().lower():
@@ -204,6 +202,10 @@ def _document_context_prompt(*, context: str, retrieval_query: str, safe_message
         f"{UNTRUSTED_EVIDENCE_WARNING}\n\n"
         f"{context}\n--- END DOCUMENT CONTEXT ---"
     )
+
+
+def _document_context_results(results):
+    return list(results[:MAX_CONTEXT_RESULTS])
 
 
 def prepare_vllm_payload_messages(
@@ -274,8 +276,16 @@ def derive_answer_metadata(
         "trust_label",
         "no_sources" if source_count == 0 else "source_unverified",
     )
+    citation_incomplete = (
+        answer == POLICY_CITATION_INCOMPLETE_RESPONSE
+        or trust_label == "citation_incomplete"
+        or any(source.get("citation_complete") is False for source in (sources or []))
+    )
 
-    if source_count > 0:
+    if citation_incomplete:
+        answer_type = "citation_incomplete"
+        trust_label = "citation_incomplete"
+    elif source_count > 0:
         answer_type = "uploaded_file_answer" if mode == "analyze_file" or active_document_ids else "official_source_backed"
     elif requires_sources:
         answer_type = "not_found"
@@ -300,6 +310,23 @@ def derive_answer_metadata(
         "trust_label": trust_label,
         "citation_verification": citation_verification or {},
     }
+
+
+def _citation_verification_with_feature_flags(
+    *,
+    answer: str | None,
+    sources: list[dict] | None,
+    db: Session,
+    bank_id: int | None,
+) -> dict:
+    if not bank_id:
+        return verify_answer_against_sources(answer=answer, sources=sources)
+    return verify_answer_against_sources(
+        answer=answer,
+        sources=sources,
+        nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
+        semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
+    )
 
 
 def ensure_chat_upload_dir() -> None:
@@ -358,28 +385,6 @@ def _update_session_summary(session: ChatSession, user_message: str, assistant_m
     db.add(session)
     db.commit()
 
-def _should_mix_global_knowledge(message: str) -> bool:
-    text = (message or "").lower()
-    global_terms = (
-        "global",
-        "knowledge base",
-        "policy library",
-        "nrb",
-        "regulation",
-        "directive",
-        "compare",
-        "against",
-        "across documents",
-        "all documents",
-        "other documents",
-    )
-    return any(term in text for term in global_terms)
-
-SECTION_RE = re.compile(
-    r"\b(?:section|sec\.?|clause|article|chapter|part)\s+([0-9]+(?:\.[0-9]+)*)\b|"
-    r"\b(?:दफा|परिच्छेद|बुँदा)\s*([०-९0-9]+(?:[.\-][०-९0-9]+)*)",
-    re.IGNORECASE,
-)
 EXTRACT_TEXT_INTENT_RE = re.compile(
     r"\b(?:extract|show|display|give|copy|read)\s+(?:me\s+)?(?:the\s+)?(?:raw\s+|full\s+|all\s+)?text\b|"
     r"\b(?:ocr|text extraction|extracted text|raw text|full text)\b|"
@@ -387,15 +392,6 @@ EXTRACT_TEXT_INTENT_RE = re.compile(
     re.IGNORECASE,
 )
 CHAT_EXTRACT_TEXT_MAX_CHARS = 24000
-
-
-def _extract_section_label(text: str | None) -> str | None:
-    if not text:
-        return None
-    match = SECTION_RE.search(text[:1200])
-    if not match:
-        return None
-    return " ".join(match.group(0).strip().split())[:80]
 
 
 def _is_extract_text_request(message: str | None) -> bool:
@@ -537,14 +533,24 @@ def _direct_extract_verification(sources: list[dict] | None) -> dict:
     }
 
 
-def _source_prefix(doc, payload: dict) -> str:
-    parts = [f"Source: {(doc.title or doc.file_name) if doc else 'Document'}"]
-    section = payload.get("section_label") or payload.get("section_number") or _extract_section_label(payload.get("text"))
-    if section:
-        parts.append(f"Section: {section}")
-    if payload.get("page_number"):
-        parts.append(f"Page: {payload.get('page_number')}")
-    return "[" + "; ".join(parts) + "]"
+def _citation_incomplete_verification(sources: list[dict] | None) -> dict:
+    incomplete_reasons = []
+    for source in sources or []:
+        for reason in source.get("citation_incomplete_reasons") or []:
+            if reason not in incomplete_reasons:
+                incomplete_reasons.append(reason)
+    return {
+        "status": "citation_incomplete",
+        "trust_label": "citation_incomplete",
+        "verification_stage": "citation_metadata",
+        "supported_sentence_count": 0,
+        "unsupported_sentence_count": 0,
+        "unsupported_sentences": [],
+        "nli_checked_sentence_count": 0,
+        "incomplete_source_count": len(sources or []),
+        "citation_incomplete_reasons": incomplete_reasons,
+    }
+
 
 @router.post("/sessions", response_model=ChatSessionResponse)
 def create_chat_session(
@@ -703,11 +709,17 @@ async def create_chat_message(
             )
             sources = []
 
-    citation_verification = (
-        _direct_extract_verification(sources)
-        if direct_text_extract
-        else verify_answer_against_sources(answer=answer, sources=sources)
-    )
+    if direct_text_extract:
+        citation_verification = _direct_extract_verification(sources)
+    elif answer == POLICY_CITATION_INCOMPLETE_RESPONSE:
+        citation_verification = _citation_incomplete_verification(sources)
+    else:
+        citation_verification = _citation_verification_with_feature_flags(
+            answer=answer,
+            sources=sources,
+            db=db,
+            bank_id=current_user.bank_id,
+        )
     sources = attach_source_verification(sources, citation_verification)
     
     # 4. Save AI message
@@ -742,7 +754,7 @@ async def create_chat_message(
             "query": safe_message,
             "pii_detected": safe_message != chat_request.message,
             "masking_mode": "redact",
-            "llm_received_masked_input": not direct_text_extract,
+            "llm_received_masked_input": not direct_text_extract and answer != POLICY_CITATION_INCOMPLETE_RESPONSE,
             "sources_count": len(sources),
             "answer_type": answer_metadata["answer_type"],
             "trust_label": answer_metadata.get("trust_label"),
@@ -750,6 +762,7 @@ async def create_chat_message(
             "citation_verification": citation_verification,
             "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
             "direct_text_extract": direct_text_extract or None,
+            "citation_gate_blocked": answer == POLICY_CITATION_INCOMPLETE_RESPONSE or None,
         }
     )
     
@@ -897,101 +910,94 @@ async def stream_chat_message(
         if should_search_documents:
             try:
                 logger.info("[STREAM] Starting RAG search")
-                from ..services.embedding_service import generate_embeddings
-                from ..services.qdrant_service import search_points
-                from ..models.document import Document
 
                 logger.info(f"[STREAM] Generating embeddings for query: {retrieval_query[:50]}")
                 embeddings = await asyncio.to_thread(generate_embeddings, [retrieval_query])
                 query_vector = embeddings[0]
                 logger.info("[STREAM] Embeddings generated")
 
-                session_results = []
-                if active_doc_ids:
-                    session_results = search_points(
-                        query_vector,
-                        current_user.bank_id,
-                        limit=MAX_CANDIDATE_RESULTS,
-                        document_ids=active_doc_ids,
-                        session_id=session_id,
-                        document_scope="session_upload",
-                        document_statuses=SESSION_RETRIEVAL_STATUSES,
-                    )
-
-                allow_global_mix = not active_doc_ids or not session_results or _should_mix_global_knowledge(safe_message)
-                global_limit = MAX_CANDIDATE_RESULTS if allow_global_mix else 0
-                global_results = []
-                if global_limit > 0:
-                    global_results = search_points(
-                        query_vector,
-                        current_user.bank_id,
-                        limit=global_limit,
-                        document_scope="global_knowledge",
-                        document_statuses=GLOBAL_RETRIEVAL_STATUSES,
-                        version_states=GLOBAL_RETRIEVAL_VERSION_STATES,
-                    )
-                    seen = {r.payload.get("document_id") for r in session_results if r.payload}
-                    global_results = [r for r in global_results if r.payload and r.payload.get("document_id") not in seen]
-
-                results = session_results + global_results
-
+                results = _search(query_vector, current_user.bank_id, active_doc_ids, session_id, retrieval_query, db)
                 if results:
-                    doc_ids = list(set(r.payload.get("document_id") for r in results if r.payload))
-                    allowed_docs = set()
-                    for doc_id in doc_ids:
-                        doc = db.get(Document, doc_id)
-                        if doc and _document_visible_to_user(
-                            doc,
-                            session_id,
-                            current_user.role,
-                            current_user.department,
-                        ):
-                            allowed_docs.add(doc_id)
-
-                    filtered = _rerank_results(retrieval_query, [
-                        r for r in results
-                        if r.payload
-                        and r.payload.get("document_id") in allowed_docs
-                        and r.score >= MIN_SOURCE_RELEVANCE_SCORE
-                    ])
-
-                    if filtered:
-                        context_results = _document_context_results(filtered)
-                        context_blocks = []
-                        for r in context_results:
-                            doc = db.get(Document, r.payload.get("document_id"))
-                            context_blocks.append(f"{_source_prefix(doc, r.payload)}\n{r.payload.get('text', '')}")
-                        context = "\n\n---\n\n".join(context_blocks)
+                    filtered = _filter_results(results, db, session_id, current_user.role, current_user.department)
+                    high_confidence = _high_confidence_results(filtered)
+                    if high_confidence:
+                        context = _build_context(high_confidence, db)
                         sys_identity += _document_context_prompt(
                             context=context,
                             retrieval_query=retrieval_query,
                             safe_message=safe_message,
                         )
-                        seen_src: set[tuple] = set()
-                        for r in context_results:
-                            doc_id = r.payload.get("document_id")
-                            section_label = (
-                                r.payload.get("section_label")
-                                or r.payload.get("section_number")
-                                or _extract_section_label(r.payload.get("text"))
-                            )
-                            source_key = (doc_id, r.payload.get("page_number"), section_label, r.payload.get("chunk_index"))
-                            if doc_id and source_key not in seen_src:
-                                doc = db.get(Document, doc_id)
-                                if doc:
-                                    sources_list.append(_build_source(doc, r.score, r))
-                                    seen_src.add(source_key)
+                        sources_list = _build_sources(high_confidence, db)
             except Exception as e:
                 logger.error(f"RAG failed in stream: {e}")
 
         logger.info("[STREAM] About to yield prepare status")
         yield f"data: {json.dumps({'type': 'status', 'message': 'Generating response...'})}\n\n"
 
+        if not has_image and _policy_citation_gate_blocks(retrieval_query, sources_list):
+            sources_list = _policy_citation_blocking_sources(sources_list)
+            full_response = POLICY_CITATION_INCOMPLETE_RESPONSE
+            yield f"data: {json.dumps({'token': full_response})}\n\n"
+            suggestions = []
+            citation_verification = _citation_incomplete_verification(sources_list)
+            sources_list = attach_source_verification(sources_list, citation_verification)
+            answer_metadata = derive_answer_metadata(
+                mode=mode,
+                sources=sources_list,
+                active_document_ids=active_doc_ids,
+                answer=full_response,
+                citation_verification=citation_verification,
+            )
+            try:
+                ai_msg = ChatMessage(
+                    bank_id=current_user.bank_id,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    role="assistant",
+                    content=full_response,
+                    sources_json=json.dumps(sources_list),
+                    suggestions_json=json.dumps(suggestions),
+                )
+                db.add(ai_msg)
+                db.commit()
+                _update_session_summary(session, safe_message, full_response, db)
+                log_audit_event(
+                    db=db,
+                    action="chat_query",
+                    resource_type="chat",
+                    resource_id=str(session_id),
+                    bank_id=current_user.bank_id,
+                    user_id=current_user.id,
+                    metadata={
+                        "query": safe_message,
+                        "pii_detected": safe_message != chat_request.message,
+                        "masking_mode": "redact",
+                        "llm_received_masked_input": False,
+                        "sources_count": len(sources_list),
+                        "answer_type": answer_metadata["answer_type"],
+                        "trust_label": answer_metadata.get("trust_label"),
+                        "mode": mode,
+                        "citation_verification": citation_verification,
+                        "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
+                        "streamed": True,
+                        "citation_gate_blocked": True,
+                    },
+                )
+            except Exception as e:
+                logger.error(f"[STREAM] Error saving citation-incomplete message: {e}")
+            yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
+            return
+
         if not has_image and mode in SOURCE_REQUIRED_MODES and not sources_list:
             full_response = NOT_FOUND_RESPONSE
             yield f"data: {json.dumps({'token': full_response})}\n\n"
             suggestions = []
-            citation_verification = verify_answer_against_sources(answer=full_response, sources=sources_list)
+            citation_verification = _citation_verification_with_feature_flags(
+                answer=full_response,
+                sources=sources_list,
+                db=db,
+                bank_id=current_user.bank_id,
+            )
             answer_metadata = derive_answer_metadata(
                 mode=mode,
                 sources=sources_list,
@@ -1129,6 +1135,20 @@ async def stream_chat_message(
         # Skip suggestions during streaming (would block the async generator)
         # Could generate async in background if needed
         suggestions = []
+        citation_verification = _citation_verification_with_feature_flags(
+            answer=full_response,
+            sources=sources_list,
+            db=db,
+            bank_id=current_user.bank_id,
+        )
+        sources_list = attach_source_verification(sources_list, citation_verification)
+        answer_metadata = derive_answer_metadata(
+            mode=mode,
+            sources=sources_list,
+            active_document_ids=active_doc_ids,
+            answer=full_response,
+            citation_verification=citation_verification,
+        )
 
         try:
             ai_msg = ChatMessage(
@@ -1143,15 +1163,6 @@ async def stream_chat_message(
             db.add(ai_msg)
             db.commit()
             _update_session_summary(session, safe_message, full_response, db)
-            citation_verification = verify_answer_against_sources(answer=full_response, sources=sources_list)
-            sources_list = attach_source_verification(sources_list, citation_verification)
-            answer_metadata = derive_answer_metadata(
-                mode=mode,
-                sources=sources_list,
-                active_document_ids=active_doc_ids,
-                answer=full_response,
-                citation_verification=citation_verification,
-            )
             log_audit_event(
                 db=db,
                 action="chat_query",
@@ -1181,7 +1192,7 @@ async def stream_chat_message(
             sources=sources_list,
             active_document_ids=active_doc_ids,
             answer=full_response,
-            citation_verification=verify_answer_against_sources(answer=full_response, sources=sources_list),
+            citation_verification=citation_verification,
         )
         yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
 

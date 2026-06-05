@@ -85,6 +85,134 @@ def test_build_indexable_chunks_adds_source_risk_flags():
     assert "prompt_injection_instruction" in chunks[0]["source_risk_flags"]
 
 
+def test_build_indexable_chunks_adds_policy_citation_metadata():
+    chunks = build_indexable_chunks(
+        [
+            {
+                "page_number": 42,
+                "text": "Chapter 5: SME Lending\nClause 5.1(a) DSR limit\nFor secured loans DSR is 60%.\nPage 38",
+            }
+        ],
+        document_type="policy",
+    )
+
+    assert chunks[0]["page_number"] == 42
+    assert chunks[0]["pdf_page_number"] == 42
+    assert chunks[0]["printed_page_number"] == "38"
+    assert chunks[0]["document_heading"] == "Chapter 5: SME Lending"
+    assert chunks[0]["clause_number"] == "Clause 5.1(a)"
+    assert chunks[0]["citation_incomplete_reasons"] == []
+
+
+def test_process_document_persists_policy_citation_metadata_to_db_and_qdrant(monkeypatch):
+    from sqlmodel import SQLModel, Session, select
+
+    import app.db.session as db_session
+    import app.services.llm_service as llm_service
+    import app.services.qdrant_service as qdrant_service
+    from app.models.bank import Bank
+    from app.models.chat import ChatSession  # noqa: F401
+    from app.models.document import Document, DocumentChunk
+    from app.models.document_intelligence import DocumentExtractionPage  # noqa: F401
+    from app.models.user import User
+    from test_main import engine
+
+    class CitationPageNumber(int):
+        pass
+
+    citation_pdf_page_number = CitationPageNumber(42)
+    real_build_citation_metadata = ingestion_service.build_citation_metadata
+
+    def tagged_citation_metadata(**kwargs):
+        metadata = real_build_citation_metadata(**kwargs)
+        metadata["pdf_page_number"] = citation_pdf_page_number
+        return metadata
+
+    captured_points = []
+    dimension = int(getattr(ingestion_service.settings, "EMBEDDING_DIMENSION", 1) or 1)
+
+    monkeypatch.setattr(db_session, "engine", engine)
+    monkeypatch.setattr(
+        ingestion_service,
+        "extract_pages",
+        lambda _file_path, _file_type: [
+            {
+                "page_number": 42,
+                "text": "Chapter 5: SME Lending\nClause 5.1(a) DSR limit\nFor secured loans DSR is 60%.\nPage 38",
+            }
+        ],
+    )
+    monkeypatch.setattr(ingestion_service, "build_citation_metadata", tagged_citation_metadata)
+    monkeypatch.setattr(
+        ingestion_service,
+        "generate_embeddings",
+        lambda texts: [[0.0] * dimension for _text in texts],
+    )
+    monkeypatch.setattr(ingestion_service, "upload_points", lambda points: captured_points.extend(points))
+    monkeypatch.setattr(llm_service, "call_llm", lambda *_args, **_kwargs: "Generated summary.")
+    monkeypatch.setattr(qdrant_service, "update_points_by_document_payload", lambda *_args, **_kwargs: None)
+
+    SQLModel.metadata.drop_all(engine)
+    SQLModel.metadata.create_all(engine)
+    try:
+        with Session(engine) as session:
+            bank = Bank(name="Metadata Bank", code="META01")
+            session.add(bank)
+            session.commit()
+            session.refresh(bank)
+
+            user = User(
+                bank_id=bank.id,
+                name="Metadata User",
+                email="metadata@test.local",
+                password_hash="hash",
+                role="staff_user",
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+            document = Document(
+                bank_id=bank.id,
+                uploaded_by=user.id,
+                title="SME Lending Policy",
+                file_name="sme-lending-policy.pdf",
+                file_type="pdf",
+                file_path="/tmp/sme-lending-policy.pdf",
+                document_type="policy",
+            )
+            session.add(document)
+            session.commit()
+            session.refresh(document)
+            document_id = document.id
+
+        ingestion_service.process_document(document_id)
+
+        with Session(engine) as session:
+            chunk = session.exec(
+                select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            ).first()
+
+        assert chunk is not None
+        assert chunk.page_number == 42
+        assert chunk.printed_page_number == "38"
+        assert chunk.document_heading == "Chapter 5: SME Lending"
+        assert chunk.clause_number == "Clause 5.1(a)"
+        assert chunk.citation_incomplete_reasons_json == "[]"
+
+        assert len(captured_points) == 1
+        payload = captured_points[0].payload
+        assert payload["page_number"] == 42
+        assert payload["pdf_page_number"] == 42
+        assert payload["pdf_page_number"] is citation_pdf_page_number
+        assert payload["printed_page_number"] == "38"
+        assert payload["document_heading"] == "Chapter 5: SME Lending"
+        assert payload["clause_number"] == "Clause 5.1(a)"
+        assert payload["citation_incomplete_reasons"] == []
+    finally:
+        SQLModel.metadata.drop_all(engine)
+
+
 def test_create_extraction_review_records_marks_low_ocr_review_required():
     from sqlmodel import SQLModel, Session, select
 

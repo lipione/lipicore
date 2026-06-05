@@ -10,8 +10,9 @@ Queued long-document analysis is a separate workflow and is not yet covered by t
 
 1. **Verify document upload workflow**: Users can upload documents to a chat session
 2. **Verify session-scoped RAG**: Uploaded documents are prioritized in RAG searches over global knowledge
-3. **Verify source attribution**: Generated responses correctly cite the source documents
+3. **Verify source attribution**: Generated responses correctly cite source documents and expose source metadata
 4. **Verify session persistence**: Follow-up questions maintain context with previously uploaded documents
+5. **Verify trust metadata**: Source panels and badges show citation verification, and policy-like answers show heading/clause/page metadata when available
 
 ## Test Infrastructure
 
@@ -64,6 +65,7 @@ npx playwright test --verbose
 - "Ready for questions" badge appears when document is processed
 - Response contains loan amount ($5,000,000) from the document
 - Source chip correctly attributes the response to the uploaded document
+- Source evidence panel exposes document title, passage, relevance, citation verification, and available page/section/heading/clause metadata
 
 **Pass criteria:** ✓ All assertions pass
 
@@ -176,6 +178,7 @@ If automated tests fail, perform these manual steps to verify functionality:
 - ✓ Status changes from "Uploading" → "Processing" → "Ready for questions"
 - ✓ All questions are answered with information from the uploaded document
 - ✓ Source chips appear below each response showing document name
+- ✓ Source evidence panel opens and shows passage, relevance, citation verification, and available page/section/heading/clause metadata
 - ✓ Questions maintain session context (subsequent questions use same document)
 - ✓ No external knowledge is used (only uploaded document is referenced)
 
@@ -187,6 +190,7 @@ If automated tests fail, perform these manual steps to verify functionality:
 | "Ready for questions" doesn't appear | Check document processing: Backend embedding service may be slow |
 | Response doesn't contain expected data | Verify test document contains the data at `/e/BankAi/frontend/tests/e2e/fixtures/Loan_Policy.txt` |
 | Source not attributed | Check Qdrant service running: Document vectors may not be indexed |
+| Citation metadata missing | Confirm the fixture/document has page, heading, or clause markers and inspect ingestion chunk metadata |
 | Follow-up questions use global knowledge | Check session-aware RAG implementation in `backend/app/api/chat.py` line 160-168 |
 
 ## Architecture Verification
@@ -208,6 +212,7 @@ The E2E tests verify these critical backend components:
 **File:** `backend/app/services/rag_service.py` lines 42-49
 - `_build_source()`: Normalizes source dict with document_title and title fields
 - Includes document_id, file_name, and relevance_score
+- Current source payloads may also include pdf_page_number, printed_page_number, document_heading, clause_number, citation_confidence, and citation_incomplete_reasons
 
 ### 4. Stream Response Flow
 **File:** `backend/app/api/chat.py` lines 198-370
@@ -254,6 +259,7 @@ To run these tests in CI:
 | Session Tracking | ✓ | Implemented |
 | RAG Priority Search | ✓ | Implemented |
 | Source Attribution | ✓ | Implemented |
+| Source Metadata Panel | ✓ | Implemented |
 | Multi-turn Context | ✓ | Implemented |
 | Follow-up Suggestions | ✓ | Implemented |
 | Error Handling | ✓ | Implemented |

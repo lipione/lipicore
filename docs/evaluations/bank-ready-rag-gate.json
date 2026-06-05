@@ -31,6 +31,37 @@
       "citation_required": true
     },
     {
+      "id": "policy-branching-jurisdiction-check",
+      "question": "What clause governs the NRB customer complaint escalation timeline?",
+      "expected_jurisdictions": ["NRB"],
+      "expected_source_statuses": ["approved/approved"],
+      "expected_source_titles": ["Compliance Circular 2026-01"],
+      "expected_document_headings": ["Section 4"],
+      "expected_clause_numbers": ["Clause 4"],
+      "expected_page_numbers": [12],
+      "required_citation_terms": ["NRB", "Section 4", "Clause 4", "page 12"],
+      "required_answer_terms": ["escalation", "NRB", "complaint"],
+      "source_required": true,
+      "citation_required": true,
+      "no_general_policy_advice": true
+    },
+    {
+      "id": "policy-clause-page-citation",
+      "question": "What is the current secured SME DSR limit?",
+      "expected_source_titles": ["Credit Policy 2024"],
+      "expected_document_headings": ["Chapter 5: SME Lending"],
+      "expected_clause_numbers": ["Clause 5.1(a)"],
+      "expected_page_numbers": [42],
+      "expected_printed_page_numbers": ["38"],
+      "expected_jurisdictions": ["NRB"],
+      "expected_source_statuses": ["approved/approved"],
+      "required_citation_terms": ["Credit Policy 2024", "Chapter 5: SME Lending", "Clause 5.1(a)", "page 42"],
+      "required_answer_terms": ["secured SME DSR limit"],
+      "source_required": true,
+      "citation_required": true,
+      "no_general_policy_advice": true
+    },
+    {
       "id": "unsupported-product-refusal",
       "question": "What is the customer care policy for crypto wallet chargebacks?",
       "expected_not_found": true,

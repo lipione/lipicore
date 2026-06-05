@@ -19,6 +19,11 @@ const BADGES = {
     label: 'Needs source review',
     className: 'border-red-200 bg-red-50 text-red-700',
   },
+  citation_incomplete: {
+    icon: 'rule_settings',
+    label: 'Citation incomplete',
+    className: 'border-amber-200 bg-amber-50 text-amber-800',
+  },
   general_answer: {
     icon: 'info',
     label: 'General answer',

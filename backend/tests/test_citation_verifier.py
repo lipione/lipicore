@@ -77,3 +77,68 @@ def test_citation_verifier_keeps_lexical_stage_when_nli_disabled():
     assert result["status"] == "supported"
     assert result["verification_stage"] == "lexical"
     assert result["nli_checked_sentence_count"] == 0
+
+
+def test_verifier_uses_semantic_matching_for_english_answer_against_nepali_sources():
+    answer = "Customer complaints must be escalated within one business day."
+    sources = [
+        {
+            "passage": "ग्राहकको गुनासो एक कार्यदिनभित्र सुपरवाइजरमा पठाउनुपर्छ।"
+        }
+    ]
+
+    def fake_semantic_scorer(sentences: list[str], source_segments: list[str]) -> list[float]:
+        assert source_segments
+        return [0.82 for _ in sentences]
+
+    result = verify_answer_against_sources(
+        answer=answer,
+        sources=sources,
+        min_overlap=0.95,
+        nli_enabled=False,
+        semantic_enabled=True,
+        semantic_threshold=0.8,
+        semantic_scorer=fake_semantic_scorer,
+        semantic_only_cross_lang=True,
+    )
+
+    assert result["status"] == "supported"
+    assert result["verification_stage"] == "lexical+semantic"
+    assert result["semantic_checked_sentence_count"] == 1
+    assert result["semantic_supported_sentence_count"] == 1
+    assert result["semantic_top_score"] == 0.82
+    assert result["trust_label"] == "source_supported"
+
+
+def test_verifier_falls_back_to_semantic_when_nli_does_not_support():
+    answer = "Customer complaints must be escalated within one business day."
+    sources = [
+        {
+            "passage": "ग्राहकको गुनासो एक कार्यदिनभित्र सुपरवाइजरमा पठाउनुपर्छ।"
+        }
+    ]
+
+    def fake_nli(_premise, _hypothesis):
+        return {"label": "contradiction", "score": 0.95}
+
+    def fake_semantic_scorer(sentences: list[str], source_segments: list[str]) -> list[float]:
+        return [0.83 for _ in sentences]
+
+    result = verify_answer_against_sources(
+        answer=answer,
+        sources=sources,
+        min_overlap=0.95,
+        nli_enabled=True,
+        nli_predictor=fake_nli,
+        semantic_enabled=True,
+        semantic_threshold=0.9,
+        semantic_scorer=fake_semantic_scorer,
+        semantic_only_cross_lang=True,
+    )
+
+    assert result["status"] == "unsupported"
+    assert result["verification_stage"] == "hybrid"
+    assert result["nli_checked_sentence_count"] == 1
+    assert result["semantic_checked_sentence_count"] == 1
+    assert result["semantic_supported_sentence_count"] == 0
+    assert result["trust_label"] == "not_source_supported"

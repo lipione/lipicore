@@ -3,6 +3,8 @@
 **Date:** May 23, 2026
 **Status:** Production stack deployed at commit `615d299`; staff helpdesk, document governance, OCR extraction, Model Lab, and queued long-document analysis are live
 
+> This file is a dated production snapshot for the live Silver Lining deployment. The current repository branch includes later policy citation fidelity, internal workspace, and documentation updates that still require the normal deployment, migration, validation, and readiness process before this live-status page should be replaced.
+
 ## Public Access
 
 ```text

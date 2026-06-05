@@ -10,7 +10,7 @@ from app.api.chat import (
     prepare_vllm_payload_messages,
     should_show_document_search_status,
 )
-from app.services.rag_service import RAG_PROMPT_TEMPLATE, get_system_identity
+from app.services.rag_service import POLICY_CITATION_INCOMPLETE_RESPONSE, RAG_PROMPT_TEMPLATE, get_system_identity
 from app.schemas.chat import ChatRequest
 
 
@@ -119,6 +119,30 @@ def test_answer_metadata_uses_citation_trust_label_for_unsupported_source():
 
     assert metadata["answer_type"] == "unsupported_source"
     assert metadata["trust_label"] == "partially_source_supported"
+
+
+def test_answer_metadata_marks_citation_incomplete_response():
+    metadata = derive_answer_metadata(
+        mode="ask_knowledge",
+        sources=[
+            {
+                "document_id": 12,
+                "document_title": "Credit Policy",
+                "citation_complete": False,
+                "citation_incomplete_reasons": ["missing_clause_number"],
+            }
+        ],
+        active_document_ids=[],
+        answer=POLICY_CITATION_INCOMPLETE_RESPONSE,
+        citation_verification={
+            "status": "citation_incomplete",
+            "trust_label": "citation_incomplete",
+        },
+    )
+
+    assert metadata["answer_type"] == "citation_incomplete"
+    assert metadata["trust_label"] == "citation_incomplete"
+    assert metadata["source_count"] == 1
 
 
 def test_general_fallback_warns_not_official_policy():

@@ -13,6 +13,7 @@ from ..models.document import Document, DocumentChunk
 from ..core.config import settings
 from .embedding_service import generate_embeddings
 from .ocr_service import OcrResult, convert_pdf_pages_to_images, ocr_image_file, ocr_pil_image_to_text
+from .policy_citation_metadata import build_citation_metadata
 from .qdrant_service import upload_points
 from .source_risk_service import classify_source_risk
 
@@ -587,9 +588,21 @@ def build_indexable_chunks(
             continue
         for chunk_text in text_splitter.split_text(page_text):
             risk = classify_source_risk(chunk_text)
+            citation = build_citation_metadata(
+                page=page,
+                chunk_text=chunk_text,
+                document_type=document_type,
+            )
             indexable_chunks.append({
                 "text": chunk_text,
                 "page_number": page.get("page_number"),
+                "pdf_page_number": citation["pdf_page_number"],
+                "printed_page_number": citation["printed_page_number"],
+                "document_heading": citation["document_heading"],
+                "clause_number": citation["clause_number"],
+                "citation_confidence": citation["citation_confidence"],
+                "citation_incomplete_reasons": citation["citation_incomplete_reasons"],
+                "legal_hierarchy": citation.get("legal_hierarchy"),
                 "section_label": page.get("section_label") or _extract_section_label(chunk_text),
                 "extraction_confidence": page.get("extraction_confidence"),
                 "ocr_confidence": page.get("ocr_confidence"),
@@ -771,6 +784,11 @@ def process_document(document_id: int):
                     chunk_index=i,
                     chunk_text=chunk["text"],
                     page_number=chunk["page_number"],
+                    printed_page_number=chunk.get("printed_page_number"),
+                    document_heading=chunk.get("document_heading"),
+                    clause_number=chunk.get("clause_number"),
+                    citation_confidence=chunk.get("citation_confidence"),
+                    citation_incomplete_reasons_json=json.dumps(chunk.get("citation_incomplete_reasons", [])),
                     extraction_confidence=chunk.get("extraction_confidence"),
                     ocr_confidence=chunk.get("ocr_confidence"),
                     table_confidence=chunk.get("table_confidence"),
@@ -794,6 +812,13 @@ def process_document(document_id: int):
                         "chunk_index": i,
                         "text": chunk["text"],
                         "page_number": chunk["page_number"],
+                        "pdf_page_number": chunk.get("pdf_page_number"),
+                        "printed_page_number": chunk.get("printed_page_number"),
+                        "document_heading": chunk.get("document_heading"),
+                        "clause_number": chunk.get("clause_number"),
+                        "citation_confidence": chunk.get("citation_confidence"),
+                        "citation_incomplete_reasons": chunk.get("citation_incomplete_reasons", []),
+                        "legal_hierarchy": chunk.get("legal_hierarchy"),
                         "section_label": chunk["section_label"],
                         "extraction_confidence": chunk.get("extraction_confidence"),
                         "ocr_confidence": chunk.get("ocr_confidence"),

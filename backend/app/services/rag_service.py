@@ -10,12 +10,18 @@ from .embedding_service import generate_embeddings
 from .qdrant_service import search_points
 from .llm_service import call_llm, async_call_llm
 from .citation_verifier import attach_source_verification, verify_answer_against_sources
+from .feature_flag_service import is_feature_enabled
+from .policy_citation_metadata import is_policy_document_type
 from .source_risk_service import classify_source_risk
 from ..models.document import Document, DocumentChunk
 
 NOT_FOUND_RESPONSE = (
     "I could not find this in the approved documents. "
     "Please consult the relevant policy or contact your supervisor."
+)
+POLICY_CITATION_INCOMPLETE_RESPONSE = (
+    "I found policy-like material, but the source citation is incomplete. "
+    "Please send this to compliance review before relying on it."
 )
 MIN_SOURCE_RELEVANCE_SCORE = 0.4
 MAX_CONTEXT_RESULTS = 5
@@ -61,7 +67,7 @@ Do not offer multiple alternative answers or generic option lists unless the use
 If the context does not contain enough information to answer, respond with exactly:
 "I could not find this in the approved documents. Please consult the relevant policy or contact your supervisor."
 Do NOT use your general knowledge to answer banking, compliance, or policy questions.
-When the answer comes from a policy, directive, circular, or procedure, mention the source document and any available section/page reference.
+When the answer comes from a policy, directive, circular, procedure, SOP, law, act, or compliance document, every key policy claim must cite: document title, heading, clause number, PDF page, printed page when available, effective dates when available, and source status.
 """ + UNTRUSTED_EVIDENCE_WARNING + """
 
 Context:
@@ -103,11 +109,122 @@ def _extract_section_label(text: str | None) -> str | None:
     return " ".join(label.split())[:80]
 
 
+def _payload_pdf_page_number(payload: dict):
+    pdf_page = payload.get("pdf_page_number")
+    return payload.get("page_number") if not _citation_page_present(pdf_page) else pdf_page
+
+
+def _citation_text_present(value) -> bool:
+    return value is not None and bool(str(value).strip())
+
+
+def _citation_page_present(value) -> bool:
+    if isinstance(value, bool) or value is None:
+        return False
+    if isinstance(value, int):
+        return True
+    if isinstance(value, str):
+        return bool(value.strip())
+    return False
+
+
+_MISSING_CITATION_REASONS = object()
+
+
+def _policy_missing_citation_reasons(payload: dict) -> list[str]:
+    reasons: list[str] = []
+    if not _citation_page_present(_payload_pdf_page_number(payload)):
+        reasons.append("missing_pdf_page_number")
+    if not _citation_text_present(payload.get("document_heading")):
+        reasons.append("missing_document_heading")
+    if not _citation_text_present(payload.get("clause_number")):
+        reasons.append("missing_clause_number")
+    return reasons
+
+
+def _merge_citation_reasons(existing: list[str], synthesized: list[str]) -> list[str]:
+    merged: list[str] = []
+    for reason in [*existing, *synthesized]:
+        if reason and reason not in merged:
+            merged.append(reason)
+    return merged
+
+
+def _citation_reasons(payload: dict, document_type: str | None = None) -> list[str]:
+    reasons = payload.get("citation_incomplete_reasons", _MISSING_CITATION_REASONS)
+    policy_document = is_policy_document_type(document_type)
+    if reasons is _MISSING_CITATION_REASONS or reasons is None:
+        return ["missing_citation_metadata"] if policy_document else []
+    if isinstance(reasons, list):
+        parsed = [str(reason).strip() for reason in reasons if str(reason).strip()]
+        return _merge_citation_reasons(parsed, _policy_missing_citation_reasons(payload)) if policy_document else parsed
+    if isinstance(reasons, str):
+        try:
+            parsed = json.loads(reasons)
+        except json.JSONDecodeError:
+            return ["invalid_citation_incomplete_reasons"] if policy_document else []
+        if isinstance(parsed, list):
+            parsed_reasons = [str(reason).strip() for reason in parsed if str(reason).strip()]
+            return _merge_citation_reasons(parsed_reasons, _policy_missing_citation_reasons(payload)) if policy_document else parsed_reasons
+        return ["invalid_citation_incomplete_reasons"] if policy_document else []
+    return ["invalid_citation_incomplete_reasons"] if policy_document else []
+
+
+def _citation_complete_for_source(payload: dict, document_type: str | None, citation_reasons: list[str]) -> bool:
+    if citation_reasons:
+        return False
+    if not is_policy_document_type(document_type):
+        return True
+    return (
+        "citation_incomplete_reasons" in payload
+        and _citation_page_present(_payload_pdf_page_number(payload))
+        and _citation_text_present(payload.get("document_heading"))
+        and _citation_text_present(payload.get("clause_number"))
+    )
+
+
+def _source_has_complete_policy_citation(source: dict) -> bool:
+    if not is_policy_document_type(source.get("document_type")):
+        return False
+    if source.get("citation_complete") is False:
+        return False
+    return bool(
+        _citation_text_present(source.get("document_heading"))
+        and _citation_text_present(source.get("clause_number"))
+        and _citation_page_present(
+            source.get("pdf_page_number") if _citation_page_present(source.get("pdf_page_number")) else source.get("page_number")
+        )
+        and not source.get("citation_incomplete_reasons")
+    )
+
+
+def _policy_sources_need_complete_citations(question: str | None, sources: list[dict]) -> bool:
+    return any(is_policy_document_type(source.get("document_type")) for source in sources)
+
+
+def _policy_citation_blocking_sources(sources: list[dict]) -> list[dict]:
+    return [
+        source
+        for source in sources
+        if is_policy_document_type(source.get("document_type"))
+        and not _source_has_complete_policy_citation(source)
+    ]
+
+
+def _policy_citation_gate_blocks(question: str | None, sources: list[dict]) -> bool:
+    return _policy_sources_need_complete_citations(question, sources) and bool(
+        _policy_citation_blocking_sources(sources)
+    )
+
+
 def _build_source(doc: Document, score: float, result=None) -> dict:
     payload = getattr(result, "payload", {}) or {}
     passage = payload.get("text") or ""
     section_label = payload.get("section_label") or payload.get("section_number") or _extract_section_label(payload.get("text"))
     warnings = _source_warnings(doc)
+    citation_reasons = _citation_reasons(payload, doc.document_type)
+    document_status = payload.get("document_status") or doc.status
+    version_state = payload.get("version_state") or doc.version_state
     return {
         "document_id":     doc.id,
         "document_title":  doc.title or doc.file_name,
@@ -116,6 +233,17 @@ def _build_source(doc: Document, score: float, result=None) -> dict:
         "document_type":   doc.document_type,
         "department":      doc.department,
         "page_number":     payload.get("page_number"),
+        "pdf_page_number": _payload_pdf_page_number(payload),
+        "printed_page_number": payload.get("printed_page_number"),
+        "document_heading": payload.get("document_heading"),
+        "clause_number": payload.get("clause_number"),
+        "citation_confidence": payload.get("citation_confidence"),
+        "citation_incomplete_reasons": citation_reasons,
+        "citation_complete": _citation_complete_for_source(payload, doc.document_type, citation_reasons),
+        "legal_hierarchy": payload.get("legal_hierarchy"),
+        "document_status": document_status,
+        "version_state": version_state,
+        "source_status": f"{document_status}/{version_state}",
         "section_label":   section_label,
         "section_number":  section_label,
         "chunk_index":     payload.get("chunk_index"),
@@ -206,12 +334,28 @@ def _high_confidence_results(filtered_results, min_relevance_score=MIN_SOURCE_RE
 
 def _source_prefix(doc: Document | None, payload: dict) -> str:
     title = (doc.title or doc.file_name) if doc else "Document"
-    parts = [f"Source: {title}"]
-    section = payload.get("section_label") or payload.get("section_number") or _extract_section_label(payload.get("text"))
-    if section:
-        parts.append(f"Section: {section}")
-    if payload.get("page_number"):
-        parts.append(f"Page: {payload.get('page_number')}")
+    parts = [f"Document: {title}"]
+    heading = payload.get("document_heading") or payload.get("section_label") or payload.get("section_number")
+    if heading:
+        parts.append(f"Heading: {heading}")
+    hierarchy = payload.get("legal_hierarchy")
+    if hierarchy:
+        parts.append(f"Legal hierarchy: {hierarchy}")
+    clause = payload.get("clause_number")
+    if clause:
+        parts.append(f"Clause: {clause}")
+    pdf_page = _payload_pdf_page_number(payload)
+    if pdf_page is not None:
+        parts.append(f"PDF page: {pdf_page}")
+    printed_page = payload.get("printed_page_number")
+    if printed_page:
+        parts.append(f"Printed page: {printed_page}")
+    if doc:
+        parts.append(f"Status: {doc.status}/{doc.version_state}")
+        if doc.effective_from:
+            parts.append(f"Effective from: {doc.effective_from.isoformat()}")
+        if doc.effective_to:
+            parts.append(f"Effective until: {doc.effective_to.isoformat()}")
     chunk_index = payload.get("chunk_index")
     if chunk_index is not None:
         parts.append(f"Chunk: {chunk_index}")
@@ -340,6 +484,12 @@ def _python_keyword_search(
                 "chunk_index": chunk.chunk_index,
                 "text": chunk.chunk_text,
                 "page_number": chunk.page_number,
+                "pdf_page_number": chunk.page_number,
+                "printed_page_number": chunk.printed_page_number,
+                "document_heading": chunk.document_heading,
+                "clause_number": chunk.clause_number,
+                "citation_confidence": chunk.citation_confidence,
+                "citation_incomplete_reasons": chunk.citation_incomplete_reasons_json,
                 "extraction_confidence": chunk.extraction_confidence,
                 "ocr_confidence": chunk.ocr_confidence,
                 "table_confidence": chunk.table_confidence,
@@ -347,6 +497,7 @@ def _python_keyword_search(
                 "source_risk_level": source_risk_level,
                 "source_risk_flags": risk_flags,
                 "section_label": _extract_section_label(chunk.chunk_text),
+                "legal_hierarchy": None,
                 "department": chunk.department,
                 "access_level": chunk.access_level,
                 "document_status": chunk.document_status,
@@ -401,6 +552,11 @@ def _postgres_keyword_search(
             c.chunk_index,
             c.chunk_text,
             c.page_number,
+            c.printed_page_number,
+            c.document_heading,
+            c.clause_number,
+            c.citation_confidence,
+            c.citation_incomplete_reasons_json,
             c.extraction_confidence,
             c.ocr_confidence,
             c.table_confidence,
@@ -450,6 +606,13 @@ def _postgres_keyword_search(
                 "chunk_index": row["chunk_index"],
                 "text": text_value,
                 "page_number": row["page_number"],
+                "pdf_page_number": row["page_number"],
+                "printed_page_number": row.get("printed_page_number"),
+                "document_heading": row.get("document_heading"),
+                "clause_number": row.get("clause_number"),
+                "legal_hierarchy": row.get("legal_hierarchy"),
+                "citation_confidence": row.get("citation_confidence"),
+                "citation_incomplete_reasons": row.get("citation_incomplete_reasons_json"),
                 "extraction_confidence": row.get("extraction_confidence"),
                 "ocr_confidence": row.get("ocr_confidence"),
                 "table_confidence": row.get("table_confidence"),
@@ -637,8 +800,15 @@ def generate_rag_response(
     context = _build_context(high_confidence, db)
     prompt = RAG_PROMPT_TEMPLATE.format(system=sys_identity, context=context, question=question)
     sources = _build_sources(high_confidence, db)
+    if _policy_citation_gate_blocks(question, sources):
+        return POLICY_CITATION_INCOMPLETE_RESPONSE, _policy_citation_blocking_sources(sources)
     answer = call_llm(prompt)
-    verification = verify_answer_against_sources(answer=answer, sources=sources)
+    verification = verify_answer_against_sources(
+        answer=answer,
+        sources=sources,
+        nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
+        semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
+    )
     return answer, attach_source_verification(sources, verification)
 
 
@@ -674,6 +844,13 @@ async def async_generate_rag_response(
     context = _build_context(high_confidence, db)
     prompt = RAG_PROMPT_TEMPLATE.format(system=sys_identity, context=context, question=question)
     sources = _build_sources(high_confidence, db)
+    if _policy_citation_gate_blocks(question, sources):
+        return POLICY_CITATION_INCOMPLETE_RESPONSE, _policy_citation_blocking_sources(sources)
     answer = await async_call_llm(prompt, user_id=user_id, role=user_role, model_name=model_name)
-    verification = verify_answer_against_sources(answer=answer, sources=sources)
+    verification = verify_answer_against_sources(
+        answer=answer,
+        sources=sources,
+        nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
+        semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
+    )
     return answer, attach_source_verification(sources, verification)

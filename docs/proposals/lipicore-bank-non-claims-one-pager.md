@@ -15,7 +15,9 @@ LipiCore can reduce lookup, drafting, and circular review workload. It does not 
 
 ## It Does Not Guarantee Regulatory Correctness
 
-LipiCore answers from approved source documents and shows citations. Regulatory correctness depends on the bank keeping policies, circulars, SOPs, and product documents accurate, current, approved, and available in the knowledge base.
+LipiCore answers from approved source documents and shows citations, including heading, clause, PDF page, and printed page where available for policy-like answers. Regulatory correctness depends on the bank keeping policies, circulars, SOPs, and product documents accurate, current, approved, and available in the knowledge base.
+
+Citation completeness is not a legal guarantee. It means the required citation fields are present; staff still need to inspect the cited passage, document status, version state, and effective dates.
 
 ## It Does Not Perfectly Understand Every Document
 
@@ -28,6 +30,10 @@ Large PDFs, OCR-heavy files, and detailed Excel workbooks run as background anal
 ## Current Safe Large-File Statement
 
 LipiCore can queue large-file analysis, select relevant extracted excerpts, and generate staff-reviewable summaries or action notes. It should not be described as perfect whole-document reasoning, perfect OCR, or automatic verification of signatures, seals, handwritten notes, or complex tables.
+
+## Internal Workspace Tools Are Operational Aids
+
+Employee Search, Notifications & Alerts, CEO's Message, Staff Inbox, Forex/Time/Dates, knowledge-gap tracking, policy-change watch, audit evidence packs, and banking workflow helpers are feature-flagged operational tools. They do not replace maker-checker controls, compliance sign-off, customer-impact approval, or Treasury ownership of exchange-rate updates.
 
 ## SLA Depends On Deployment Architecture
 

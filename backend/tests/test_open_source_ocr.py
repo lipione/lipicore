@@ -31,6 +31,8 @@ def test_image_extraction_uses_open_source_ocr(monkeypatch, tmp_path):
             "ocr_confidence": 0.91,
             "table_confidence": None,
             "page_bbox_json": None,
+            "section_label": None,
+            "table_metadata": None,
         }
     ]
 

@@ -3,11 +3,14 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { BrandingProvider } from './contexts/BrandingContext.jsx'
+import { FeatureFlagProvider } from './contexts/FeatureFlagContext.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrandingProvider>
-      <App />
+      <FeatureFlagProvider>
+        <App />
+      </FeatureFlagProvider>
     </BrandingProvider>
   </React.StrictMode>,
 )

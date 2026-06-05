@@ -22,6 +22,14 @@ def _chunk_source_risk_flags(chunk: DocumentChunk) -> list[str]:
     return value if isinstance(value, list) else []
 
 
+def _chunk_citation_incomplete_reasons(chunk: DocumentChunk) -> list[str]:
+    try:
+        value = json.loads(chunk.citation_incomplete_reasons_json or "[]")
+    except json.JSONDecodeError:
+        return []
+    return value if isinstance(value, list) else []
+
+
 def _chunk_payload(document: Document, chunk: DocumentChunk) -> dict:
     return {
         "bank_id": document.bank_id,
@@ -29,6 +37,12 @@ def _chunk_payload(document: Document, chunk: DocumentChunk) -> dict:
         "chunk_index": chunk.chunk_index,
         "text": chunk.chunk_text,
         "page_number": chunk.page_number,
+        "pdf_page_number": chunk.page_number,
+        "printed_page_number": chunk.printed_page_number,
+        "document_heading": chunk.document_heading,
+        "clause_number": chunk.clause_number,
+        "citation_confidence": chunk.citation_confidence,
+        "citation_incomplete_reasons": _chunk_citation_incomplete_reasons(chunk),
         "section_label": None,
         "extraction_confidence": chunk.extraction_confidence,
         "ocr_confidence": chunk.ocr_confidence,

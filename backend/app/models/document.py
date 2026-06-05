@@ -52,6 +52,11 @@ class DocumentChunk(SQLModel, table=True):
     chunk_index: int
     chunk_text: str
     page_number: Optional[int] = None
+    printed_page_number: Optional[str] = None
+    document_heading: Optional[str] = None
+    clause_number: Optional[str] = None
+    citation_confidence: Optional[float] = None
+    citation_incomplete_reasons_json: str = "[]"
     qdrant_point_id: str
     extraction_confidence: Optional[float] = None
     ocr_confidence: Optional[float] = None

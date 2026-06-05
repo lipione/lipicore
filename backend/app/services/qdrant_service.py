@@ -97,6 +97,36 @@ def update_points_by_document_payload(document_id: int, bank_id: int, payload: d
     )
 
 
+def update_point_payload(
+    point_id: str,
+    payload: dict,
+    *,
+    bank_id: int | None = None,
+    document_id: int | None = None,
+):
+    if bank_id is not None and document_id is not None:
+        from qdrant_client.models import Filter, FieldCondition, HasIdCondition, MatchValue
+
+        qdrant_client.set_payload(
+            collection_name=COLLECTION_NAME,
+            payload=payload,
+            points=Filter(
+                must=[
+                    HasIdCondition(has_id=[point_id]),
+                    FieldCondition(key="bank_id", match=MatchValue(value=bank_id)),
+                    FieldCondition(key="document_id", match=MatchValue(value=document_id)),
+                ]
+            ),
+        )
+        return
+
+    qdrant_client.set_payload(
+        collection_name=COLLECTION_NAME,
+        payload=payload,
+        points=[point_id],
+    )
+
+
 def search_points(
     query_vector: list[float],
     bank_id: int,

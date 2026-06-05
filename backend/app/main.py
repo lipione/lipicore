@@ -10,19 +10,33 @@ from .db.session import init_db
 from .api import (
     analytics,
     audit,
+    audit_evidence,
     auth,
     banks,
+    branch_responses,
+    ceo_messages,
     chat,
+    checklist_workspace,
+    circular_impact,
     compliance_reviews,
     configuration,
+    complaint_workspace,
     document_review,
     documents,
+    employee_directory,
     evaluations,
     export,
+    feature_flags,
+    knowledge_gaps,
+    kyc_case_prep,
     loan_support,
     long_document_analysis,
+    market_utilities,
     model_lab,
+    notifications,
     ocr,
+    policy_changes,
+    staff_work_items,
     support_cases,
     tasks,
     users,
@@ -88,11 +102,25 @@ app.include_router(analytics.router, prefix=f"{settings.API_V1_STR}/analytics", 
 app.include_router(tasks.router,    prefix=f"{settings.API_V1_STR}/tasks",    tags=["tasks"])
 app.include_router(export.router,   prefix=f"{settings.API_V1_STR}/export",   tags=["export"])
 app.include_router(configuration.router, prefix=f"{settings.API_V1_STR}/config", tags=["config"])
+app.include_router(feature_flags.router, prefix=f"{settings.API_V1_STR}/feature-flags", tags=["feature-flags"])
+app.include_router(employee_directory.router, prefix=f"{settings.API_V1_STR}/employee-directory", tags=["employee-directory"])
 app.include_router(evaluations.router, prefix=f"{settings.API_V1_STR}/evaluations", tags=["evaluations"])
+app.include_router(ceo_messages.router, prefix=f"{settings.API_V1_STR}/ceo-messages", tags=["ceo-messages"])
+app.include_router(knowledge_gaps.router, prefix=f"{settings.API_V1_STR}/knowledge-gaps", tags=["knowledge-gaps"])
+app.include_router(policy_changes.router, prefix=f"{settings.API_V1_STR}/policy-changes", tags=["policy-changes"])
+app.include_router(complaint_workspace.router, prefix=f"{settings.API_V1_STR}/complaint-workspace", tags=["complaint-workspace"])
+app.include_router(circular_impact.router, prefix=f"{settings.API_V1_STR}/circular-impact", tags=["circular-impact"])
+app.include_router(branch_responses.router, prefix=f"{settings.API_V1_STR}/branch-responses", tags=["branch-responses"])
+app.include_router(kyc_case_prep.router, prefix=f"{settings.API_V1_STR}/kyc-case-prep", tags=["kyc-case-prep"])
+app.include_router(checklist_workspace.router, prefix=f"{settings.API_V1_STR}/checklist-workspace", tags=["checklist-workspace"])
+app.include_router(audit_evidence.router, prefix=f"{settings.API_V1_STR}/audit-evidence", tags=["audit-evidence"])
 app.include_router(support_cases.router, prefix=f"{settings.API_V1_STR}/support-cases", tags=["support-cases"])
 app.include_router(compliance_reviews.router, prefix=f"{settings.API_V1_STR}/compliance-reviews", tags=["compliance-reviews"])
 app.include_router(loan_support.router, prefix=f"{settings.API_V1_STR}/loan-support", tags=["loan-support"])
 app.include_router(long_document_analysis.router, prefix=f"{settings.API_V1_STR}/long-document-analysis", tags=["long-document-analysis"])
+app.include_router(market_utilities.router, prefix=f"{settings.API_V1_STR}/market-utilities", tags=["market-utilities"])
 app.include_router(model_lab.router, prefix=f"{settings.API_V1_STR}/model-lab", tags=["model-lab"])
+app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
+app.include_router(staff_work_items.router, prefix=f"{settings.API_V1_STR}/staff-work-items", tags=["staff-work-items"])
 app.include_router(document_review.router, prefix=f"{settings.API_V1_STR}/document-review", tags=["document-review"])
 app.include_router(ocr.router, prefix=f"{settings.API_V1_STR}/ocr", tags=["ocr"])

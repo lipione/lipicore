@@ -19,11 +19,12 @@ LipiCore is a decision-support and staff-productivity system. It is not an auton
 
 | Area | Current capability | Safe wording |
 | --- | --- | --- |
-| Approved knowledge Q&A | Answers from approved policies, circulars, SOPs, manuals, product documents, and uploaded files. | Source-backed answers from approved bank knowledge where matching sources exist. |
+| Approved knowledge Q&A | Answers from approved policies, circulars, SOPs, manuals, product documents, and uploaded files. | Source-backed answers from approved bank knowledge where matching sources exist. Policy-like answers should show heading, clause, PDF page, and printed page where available. |
 | Staff chat | General banking and customer-service assistance with source-backed answers when available. | Staff assistant for routine lookup, drafting, summarization, and internal guidance. |
 | Document analysis | Upload supported files, summarize, ask questions, compare, and extract points. Heavy PDF/OCR/XLS review can be queued as a background long-document job. | Internal file analysis with citations where extracted text supports the answer; large files are processed asynchronously for staff review. |
 | OCR extraction | Upload supported PDFs, Office files, spreadsheets, CSV/TXT, and images to extract text without adding them to approved knowledge. | Transient text extraction for staff review; complex scans, tables, stamps, signatures, and handwriting still require caution. |
-| Governance workspaces | Compliance Workspace, Model Lab, and Evaluation Center are available as controlled staff workflows. | Review notes, benchmark evidence, and evaluation records without autonomous business decisions. |
+| Governance workspaces | Compliance Workspace, Model Lab, Evaluation Center, Knowledge Gaps, Policy Changes, Audit Evidence Packs, and workflow helpers are available as controlled staff workflows where enabled. | Review notes, benchmark evidence, and evaluation records without autonomous business decisions. |
+| Internal banking workspace | Employee Search, CEO's Message, Notifications & Alerts, Staff Inbox, and Forex/Time/Dates can be enabled per bank by Super Admin. | Day-to-day employee workflow tools; they do not replace bank approval chains or Treasury rate ownership. |
 | Drafting | Customer replies, internal memos, notices, scripts, FAQs, and escalation notes. | Staff-ready drafts for human review. |
 | Bilingual usage | English and Nepali staff usage. | Bilingual support for staff workflows, subject to evaluation on the bank's documents. |
 | Data control | Local deployment with private model runtime and self-hosted storage/vector database. | Bank data stays inside bank-controlled infrastructure. |
@@ -35,7 +36,8 @@ LipiCore is a decision-support and staff-productivity system. It is not an auton
 | --- | --- | --- |
 | Lending decisions | LipiCore is not currently positioned as a lending workflow product. It can answer approved policy questions where sources exist, but final lending work remains outside the active product scope. | A separately contracted loan workspace, policy citations, validation set, maker-checker workflow, and bank-approved governance model. |
 | Compliance officer replacement | LipiCore reduces manual compliance lookup, circular summarization, and drafting work. Compliance officers remain responsible for review, interpretation, and approval. | Compliance workspace, circular impact review, policy gap notes, checklist generator, review queue, audit export. |
-| Guaranteed regulatory correctness | LipiCore answers from approved bank knowledge and shows source citations. Regulatory correctness depends on the bank keeping approved documents current. | Effective dates, superseded documents, mandatory citation mode, citation verifier, compliance evaluation suite. |
+| Guaranteed regulatory correctness | LipiCore answers from approved bank knowledge and shows source citations. Regulatory correctness depends on the bank keeping approved documents current. | Effective dates, superseded documents, mandatory clause/page citation mode, citation verifier, compliance evaluation suite. |
+| Live forex feed | LipiCore can display bank-published exchange-rate batches, local banking time, UTC time, and business date. | Integration with an approved market-data provider, Treasury ownership, reconciliation, retention, and customer-facing publication controls. |
 | Scanned PDFs, tables, seals, signatures, handwriting | LipiCore supports OCR, table extraction, and queued long-document analysis. High-risk scanned or complex documents should be reviewed by staff, especially tables, stamps, handwritten notes, and signatures. | Full OCR benchmarks, layout-aware parsing, table extraction, confidence scores, low-confidence review queue, side-by-side source viewer. |
 | Production HA/SLA | LipiCore can be deployed as pilot, department, or whole-bank architecture. SLA depends on the selected infrastructure tier and tested setup. | HA Postgres, Qdrant cluster, Redis HA, backend/frontend replicas, GPU model replicas, monitoring, failover and restore drills. |
 | Better than GPT-4/GPT-5 | LipiCore is not positioned as a better general model. Its advantage is private deployment, bank-owned knowledge, source control, audit logs, and no external data exposure. | Side-by-side bank evaluation sets, citation accuracy metrics, latency tests, bilingual test sets, model benchmark records. |
@@ -53,8 +55,10 @@ LipiCore is a decision-support and staff-productivity system. It is not an auton
 
 - Secure internal AI for bank staff, powered by approved bank knowledge.
 - Source-backed answers from approved documents.
+- Policy answers with heading, clause, PDF page, printed page where available, and citation status.
 - Airgapped or bank-controlled deployment.
 - Staff-ready drafts for human review.
+- Optional internal workspaces for employee search, staff alerts, CEO messages, Staff Inbox, forex/time/date utilities, and banking workflow helpers.
 - Queued long-document analysis for large PDFs, Excel workbooks, and OCR-heavy files.
 - OCR extraction for supported documents and images without external AI providers.
 - Decision-support for customer care, branch, compliance, and operations teams.

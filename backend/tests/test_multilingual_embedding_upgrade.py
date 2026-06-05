@@ -135,6 +135,11 @@ def test_reindex_document_vectors_reuses_existing_chunks(monkeypatch):
                 chunk_index=0,
                 chunk_text="जोखिम व्यवस्थापन सम्बन्धी नीति",
                 page_number=1,
+                printed_page_number="३",
+                document_heading="परिच्छेद १: जोखिम व्यवस्थापन",
+                clause_number="दफा १.१",
+                citation_confidence=0.95,
+                citation_incomplete_reasons_json="[]",
                 qdrant_point_id="old-point",
                 document_status="approved",
                 version_state="approved",
@@ -154,5 +159,11 @@ def test_reindex_document_vectors_reuses_existing_chunks(monkeypatch):
     assert len(point.vector) == 1024
     assert point.payload["embedding_model"] == "BAAI/bge-m3"
     assert point.payload["embedding_dimension"] == 1024
+    assert point.payload["pdf_page_number"] == 1
+    assert point.payload["printed_page_number"] == "३"
+    assert point.payload["document_heading"] == "परिच्छेद १: जोखिम व्यवस्थापन"
+    assert point.payload["clause_number"] == "दफा १.१"
+    assert point.payload["citation_confidence"] == 0.95
+    assert point.payload["citation_incomplete_reasons"] == []
     assert chunks[0].qdrant_point_id != "old-point"
     assert chunks[0].document_status == "approved"

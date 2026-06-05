@@ -1,94 +1,102 @@
 # LipiCore Model Capacity Runbook
 
-Use this runbook before making any concurrency, latency, or model-quality claim to a bank.
+Use this runbook before making any concurrency, latency, model-quality, or staff-capacity claim to a bank.
 
 ## Evidence Required
 
-Every model recommendation must record:
+Every capacity recommendation must record:
 
-- Server CPU, RAM, disk, GPU model, driver, CUDA version.
-- Runtime: vLLM, SGLang, TensorRT-LLM, or other.
-- Model identifier, quantization, context length, max model length, tensor parallelism, max sequences, max batched tokens.
-- Prompt set name and version.
-- Concurrency, repeat count, max output tokens, temperature.
-- p50/p95 first-token latency.
-- p50/p95 total latency.
-- Error rate and timeout count.
-- Qualitative notes for English, Nepali, source refusal, and answer concision.
+- server CPU, RAM, disk, GPU model, VRAM, driver, and CUDA version;
+- runtime: vLLM, SGLang, TensorRT-LLM, or other;
+- model identifier, quantization, context length, tensor parallelism, max sequences, and max batched tokens;
+- endpoint route: fast, deep, vision, or experimental;
+- prompt set and version;
+- concurrency, repeat count, max output tokens, temperature;
+- p50/p95 first-token latency;
+- p50/p95 total latency;
+- error rate and timeout count;
+- Redis queue depth and model admission-control state;
+- qualitative notes for English, Nepali, source refusal, citation behavior, clause/page citation fidelity, and answer concision.
 
-## Current Remote Baseline
+## Route Capacity Rule
 
-The 2026-05-23 post-deployment remote inventory found:
+`LLM_A`, `LLM_B`, `LLM_C`, and `LLM_VISION` are logical routes. They are not independent capacity unless they point to independent model servers with separate GPU headroom.
 
-- Ubuntu 22.04.3, 16 CPU cores, 125 GiB RAM.
-- 2 x NVIDIA L40S, 46 GiB each.
-- `/` has about 26 GiB free and `/data` has about 584 GiB free.
-- Running endpoints:
-  - `lipicore-vllm-c` / LipiCore on GPU 1, debug port `8003`.
-  - Optional document-image route / LipiCore on GPU 0, debug port `8007` where enabled.
-- `lipicore-vllm-b` is not running on the current production profile.
-- GPU memory is already heavily occupied, around 38.9/46 GiB on GPU 0 and 40.7/46 GiB on GPU 1 at the last check. New model tests require a controlled swap window.
-- Keep the LipiCore text/analyst tier on GPU 1 unless explicitly testing analyst replacements.
+If multiple routes share one vLLM endpoint, size concurrency against that single endpoint. Do not add route limits together as if they were separate GPUs.
 
-Benchmark artifacts are under `reports/model-lab/`.
-
-## Routing Defaults
-
-- Current production: `ask_knowledge`, short staff drafts, customer-care responses, `approved_knowledge`, compliance review, document comparison, OCR extraction, and queued long-document analysis route through the configured text endpoints as needed. OCR text extraction itself uses open-source Tesseract plus direct document parsers by default.
-- Future capacity profile: short staff chat may move back to a fast tier after GPU memory and quality tests prove it is stable.
-- Document-image review routes can use the dedicated LipiCore endpoint where enabled. Do not make strong scanned-document claims until bank-specific OCR/PDF/XLS benchmarks are recorded.
-
-## Vision Endpoint
-
-`docker-compose.yml` includes `vllm-vision` behind the `vision` profile so it is not started accidentally on constrained two-GPU pilots. On the current production server, `lipicore-vllm-vision` is already running. For a new server, start it only after reserving a GPU:
+## Inventory Commands
 
 ```bash
-docker compose --profile vision up -d vllm-vision
+nvidia-smi
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep 'lipicore-vllm'
+curl -s http://127.0.0.1:8002/v1/models || true
+curl -s http://127.0.0.1:8003/v1/models || true
+curl -s http://127.0.0.1:8007/v1/models || true
+docker compose logs --tail=100 backend
+docker compose logs --tail=100 redis
 ```
 
-Default settings target the configured LipiCore image route on GPU 0, port `8007`, 8192-token context, max two concurrent sequences, and persisted model cache under `/data/models/hf_cache`. On a two-L40S host, run this instead of the small fast endpoint unless GPU memory tests prove both can safely coexist.
+Authenticated operators should also check:
+
+```text
+GET /api/chat/models/status
+```
+
+## Benchmark Lanes
+
+| Lane | Workload | Priority |
+| --- | --- | --- |
+| Fast | short staff chat, customer care, branch support, drafting | first-token latency, concise output |
+| Analyst | policy Q&A, compliance review, comparison | source discipline, low error rate |
+| Long-document | queued PDF/OCR/Excel analysis | job duration, selected excerpt quality, worker/model queue behavior |
+| Vision | image-heavy document notes and review | visual usefulness, cost, latency, clear limits |
+| Evaluation | RAG gate and seed packs | source recall, not-found behavior, citation terms |
+| Internal workspace | employee search, notifications, CEO messages, rates, staff inbox | API/database latency; not a model-quality benchmark unless the workflow calls a model |
 
 ## Model Swap Procedure
 
-1. Confirm which current model endpoint may be paused.
-2. Capture `docker inspect`, `nvidia-smi`, and `/v1/models` output before any change.
+1. Confirm which endpoint may be paused or replaced.
+2. Save `docker inspect`, `nvidia-smi`, `/v1/models`, and current `.env`/compose override evidence.
 3. Start one candidate model only.
-4. Run smoke benchmark at concurrency 1.
+4. Run a concurrency-1 smoke benchmark.
 5. Run staff benchmark at concurrency 5.
-6. If stable, run 20/40/75 user load tiers with real RAG prompts.
-7. Save JSON, CSV, and operator notes under `reports/model-lab/<date>-<model>-<scenario>/`.
-8. Restore the previous endpoint and rerun smoke tests if the candidate fails.
+6. If stable, run 20/40/75 user tiers or the agreed target tier.
+7. Run the bank-specific RAG evaluation gate.
+8. Confirm policy-like answers still return required heading, clause, PDF page, and printed page when available, or `citation_incomplete` when required citation fields are missing.
+9. Save JSON, CSV, and operator notes under `reports/model-lab/<date>-<model>-<scenario>/`.
+10. Restore the previous endpoint and rerun smoke tests if the candidate fails.
 
 ## Release Gates
 
-A model is not bank-demo-ready if any of these are true:
+A model route is not bank-demo-ready if any of these are true:
 
-- Error rate is above 2 percent.
-- p95 first-token latency exceeds the tier target.
-- It fails not-found/refusal cases.
-- Nepali output is corrupted or mixed-script for staff-facing use.
-- It cannot cite or follow source-backed instructions reliably.
-- It requires GPU memory that leaves no operational headroom.
+- error rate is above 2 percent;
+- p95 first-token latency exceeds the tier target;
+- source-required refusal or not-found cases fail;
+- Nepali output is corrupted or mixed-script when Nepali is requested;
+- citation behavior regresses, including heading, clause, PDF page, and citation-incomplete handling;
+- GPU memory leaves no operational headroom;
+- long-document tests were synthetic only and did not use the queued workflow.
 
 ## Tier Targets
 
 | Tier | Workload | p95 first token | p95 total | Notes |
 | --- | --- | ---: | ---: | --- |
-| Fast | short staff chat | under 2.5s | under 8s | Customer care and branch support |
-| Analyst | policy and compliance | under 5s | under 20s | Citation quality matters more than raw speed |
-| Long context | queued large files and comparisons | under 10s | case-specific | Must use queued jobs, selective excerpt packing, and staff review |
-| Batch | eval and summaries | queueable | queueable | Must not starve interactive staff chat |
+| Fast | short staff chat | under 2.5s | under 8s | Customer care and branch support. |
+| Analyst | policy and compliance | under 5s | under 20s | Citation quality matters more than raw speed. |
+| Long context | queued large files and comparisons | under 10s | case-specific | Use queued jobs and staff review. |
+| Batch | eval and summaries | queueable | queueable | Must not starve interactive chat. |
+
+Targets are planning thresholds. Contractual SLA language requires the deployment tier evidence in [sla-tier-matrix.md](sla-tier-matrix.md).
 
 ## Long-Document Test Scenarios
 
-Before claiming a model is good for large-file work, benchmark it through the queued workflow, not only with a synthetic long prompt.
+Before claiming a model is good for large-file work, test through `/api/long-document-analysis`:
 
-Minimum scenarios:
-
-- Clean 100-page policy PDF.
-- Scanned PDF near the configured `OCR_MAX_PAGES` cap.
-- Excel workbook with multiple sheets, formulas, merged ranges, and named tables.
-- Bilingual English/Nepali circular.
-- Unsupported-question prompt where the selected excerpts do not contain the answer.
+- clean 100-page policy PDF;
+- scanned PDF near the configured `OCR_MAX_PAGES` cap;
+- Excel workbook with multiple sheets, formulas, merged ranges, and named tables;
+- bilingual English/Nepali circular;
+- unsupported-question prompt where selected excerpts do not contain the answer.
 
 Record selected excerpt size, total extracted characters, p50/p95 job duration, failure rate, source usefulness, and staff correction notes.

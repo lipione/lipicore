@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-04
+
+- Added policy citation fidelity for policy, procedure, circular, directive, SOP, law, act, and compliance answers:
+  - citation metadata now includes document heading, clause number, PDF page, printed page when available, citation confidence, and incomplete reasons;
+  - source payloads expose both `page_number` and `pdf_page_number` for compatibility;
+  - policy-like answers missing required heading, clause, or PDF page return a `citation_incomplete` review response instead of final policy advice;
+  - document-level citation backfill can update existing approved chunks and scoped Qdrant payloads.
+- Extended RAG evaluation cases with expected document headings, clause numbers, and printed page numbers.
+- Updated chat and evaluation UI to render heading, clause, PDF page, printed page, source status, citation completeness, and citation verification.
+- Added feature-flagged internal banking workspace modules:
+  - Employee Search;
+  - Staff Inbox;
+  - Notifications & Alerts;
+  - CEO's Message;
+  - Forex, Time & Dates with bank-published exchange-rate batches;
+  - Knowledge Gaps, Policy Changes, Audit Evidence Packs, and banking workflow helpers.
+- Added Super Admin per-bank feature controls; all new workspace feature flags default off.
+- Updated engineering, operations, readiness, sizing, pilot, demo, and bank-facing proposal documentation for the new feature set.
+
 ## 2026-05-25
 
 - Replaced the visible Support Desk, Loan Support, and Document Review product pages with a focused OCR Extraction page.

@@ -30,6 +30,8 @@ def test_route_policy_sends_high_risk_workflows_to_deep_model():
 def test_resolve_model_profile_accepts_registry_key_and_alias():
     assert resolve_model_profile("fast").key == "fast"
     assert resolve_model_profile("LipiFast").key == "fast"
+    assert resolve_model_profile("gemma").key == "fast"
+    assert resolve_model_profile("Gemma-4").key == "deep"
     assert resolve_model_profile("analyst").key == "deep"
     assert resolve_model_profile("LipiCore").key == "deep"
     assert resolve_model_profile("legacy-vendor-image-route").key == "fast"

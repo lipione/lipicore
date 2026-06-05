@@ -4,7 +4,7 @@ from sqlmodel import Session, SQLModel, select
 from app.core.security import create_access_token, get_password_hash
 from app.models.bank import Bank
 from app.models.user import User
-from app.services import rag_service
+from app.services import rag_evaluation_service, rag_service
 from app.services.rag_evaluation_service import evaluate_rag_cases
 from test_main import client, engine
 
@@ -125,6 +125,74 @@ def test_rag_evaluation_scores_expected_section_labels():
         expected_page_numbers=[4],
         expected_chunk_indexes=[],
     ) == 1.0
+
+
+def test_rag_evaluation_scores_clause_heading_and_printed_page_locations():
+    sources = [
+        {
+            "document_title": "Credit Policy 2024",
+            "document_heading": "Chapter 5: SME Lending",
+            "clause_number": "Clause 5.1(a)",
+            "page_number": 42,
+            "pdf_page_number": 42,
+            "printed_page_number": "38",
+        }
+    ]
+
+    score = rag_evaluation_service._score_location_recall(
+        sources=sources,
+        expected_section_labels=[],
+        expected_page_numbers=[42],
+        expected_chunk_indexes=[],
+        expected_document_headings=["Chapter 5: SME Lending"],
+        expected_clause_numbers=["Clause 5.1(a)"],
+        expected_printed_page_numbers=["38"],
+    )
+
+    assert score == 1.0
+
+
+def test_evaluate_rag_cases_counts_structured_citation_metadata_as_citation_terms():
+    def fake_generator(*_args, **_kwargs):
+        return (
+            "The secured SME DSR limit is governed by the SME lending clause.",
+            [
+                {
+                    "document_title": "Credit Policy 2024",
+                    "document_heading": "Chapter 5: SME Lending",
+                    "clause_number": "Clause 5.1(a)",
+                    "page_number": 42,
+                    "pdf_page_number": 42,
+                    "printed_page_number": "38",
+                    "citation_verification": "supported",
+                }
+            ],
+        )
+
+    cases = [
+        {
+            "id": "policy-clause-page",
+            "question": "What is the current secured SME DSR limit?",
+            "required_citation_terms": [
+                "Credit Policy 2024",
+                "Chapter 5: SME Lending",
+                "Clause 5.1(a)",
+                "printed page 38",
+            ],
+        }
+    ]
+
+    with Session(engine) as session:
+        result = evaluate_rag_cases(
+            cases=cases,
+            db=session,
+            bank_id=1,
+            user_role="staff_user",
+            answer_generator=fake_generator,
+        )
+
+    assert result["cases"][0]["citation_term_recall"] == 1
+    assert result["cases"][0]["passed"] is True
 
 
 def test_evaluate_rag_cases_fails_when_citation_points_to_wrong_document():

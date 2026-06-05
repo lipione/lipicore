@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import api from '../api/axios';
 import SourceMetadataStrip from '../components/trust/SourceMetadataStrip';
+import { hasCitationValue, sourcePdfPage } from '../utils/sourceCitation';
 
 const SAMPLE_CASES = [
   {
@@ -29,6 +30,16 @@ const SAMPLE_CASES = [
 
 function pct(value) {
   return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
+function evaluationSourceLocation(source) {
+  const pdfPage = sourcePdfPage(source);
+  return [
+    source.document_heading || source.section_label || source.section_number || 'Heading unknown',
+    source.clause_number,
+    hasCitationValue(pdfPage) ? `PDF p.${pdfPage}` : null,
+    hasCitationValue(source.printed_page_number) ? `printed p.${source.printed_page_number}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 function ScoreCard({ label, value, icon, tone = 'slate' }) {
@@ -118,10 +129,7 @@ function CaseResult({ item }) {
                     </span>
                   ))}
                 </div>
-                <p className="text-slate-500 mt-1">
-                  {source.section_label || source.section_number || 'Section unknown'}
-                  {source.page_number ? ` · p.${source.page_number}` : ''}
-                </p>
+                <p className="text-slate-500 mt-1">{evaluationSourceLocation(source)}</p>
                 <div className="mt-2">
                   <SourceMetadataStrip source={source} />
                 </div>

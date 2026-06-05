@@ -17,6 +17,7 @@ from ..schemas.document import DocumentResponse
 from .deps import get_current_user, get_current_bank_admin
 from ..services.ingestion_queue import enqueue_document_ingestion
 from ..services.audit_service import log_audit_event
+from ..services.policy_citation_backfill_service import backfill_document_citation_metadata
 from fastapi.responses import StreamingResponse
 import asyncio
 import json
@@ -28,6 +29,7 @@ ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.csv', '.jpg', '.jpeg', '.png', 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # Match nginx client_max_body_size.
 DOCUMENT_GOVERNANCE_ROLES = {"super_admin", "bank_admin", "compliance_user", "compliance_officer", "document_reviewer"}
 DOCUMENT_VIEWER_ROLES = DOCUMENT_GOVERNANCE_ROLES | {"auditor", "data_auditor"}
+CITATION_BACKFILL_ROLES = {"super_admin", "bank_admin", "compliance_officer", "document_reviewer"}
 
 
 class DocumentGovernanceUpdate(BaseModel):
@@ -415,6 +417,31 @@ def update_document_lifecycle(
     return doc
 
 
+@router.post("/{document_id}/citation-backfill")
+def backfill_document_citations(
+    *,
+    db: Session = Depends(get_session),
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    if current_user.role not in CITATION_BACKFILL_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized to backfill citation metadata")
+    document = db.get(Document, document_id)
+    if not document or (current_user.role != "super_admin" and document.bank_id != current_user.bank_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    result = backfill_document_citation_metadata(db, document_id=document_id, bank_id=document.bank_id)
+    log_audit_event(
+        db=db,
+        action="backfill_citation_metadata",
+        resource_type="document",
+        resource_id=str(document.id),
+        bank_id=document.bank_id,
+        user_id=current_user.id,
+        metadata=result,
+    )
+    return result
+
+
 @router.get("/{document_id}/source")
 def read_document_source(
     *,
@@ -458,6 +485,12 @@ def read_document_source(
                 "id": chunk.id,
                 "chunk_index": chunk.chunk_index,
                 "page_number": chunk.page_number,
+                "pdf_page_number": chunk.page_number,
+                "printed_page_number": chunk.printed_page_number,
+                "document_heading": chunk.document_heading,
+                "clause_number": chunk.clause_number,
+                "citation_confidence": chunk.citation_confidence,
+                "citation_incomplete_reasons_json": chunk.citation_incomplete_reasons_json,
                 "text": chunk.chunk_text,
                 "extraction_confidence": chunk.extraction_confidence,
                 "ocr_confidence": chunk.ocr_confidence,

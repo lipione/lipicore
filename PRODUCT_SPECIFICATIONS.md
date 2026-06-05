@@ -2,16 +2,16 @@
 
 **Product:** Airgapped white-label bank AI appliance
 **Delivery:** Bank-controlled infrastructure plus enterprise software
-**Version:** 1.3
-**Last updated:** 2026-05-23
+**Version:** 1.4
+**Last updated:** 2026-06-04
 
 ---
 
 ## Executive Summary
 
-BankAi is a private GPT-style assistant for bank staff. It runs on bank-owned or bank-controlled infrastructure, uses local vLLM model servers, and answers from approved internal documents with source evidence, citation metadata, audit logging, and role-aware access controls.
+BankAi is a private GPT-style assistant for bank staff. It runs on bank-owned or bank-controlled infrastructure, uses local vLLM model servers, and answers from approved internal documents with source evidence, clause/page citation metadata, audit logging, and role-aware access controls.
 
-The current product is strongest as an internal knowledge, document analysis, customer-care support, compliance research, and drafting tool. It should not be sold as an autonomous decisioning system, a regulator-approved compliance engine, or a guaranteed substitute for human review.
+The current product is strongest as an internal knowledge, document analysis, customer-care support, compliance research, drafting, and day-to-day employee workspace tool. It should not be sold as an autonomous decisioning system, a regulator-approved compliance engine, or a guaranteed substitute for human review.
 
 ## Core Capabilities
 
@@ -20,7 +20,8 @@ The current product is strongest as an internal knowledge, document analysis, cu
 - Retrieval-augmented generation over uploaded and approved documents.
 - Hybrid retrieval using Qdrant vector search plus PostgreSQL full-text search.
 - Reranking before context construction.
-- Source passage viewer with document, page, section/chunk, snippet, passage, and relevance metadata.
+- Source passage viewer with document, document heading, clause number, PDF page, printed page when available, section metadata, snippet, passage, and relevance metadata.
+- Policy citation fidelity for policy, procedure, circular, directive, SOP, law, act, and compliance answers; missing required heading, clause, or PDF page metadata returns a citation-incomplete review response.
 - Citation verification metadata displayed in chat.
 - Document lifecycle states: `draft`, `approved`, `superseded`, `archived`, and `disabled`.
 - Chunk-level permission metadata copied into PostgreSQL and Qdrant.
@@ -32,6 +33,7 @@ The current product is strongest as an internal knowledge, document analysis, cu
 - OCR Extraction workspace for transient text extraction from supported documents and images without indexing.
 - Model Lab for model inventory, route visibility, and benchmark evidence.
 - RAG Evaluation Center for bank-specific test cases.
+- Optional internal banking workspace modules controlled by Super Admin feature flags: Employee Search, Staff Inbox, Notifications & Alerts, CEO's Message, Forex/Time/Dates, Knowledge Gaps, Policy Changes, Audit Evidence Packs, Complaint Workspace, Circular Impact Analyzer, Branch Response Builder, KYC Case Prep, and Checklist Validator.
 - Audit logs, RBAC, bank partitioning, and white-label branding.
 - Health-gated upgrade script for remote deployments.
 
@@ -48,6 +50,10 @@ The current product is strongest as an internal knowledge, document analysis, cu
 | Large document analysis | Good but queue-based | Heavy OCR, large PDFs, and detailed Excel workbooks run as background jobs with stored results. |
 | Multi-document comparison | Good but bounded | Long, broad answers need queued analysis, multi-step retrieval, or map-reduce improvements. |
 | Compliance review notes | Controlled support | Can summarize circular impact and review notes. Officers remain responsible for interpretation and sign-off. |
+| Employee search | Strong when enabled | Searches bank-scoped staff profiles by department, branch, role, expertise, and escalation area. |
+| Notifications and CEO messages | Strong when enabled | Supports audience targeting, read state, acknowledgement, expiry, and audit records. |
+| Forex/time/date utilities | Good when enabled | Shows local banking time, business date, UTC time, and bank-published exchange-rate batches; Treasury/admin ownership required. |
+| Staff Inbox and workflow helpers | Controlled support | Supports staff-reviewable work items, cases, drafts, and checklists. Does not replace approval workflows. |
 | Credit/risk decisioning | Not ready | Requires validated workflow controls, integrations, supervisor review, and a bank-approved governance model. |
 | Regulatory reporting automation | Not ready | Needs structured workflows, source validation, and formal sign-off. |
 
@@ -86,14 +92,15 @@ BankAi uses a defensive RAG pipeline rather than sending entire files to the mod
 1. Files are uploaded and stored in MinIO.
 2. Metadata is saved in PostgreSQL.
 3. Redis/RQ queues ingestion work for extraction, OCR/table parsing, adaptive chunking, embedding, and indexing.
-4. Chunks are stored with lifecycle and permission metadata.
+4. Chunks are stored with lifecycle, permission, source-risk, and policy citation metadata.
 5. Retrieval combines Qdrant semantic search and PostgreSQL full-text search.
    Semantic search uses `BAAI/bge-m3` multilingual embeddings with 1024-dimensional vectors so English questions can retrieve relevant Nepali policy chunks more reliably than the previous English-centric MiniLM baseline.
 6. Candidates are reranked, filtered by access rules and relevance threshold, then passed to the model.
-7. Answers include source metadata and citation verification results.
-8. Admins/auditors can run RAG evaluation cases against expected sources and required citation terms.
+7. Answers include source metadata, heading/clause/page citation metadata, and citation verification results.
+8. Policy-like answers missing required heading, clause, or PDF page metadata return `citation_incomplete` instead of final policy advice.
+9. Admins/auditors can run RAG evaluation cases against expected sources, expected headings/clauses/pages, and required citation terms.
 
-This is stronger than a basic vector-only chatbot because it adds document governance, role filters, adaptive chunk profiles, reranking, citation evidence, queued long-document analysis, and measurable evaluation. It is still not perfect: citation verification is lexical overlap, not formal entailment, and broad multi-document synthesis still needs stronger map-reduce and evaluation coverage.
+This is stronger than a basic vector-only chatbot because it adds document governance, role filters, adaptive chunk profiles, reranking, citation evidence, policy citation completeness checks, queued long-document analysis, and measurable evaluation. It is still not perfect: citation verification is a lexical precheck plus configurable semantic matching (with optional NLI path when enabled), and broad multi-document synthesis still needs stronger map-reduce and evaluation coverage.
 
 ## Measured Test Baseline
 
@@ -107,6 +114,8 @@ These are test-server results, not contractual SLAs.
 | Production deployment | `/data/bankai` deployed at commit `615d299`; migrations applied through `012` |
 | Production route checks | Backend and frontend health checks passed; protected Model Lab and long-document endpoints return `401` unauthenticated |
 | OCR extraction API | TXT extraction returns text without creating document records; unsupported files are rejected |
+| Policy citation fidelity | Current local branch verifies extraction, ingestion, retrieval, citation backfill, evaluation, streaming persistence, and UI trust labels for heading/clause/page metadata |
+| Internal workspace controls | Current local branch verifies feature flags, employee directory, market utilities, notifications, CEO messages, staff work items, and banking workflow services |
 | 25 active staff token smoke | 442 requests, 0 failures, p95 stream around 17s |
 | 50 active staff API smoke | 752 requests, 0 failures |
 | 100 active staff API-only smoke | 2,357 requests, 0 failures, p95 around 57ms |
@@ -132,6 +141,9 @@ Single-host Docker Compose is acceptable for pilots and controlled internal tria
 - Bank-controlled identity lifecycle and role assignment.
 - Approved document governance before staff-wide release.
 - Regular RAG evaluations using the bank's real policies and expected answers.
+- Policy citation checks for heading, clause, PDF page, printed page where available, and citation-incomplete behavior.
+- Super Admin feature-control review before enabling optional internal workspaces.
+- Named bank owners for employee directory data, notifications, CEO messages, Staff Inbox, and exchange-rate updates where enabled.
 - Representative long-document tests using clean PDFs, scanned PDFs, Excel workbooks, and bilingual documents before making large-file claims.
 - Backup and restore drills for PostgreSQL, MinIO, and Qdrant.
 - Firewall isolation for PostgreSQL, Qdrant, Redis, MinIO, backend debug ports, and model debug ports.
@@ -155,6 +167,8 @@ Do not use these claims in sales material until independently validated for the 
 - 500+ simultaneous LLM users.
 - Fixed ROI percentages.
 - Perfect hallucination prevention.
+- Fully automatic policy correctness from citation metadata alone.
+- Live market-rate feed unless an approved provider integration is separately implemented.
 - Full understanding of scanned, handwritten, chart-heavy, signed, sealed, or image-heavy documents.
 - Instant large-file analysis under unlimited concurrent OCR/PDF/XLS load.
 

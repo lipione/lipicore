@@ -49,7 +49,7 @@ Create request:
 {
   "document_id": 123,
   "analysis_type": "long_document_analysis",
-  "prompt": "Summarize the policy, extract key dates, exceptions, risks, and staff action points. Cite page or section labels where possible."
+  "prompt": "Summarize the policy, extract key dates, exceptions, risks, and staff action points. Cite document heading, clause, PDF page, printed page, section, sheet, or cell labels where possible."
 }
 ```
 
@@ -122,4 +122,4 @@ Run at least one representative file from each bank category:
 - Circular or SOP with tables.
 - Nepali or bilingual document if the bank expects bilingual use.
 
-Record whether the answer cited useful pages/sheets, whether low-confidence extraction was visible, and whether the result required staff correction.
+Record whether the answer cited useful headings, clauses, pages, printed pages, sheets, or cells, whether low-confidence extraction was visible, and whether the result required staff correction.

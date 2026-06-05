@@ -3,13 +3,19 @@ import { PERMISSIONS, getCurrentUserRole, hasPermission } from '../../config/rol
 import RoleBadge from '../lipicore/RoleBadge';
 import { getCurrentUser } from '../../config/rolePermissions';
 import { useBranding } from '../../contexts/BrandingContext';
+import { useFeatureFlags } from '../../contexts/FeatureFlagContext';
 
 const NAV_SECTIONS = [
   {
     label: null,
     items: [
       { icon: 'chat',           label: 'Chat Assistant',      to: '/chat',               permission: PERMISSIONS.USE_CHAT },
-      { icon: 'forum',          label: 'Staff Messenger',     to: '/messenger',          permission: PERMISSIONS.USE_MESSENGER },
+      { icon: 'badge',          label: 'Employee Directory',  to: '/employees',          permission: PERMISSIONS.VIEW_EMPLOYEE_DIRECTORY, featureKey: 'employee_directory' },
+      { icon: 'currency_exchange', label: 'Market & Time',    to: '/market-time',        permission: PERMISSIONS.VIEW_MARKET_TIME, featureKey: 'market_time' },
+      { icon: 'notifications_active', label: 'Notifications', to: '/notifications',      permission: PERMISSIONS.VIEW_NOTIFICATIONS, featureKey: 'notifications' },
+      { icon: 'campaign',       label: "CEO's Message",       to: '/ceo-messages',       permission: PERMISSIONS.VIEW_CEO_MESSAGES, featureKey: 'ceo_messages' },
+      { icon: 'inbox',          label: 'Daily Inbox',          to: '/inbox',              permission: PERMISSIONS.VIEW_STAFF_INBOX, featureKey: 'staff_inbox' },
+      { icon: 'forum',          label: 'Staff Messenger',     to: '/messenger',          permission: PERMISSIONS.USE_MESSENGER, featureKey: 'staff_inbox' },
       { icon: 'account_tree',   label: 'Process Navigator',   to: '/process-navigator',  permission: PERMISSIONS.VIEW_PROCESS_NAVIGATOR },
       { icon: 'document_scanner', label: 'OCR Extraction',     to: '/ocr',                permission: PERMISSIONS.USE_CHAT_FILE_UPLOAD },
     ],
@@ -18,8 +24,21 @@ const NAV_SECTIONS = [
     label: 'KNOWLEDGE',
     items: [
       { icon: 'folder_managed', label: 'Document Library',    to: '/documents',          permission: PERMISSIONS.VIEW_DOCUMENTS },
+      { icon: 'psychology_alt', label: 'Knowledge Gaps',      to: '/knowledge-gaps',     permission: PERMISSIONS.VIEW_KNOWLEDGE_GAPS, featureKey: 'knowledge_gaps' },
+      { icon: 'rule_settings',  label: 'Policy Changes',      to: '/policy-changes',     permission: PERMISSIONS.VIEW_POLICY_CHANGES, featureKey: 'policy_changes' },
       { icon: 'gpp_maybe',      label: 'Compliance Monitor',  to: '/regulatory',         permission: PERMISSIONS.VIEW_REGULATORY_LIBRARY },
       { icon: 'rule',           label: 'Compliance Workspace', to: '/compliance-workspace', permission: PERMISSIONS.MANAGE_COMPLIANCE },
+    ],
+  },
+  {
+    label: 'BANK WORKFLOWS',
+    items: [
+      { icon: 'support_agent',   label: 'Complaints',          to: '/complaints',         permission: PERMISSIONS.VIEW_COMPLAINT_WORKSPACE, featureKey: 'complaint_workspace' },
+      { icon: 'travel_explore',  label: 'Circular Impact',     to: '/circular-impact',    permission: PERMISSIONS.VIEW_CIRCULAR_IMPACT, featureKey: 'circular_impact_analyzer' },
+      { icon: 'account_balance', label: 'Branch Responses',    to: '/branch-responses',   permission: PERMISSIONS.VIEW_BRANCH_RESPONSES, featureKey: 'branch_response_builder' },
+      { icon: 'manage_search',   label: 'KYC Prep',            to: '/kyc-case-prep',      permission: PERMISSIONS.VIEW_KYC_CASE_PREP, featureKey: 'kyc_case_prep' },
+      { icon: 'checklist',       label: 'Checklist Validator', to: '/checklists',         permission: PERMISSIONS.VIEW_CHECKLIST_WORKSPACE, featureKey: 'checklist_validator' },
+      { icon: 'fact_check',      label: 'Audit Evidence',      to: '/audit-evidence',     permission: PERMISSIONS.VIEW_AUDIT_EVIDENCE, featureKey: 'audit_evidence_pack' },
     ],
   },
   {
@@ -37,6 +56,7 @@ const NAV_SECTIONS = [
     items: [
       { icon: 'policy',         label: 'Audit Logs',          to: '/audit',              permission: PERMISSIONS.VIEW_AUDIT_LOGS },
       { icon: 'manage_accounts', label: 'Users & Roles',      to: '/admin/users',        permission: PERMISSIONS.MANAGE_USERS },
+      { icon: 'toggle_on',      label: 'Feature Controls',    to: '/admin/features',     permission: PERMISSIONS.MANAGE_BANK_FEATURES },
       { icon: 'settings',       label: 'Settings',            to: '/admin/settings',     permission: PERMISSIONS.VIEW_SYSTEM_SETTINGS },
     ],
   },
@@ -68,6 +88,7 @@ export default function Sidebar({ onUpload, open = false, onClose }) {
   const userRole = getCurrentUserRole();
   const user = getCurrentUser();
   const branding = useBranding();
+  const { isFeatureEnabled } = useFeatureFlags();
 
   return (
     <aside
@@ -122,7 +143,8 @@ export default function Sidebar({ onUpload, open = false, onClose }) {
       <nav className="flex-1 overflow-y-auto space-y-4 pr-1">
         {NAV_SECTIONS.map((section) => {
           const visibleItems = section.items.filter(
-            (item) => !item.permission || hasPermission(userRole, item.permission)
+            (item) => (!item.permission || hasPermission(userRole, item.permission))
+              && (!item.featureKey || isFeatureEnabled(item.featureKey))
           );
           if (visibleItems.length === 0) return null;
           return (

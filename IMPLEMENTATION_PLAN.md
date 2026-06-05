@@ -1,8 +1,10 @@
 # BankAi Enterprise Intelligence — Implementation Plan
 
 **Date:** 2026-04-28  
-**Status:** Active  
+**Status:** Superseded by the current canonical docs and dated plans under `docs/`
 **Scope:** Full UI/UX redesign + backend bug fixes + feature completions
+
+> This file records the April 2026 implementation plan. For the current product architecture, deployment, policy citation fidelity, and internal banking workspace behavior, use `docs/README.md`, `docs/architecture.md`, `docs/deployment.md`, `docs/security.md`, and `docs/internal-banking-workspace.md`.
 
 ---
 
