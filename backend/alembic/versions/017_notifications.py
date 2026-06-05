@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column("source_type", sa.String(), nullable=True),
         sa.Column("source_id", sa.String(), nullable=True),
         sa.Column("action_url", sa.String(), nullable=True),
-        sa.Column("requires_acknowledgement", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("requires_acknowledgement", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("read_at", sa.DateTime(), nullable=True),
         sa.Column("acknowledged_at", sa.DateTime(), nullable=True),
         sa.Column("expires_at", sa.DateTime(), nullable=True),
