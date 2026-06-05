@@ -602,7 +602,7 @@ def test_global_rag_sources_include_freshness_warnings_and_confidence(monkeypatc
             SimpleNamespace(
                 payload={
                     "document_id": 30,
-                    "text": "Section 9 says expired circulars require compliance review before use.",
+                    "text": "Section 9 says review-due circulars require compliance review before use.",
                     "page_number": 3,
                     "document_heading": "Chapter 9: Circular Governance",
                     "clause_number": "Section 9",
@@ -618,8 +618,8 @@ def test_global_rag_sources_include_freshness_warnings_and_confidence(monkeypatc
         ]
 
     def fake_call_llm(prompt):
-        assert "expired circulars require compliance review" in prompt
-        return "Expired circulars require compliance review before use."
+        assert "review-due circulars require compliance review" in prompt
+        return "Review-due circulars require compliance review before use."
 
     monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
     monkeypatch.setattr(rag_service, "search_points", fake_search_points)
@@ -646,32 +646,320 @@ def test_global_rag_sources_include_freshness_warnings_and_confidence(monkeypatc
             id=30,
             bank_id=bank.id,
             uploaded_by=user.id,
-            title="Expired Circular",
-            file_name="expired-circular.pdf",
+            title="Review Due Circular",
+            file_name="review-due-circular.pdf",
             file_type="pdf",
-            file_path="expired-circular.pdf",
+            file_path="review-due-circular.pdf",
             document_type="circular",
             status="approved",
             version_state="approved",
             document_scope="global_knowledge",
-            effective_to=datetime.utcnow() - timedelta(days=1),
+            effective_to=datetime.utcnow() + timedelta(days=30),
             review_due_at=datetime.utcnow() - timedelta(days=1),
         )
         session.add(global_doc)
         session.commit()
 
         _answer, sources = rag_service.generate_rag_response(
-            "Can staff use the expired circular?",
+            "Can staff use the review due circular?",
             bank.id,
             "staff_user",
             session,
         )
 
-    assert sources[0]["source_warnings"] == ["expired_source", "review_due"]
+    assert sources[0]["source_warnings"] == ["review_due"]
     assert sources[0]["extraction_confidence"] == 0.72
     assert sources[0]["ocr_confidence"] == 0.61
     assert sources[0]["table_confidence"] == 0.88
     assert sources[0]["page_bbox_json"] == "{\"x\": 1, \"y\": 2, \"width\": 3, \"height\": 4}"
+
+
+def test_policy_rag_filters_expired_global_policy_sources(monkeypatch):
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 31,
+                    "text": "Section 2.1 Old KYC policy says expired documents can be accepted.",
+                    "page_number": 4,
+                    "document_heading": "Chapter 2: Old KYC",
+                    "clause_number": "Section 2.1",
+                    "citation_incomplete_reasons": [],
+                    "chunk_index": 1,
+                },
+                score=0.97,
+            ),
+            SimpleNamespace(
+                payload={
+                    "document_id": 32,
+                    "text": "Section 3.1 Current KYC policy requires valid identity documents.",
+                    "page_number": 7,
+                    "document_heading": "Chapter 3: Current KYC",
+                    "clause_number": "Section 3.1",
+                    "citation_incomplete_reasons": [],
+                    "chunk_index": 2,
+                },
+                score=0.89,
+            ),
+        ]
+
+    def fake_call_llm(prompt):
+        assert "Current KYC policy requires valid identity documents" in prompt
+        assert "Old KYC policy says expired documents can be accepted" not in prompt
+        return "Current KYC policy requires valid identity documents."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Current Policy Bank", code="CURPOL01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="current-policy@test.local", password_hash="x", name="Current Policy User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        session.add_all([
+            Document(
+                id=31,
+                bank_id=bank.id,
+                uploaded_by=user.id,
+                title="Old KYC Policy",
+                file_name="old-kyc.pdf",
+                file_type="pdf",
+                file_path="old-kyc.pdf",
+                document_type="policy",
+                status="approved",
+                version_state="approved",
+                document_scope="global_knowledge",
+                effective_to=datetime.utcnow() - timedelta(days=1),
+            ),
+            Document(
+                id=32,
+                bank_id=bank.id,
+                uploaded_by=user.id,
+                title="Current KYC Policy",
+                file_name="current-kyc.pdf",
+                file_type="pdf",
+                file_path="current-kyc.pdf",
+                document_type="policy",
+                status="approved",
+                version_state="approved",
+                document_scope="global_knowledge",
+                effective_from=datetime.utcnow() - timedelta(days=10),
+            ),
+        ])
+        session.commit()
+
+        answer, sources = rag_service.generate_rag_response(
+            "What KYC documents can staff accept?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert "valid identity documents" in answer
+    assert [source["document_title"] for source in sources] == ["Current KYC Policy"]
+
+
+def test_policy_rag_reranks_exception_clause_above_general_policy_rule():
+    results = [
+        SimpleNamespace(
+            payload={
+                "document_id": 40,
+                "text": "Clause 4.1 Account opening fees must be collected from customers.",
+                "retrieval_source": "vector",
+            },
+            score=0.95,
+        ),
+        SimpleNamespace(
+            payload={
+                "document_id": 41,
+                "text": "Clause 4.2 Exception: account opening fees may be waived with branch manager approval.",
+                "retrieval_source": "vector",
+            },
+            score=0.73,
+        ),
+    ]
+
+    reranked = rag_service._rerank_results("Can we waive account opening fees?", results)
+
+    assert reranked[0].payload["document_id"] == 41
+
+
+def test_policy_search_adds_bundle_keyword_queries_for_account_opening(monkeypatch):
+    keyword_queries = []
+
+    def fake_search_points(*_args, **_kwargs):
+        return []
+
+    def fake_keyword_search(*, query, **_kwargs):
+        keyword_queries.append(query)
+        return []
+
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "_keyword_search", fake_keyword_search)
+
+    rag_service._search(
+        [0.1, 0.2, 0.3],
+        bank_id=1,
+        active_document_ids=None,
+        session_id=None,
+        query="What documents are needed to open an account?",
+        db=SimpleNamespace(),
+    )
+
+    assert keyword_queries[0] == "What documents are needed to open an account?"
+    assert any("customer identification" in query or "kyc" in query.lower() for query in keyword_queries[1:])
+
+
+def test_policy_rag_returns_conflict_guardrail_before_llm(monkeypatch):
+    llm_called = False
+
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 42,
+                    "text": "Clause 2.1 Fee waiver is not allowed for dormant accounts.",
+                    "page_number": 5,
+                    "document_heading": "Chapter 2: Fees",
+                    "clause_number": "Clause 2.1",
+                    "citation_incomplete_reasons": [],
+                    "chunk_index": 1,
+                },
+                score=0.95,
+            ),
+            SimpleNamespace(
+                payload={
+                    "document_id": 43,
+                    "text": "Clause 2.2 Fee waiver may be approved for dormant accounts by Operations Head.",
+                    "page_number": 6,
+                    "document_heading": "Chapter 2: Fees",
+                    "clause_number": "Clause 2.2",
+                    "citation_incomplete_reasons": [],
+                    "chunk_index": 2,
+                },
+                score=0.94,
+            ),
+        ]
+
+    def fake_call_llm(_prompt):
+        nonlocal llm_called
+        llm_called = True
+        return "Should not be called."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Conflict Bank", code="CONFLICT01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="conflict@test.local", password_hash="x", name="Conflict User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        for doc_id, title in ((42, "Fee Restriction Policy"), (43, "Fee Waiver Exception Policy")):
+            session.add(Document(
+                id=doc_id,
+                bank_id=bank.id,
+                uploaded_by=user.id,
+                title=title,
+                file_name=f"{title.lower().replace(' ', '-')}.pdf",
+                file_type="pdf",
+                file_path=f"{title.lower().replace(' ', '-')}.pdf",
+                document_type="policy",
+                status="approved",
+                version_state="approved",
+                document_scope="global_knowledge",
+            ))
+        session.commit()
+
+        answer, sources = rag_service.generate_rag_response(
+            "Can we waive the dormant account fee?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert answer.startswith("I found conflicting approved sources")
+    assert {source["document_title"] for source in sources} == {"Fee Restriction Policy", "Fee Waiver Exception Policy"}
+    assert llm_called is False
+
+
+def test_policy_rag_requests_scope_when_answer_depends_on_threshold(monkeypatch):
+    llm_called = False
+
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 44,
+                    "text": "Clause 6.1 For transactions above NPR 1,000,000, branch manager approval is required. For transactions below NPR 1,000,000, teller approval is sufficient.",
+                    "page_number": 9,
+                    "document_heading": "Chapter 6: Transaction Approval",
+                    "clause_number": "Clause 6.1",
+                    "citation_incomplete_reasons": [],
+                    "chunk_index": 1,
+                },
+                score=0.96,
+            )
+        ]
+
+    def fake_call_llm(_prompt):
+        nonlocal llm_called
+        llm_called = True
+        return "Should not be called."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Scope Bank", code="SCOPE01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="scope@test.local", password_hash="x", name="Scope User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        session.add(Document(
+            id=44,
+            bank_id=bank.id,
+            uploaded_by=user.id,
+            title="Transaction Approval Policy",
+            file_name="transaction-approval.pdf",
+            file_type="pdf",
+            file_path="transaction-approval.pdf",
+            document_type="policy",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        ))
+        session.commit()
+
+        answer, sources = rag_service.generate_rag_response(
+            "Who approves this transaction?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert answer.startswith("I need one policy scope detail before answering")
+    assert sources[0]["document_title"] == "Transaction Approval Policy"
+    assert llm_called is False
 
 
 def test_chat_request_accepts_approved_knowledge_mode():

@@ -104,6 +104,21 @@ def test_build_indexable_chunks_adds_policy_citation_metadata():
     assert chunks[0]["citation_incomplete_reasons"] == []
 
 
+def test_build_indexable_chunks_adds_policy_aware_metadata():
+    chunks = build_indexable_chunks(
+        [
+            {
+                "page_number": 12,
+                "text": "Clause 4.2 Exception: account opening fees may be waived with branch manager approval.",
+            }
+        ],
+        document_type="policy",
+    )
+
+    assert chunks[0]["policy_exception"] is True
+    assert "fee_waiver" in chunks[0]["policy_bundle_terms"]
+
+
 def test_process_document_persists_policy_citation_metadata_to_db_and_qdrant(monkeypatch):
     from sqlmodel import SQLModel, Session, select
 

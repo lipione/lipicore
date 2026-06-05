@@ -13,6 +13,7 @@ from ..models.document import Document, DocumentChunk
 from ..core.config import settings
 from .embedding_service import generate_embeddings
 from .ocr_service import OcrResult, convert_pdf_pages_to_images, ocr_image_file, ocr_pil_image_to_text
+from .policy_aware_rag import policy_payload_metadata
 from .policy_citation_metadata import build_citation_metadata
 from .qdrant_service import upload_points
 from .source_risk_service import classify_source_risk
@@ -593,6 +594,7 @@ def build_indexable_chunks(
                 chunk_text=chunk_text,
                 document_type=document_type,
             )
+            policy_metadata = policy_payload_metadata({"text": chunk_text})
             indexable_chunks.append({
                 "text": chunk_text,
                 "page_number": page.get("page_number"),
@@ -611,6 +613,9 @@ def build_indexable_chunks(
                 "table_metadata": page.get("table_metadata"),
                 "source_risk_level": risk["risk_level"],
                 "source_risk_flags": risk["flags"],
+                "policy_exception": policy_metadata["policy_exception"],
+                "policy_bundle_terms": policy_metadata["policy_bundle_terms"],
+                "policy_scope_hints": policy_metadata["policy_scope_hints"],
             })
     return indexable_chunks
 
@@ -826,6 +831,9 @@ def process_document(document_id: int):
                         "page_bbox_json": chunk.get("page_bbox_json"),
                         "source_risk_level": chunk.get("source_risk_level", "low"),
                         "source_risk_flags": chunk.get("source_risk_flags", []),
+                        "policy_exception": chunk.get("policy_exception", False),
+                        "policy_bundle_terms": chunk.get("policy_bundle_terms", []),
+                        "policy_scope_hints": chunk.get("policy_scope_hints", []),
                         "department": doc.department,
                         "access_level": doc.access_level or 0,
                         "document_status": doc.status,

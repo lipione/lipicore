@@ -11,6 +11,13 @@ from .qdrant_service import search_points
 from .llm_service import call_llm, async_call_llm
 from .citation_verifier import attach_source_verification, verify_answer_against_sources
 from .feature_flag_service import is_feature_enabled
+from .policy_aware_rag import (
+    document_is_current,
+    policy_bundle_queries,
+    policy_guardrail_response,
+    policy_payload_metadata,
+    policy_rerank_boost,
+)
 from .policy_citation_metadata import is_policy_document_type
 from .source_risk_service import classify_source_risk
 from ..models.document import Document, DocumentChunk
@@ -218,7 +225,7 @@ def _policy_citation_gate_blocks(question: str | None, sources: list[dict]) -> b
 
 
 def _build_source(doc: Document, score: float, result=None) -> dict:
-    payload = getattr(result, "payload", {}) or {}
+    payload = policy_payload_metadata(getattr(result, "payload", {}) or {})
     passage = payload.get("text") or ""
     section_label = payload.get("section_label") or payload.get("section_number") or _extract_section_label(payload.get("text"))
     warnings = _source_warnings(doc)
@@ -263,6 +270,9 @@ def _build_source(doc: Document, score: float, result=None) -> dict:
         "page_bbox_json": payload.get("page_bbox_json"),
         "source_risk_level": payload.get("source_risk_level", "low"),
         "source_risk_flags": payload.get("source_risk_flags", []),
+        "policy_exception": payload.get("policy_exception", False),
+        "policy_bundle_terms": payload.get("policy_bundle_terms", []),
+        "policy_scope_hints": payload.get("policy_scope_hints", []),
     }
 
 
@@ -286,6 +296,8 @@ def _document_visible_to_user(doc: Document, session_id, user_role, user_departm
     if doc.document_scope == "session_upload":
         return doc.session_id == session_id and doc.status in SESSION_RETRIEVAL_STATUSES
     if doc.status not in GLOBAL_RETRIEVAL_STATUSES or doc.version_state not in GLOBAL_RETRIEVAL_VERSION_STATES:
+        return False
+    if not document_is_current(doc):
         return False
     if user_role == "staff_user":
         if doc.access_level and doc.access_level > 0:
@@ -440,6 +452,8 @@ def _document_matches_scope(doc: Document, active_document_ids, session_id, docu
         or doc.version_state not in GLOBAL_RETRIEVAL_VERSION_STATES
     ):
         return False
+    if document_scope == "global_knowledge" and not document_is_current(doc):
+        return False
     if document_scope == "session_upload" and doc.status not in SESSION_RETRIEVAL_STATUSES:
         return False
     return True
@@ -477,8 +491,7 @@ def _python_keyword_search(
             risk_flags = risk["flags"]
         else:
             source_risk_level = chunk.source_risk_level or "low"
-        candidates.append(SimpleNamespace(
-            payload={
+        payload = policy_payload_metadata({
                 "bank_id": bank_id,
                 "document_id": chunk.document_id,
                 "chunk_index": chunk.chunk_index,
@@ -505,7 +518,9 @@ def _python_keyword_search(
                 "document_scope": chunk.document_scope,
                 "session_id": chunk.session_id,
                 "retrieval_source": "keyword",
-            },
+            })
+        candidates.append(SimpleNamespace(
+            payload=payload,
             score=score,
         ))
 
@@ -534,8 +549,11 @@ def _postgres_keyword_search(
     if document_scope == "global_knowledge":
         where_clauses.append("d.status IN :document_statuses")
         where_clauses.append("d.version_state IN :version_states")
+        where_clauses.append("(d.effective_from IS NULL OR d.effective_from <= :as_of)")
+        where_clauses.append("(d.effective_to IS NULL OR d.effective_to >= :as_of)")
         params["document_statuses"] = GLOBAL_RETRIEVAL_STATUSES
         params["version_states"] = GLOBAL_RETRIEVAL_VERSION_STATES
+        params["as_of"] = datetime.utcnow()
     elif document_scope == "session_upload":
         where_clauses.append("d.status IN :document_statuses")
         params["document_statuses"] = SESSION_RETRIEVAL_STATUSES
@@ -599,8 +617,7 @@ def _postgres_keyword_search(
         score = max(keyword_score, fts_score * KEYWORD_SCORE_WEIGHT)
         if score <= 0:
             continue
-        results.append(SimpleNamespace(
-            payload={
+        payload = policy_payload_metadata({
                 "bank_id": bank_id,
                 "document_id": row["document_id"],
                 "chunk_index": row["chunk_index"],
@@ -627,7 +644,9 @@ def _postgres_keyword_search(
                 "document_scope": row["document_scope"],
                 "session_id": row["session_id"],
                 "retrieval_source": "postgres_fts",
-            },
+            })
+        results.append(SimpleNamespace(
+            payload=payload,
             score=score,
         ))
 
@@ -675,8 +694,9 @@ def _keyword_search(
 
 
 def _normalize_vector_result(result):
+    payload = policy_payload_metadata(result.payload or {})
     return SimpleNamespace(
-        payload={**(result.payload or {}), "retrieval_source": "vector"},
+        payload={**payload, "retrieval_source": "vector"},
         score=min(float(result.score or 0) * VECTOR_SCORE_WEIGHT, 0.99),
     )
 
@@ -702,15 +722,20 @@ def _merge_results(*result_sets):
 def _rerank_results(query: str, results: list) -> list:
     reranked = []
     for result in results:
-        text_value = (result.payload or {}).get("text", "")
+        payload = policy_payload_metadata(result.payload or {})
+        text_value = payload.get("text", "")
         keyword = _keyword_score(query, text_value)
-        source_priority = 1.0 if (result.payload or {}).get("retrieval_source") in ("postgres_fts", "keyword") else 0.5
+        source_priority = 1.0 if payload.get("retrieval_source") in ("postgres_fts", "keyword") else 0.5
+        policy_boost = policy_rerank_boost(query, payload)
         score = (
             (float(result.score or 0) * RERANK_VECTOR_WEIGHT)
             + (keyword * RERANK_KEYWORD_WEIGHT)
             + (source_priority * RERANK_SOURCE_PRIORITY_WEIGHT)
+            + policy_boost
         )
-        reranked.append(SimpleNamespace(payload=result.payload, score=min(max(score, float(result.score or 0)), 0.99)))
+        floor_boost = policy_boost if payload.get("policy_exception") else 0.0
+        boosted_floor = float(result.score or 0) + floor_boost
+        reranked.append(SimpleNamespace(payload=payload, score=min(max(score, boosted_floor), 0.99)))
     return sorted(reranked, key=lambda result: result.score, reverse=True)
 
 
@@ -757,13 +782,16 @@ def _search(query_vector, bank_id, active_document_ids, session_id, query: str, 
             global_results = [r for r in global_results if r.payload and r.payload.get("document_id") not in seen_ids]
         except Exception:
             pass
-        global_keyword_results = _keyword_search(
-            db=db,
-            query=query,
-            bank_id=bank_id,
-            limit=global_limit or MAX_CANDIDATE_RESULTS,
-            document_scope="global_knowledge",
-        )
+        global_keyword_result_sets = []
+        for keyword_query in [query, *policy_bundle_queries(query)]:
+            global_keyword_result_sets.append(_keyword_search(
+                db=db,
+                query=keyword_query,
+                bank_id=bank_id,
+                limit=global_limit or MAX_CANDIDATE_RESULTS,
+                document_scope="global_knowledge",
+            ))
+        global_keyword_results = _merge_results(*global_keyword_result_sets)
         seen_ids = {r.payload.get("document_id") for r in merged_session_results if r.payload}
         global_keyword_results = [r for r in global_keyword_results if r.payload and r.payload.get("document_id") not in seen_ids]
 
@@ -802,6 +830,9 @@ def generate_rag_response(
     sources = _build_sources(high_confidence, db)
     if _policy_citation_gate_blocks(question, sources):
         return POLICY_CITATION_INCOMPLETE_RESPONSE, _policy_citation_blocking_sources(sources)
+    guardrail_response = policy_guardrail_response(question, sources)
+    if guardrail_response:
+        return guardrail_response, sources
     answer = call_llm(prompt)
     verification = verify_answer_against_sources(
         answer=answer,
@@ -846,6 +877,9 @@ async def async_generate_rag_response(
     sources = _build_sources(high_confidence, db)
     if _policy_citation_gate_blocks(question, sources):
         return POLICY_CITATION_INCOMPLETE_RESPONSE, _policy_citation_blocking_sources(sources)
+    guardrail_response = policy_guardrail_response(question, sources)
+    if guardrail_response:
+        return guardrail_response, sources
     answer = await async_call_llm(prompt, user_id=user_id, role=user_role, model_name=model_name)
     verification = verify_answer_against_sources(
         answer=answer,
