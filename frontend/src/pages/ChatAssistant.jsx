@@ -5,6 +5,7 @@ import FilePreviewCard from '../components/chat/FilePreviewCard';
 import AnswerTrustBadge from '../components/chat/AnswerTrustBadge';
 import ChatModeSelector, { CHAT_MODES, modeByValue } from '../components/chat/ChatModeSelector';
 import SourceEvidencePanel from '../components/chat/SourceEvidencePanel';
+import VoicePromptButton from '../components/chat/VoicePromptButton';
 import NotFoundState from '../components/trust/NotFoundState';
 import useDropZone from '../hooks/useDropZone';
 import { useBranding } from '../contexts/BrandingContext';
@@ -255,6 +256,7 @@ export default function ChatAssistant() {
   const [abortCtrl, setAbortCtrl]             = useState(null);
   const [selectedLLM, setSelectedLLM]         = useState(null);
   const [selectedMode, setSelectedMode]       = useState('ask_knowledge');
+  const [voiceLanguage, setVoiceLanguage]     = useState(language === 'ne' || language === 'ne-NP' ? 'ne-NP' : 'en');
 
   const endRef      = useRef(null);
   const bodyRef     = useRef(null);
@@ -282,6 +284,10 @@ export default function ChatAssistant() {
       setSelectedMode(allowedModes[0]);
     }
   }, [allowedModes, selectedMode]);
+
+  useEffect(() => {
+    setVoiceLanguage(language === 'ne' || language === 'ne-NP' ? 'ne-NP' : 'en');
+  }, [language]);
 
   const scrollBottom = useCallback(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -710,6 +716,21 @@ export default function ChatAssistant() {
 
   const stopGeneration = () => abortCtrl?.abort();
 
+  const insertVoiceTranscript = useCallback((text) => {
+    const cleanText = (text || '').trim();
+    if (!cleanText) return;
+    setInput(current => {
+      const needsSpace = current.length > 0 && !/\s$/.test(current);
+      return `${current}${needsSpace ? ' ' : ''}${cleanText}`;
+    });
+    window.requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
+    });
+  }, []);
+
   const regenerate = async (idx) => {
     const prevUser = [...messages].slice(0, idx).reverse().find(m => m.role === 'user');
     if (!prevUser) return;
@@ -906,7 +927,7 @@ export default function ChatAssistant() {
                 placeholder={activeDocuments.length > 0
                   ? `Ask about ${activeDocuments.map(d => d.name || d.file_name).slice(0, 2).join(', ')} in English or नेपाली...`
                   : `${selectedModeOption.prompt || `Ask ${branding.product_name}...`}`}
-                className="w-full pl-12 pr-20 sm:pr-28 py-4 bg-slate-100 border-none focus:ring-2 focus:ring-secondary/20 rounded font-body-sm text-on-surface placeholder:text-slate-400 resize-none min-h-[56px] max-h-[160px] leading-relaxed outline-none"
+                className="w-full pl-12 pr-[7.75rem] sm:pr-[13rem] py-4 bg-slate-100 border-none focus:ring-2 focus:ring-secondary/20 rounded font-body-sm text-on-surface placeholder:text-slate-400 resize-none min-h-[56px] max-h-[160px] leading-relaxed outline-none"
                 rows={1}
                 disabled={isLoading && !abortCtrl}
               />
@@ -917,10 +938,18 @@ export default function ChatAssistant() {
                     <span className="material-symbols-outlined text-[16px]">stop_circle</span> STOP
                   </button>
                 ) : (
-                  <button onClick={handleSend} disabled={!input.trim()}
-                    className="bg-primary text-white p-2.5 rounded shadow-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-40">
-                    <span className="material-symbols-outlined text-[20px]">send</span>
-                  </button>
+                  <>
+                    <VoicePromptButton
+                      language={voiceLanguage}
+                      onLanguageChange={setVoiceLanguage}
+                      onTranscript={insertVoiceTranscript}
+                      disabled={!sessionId}
+                    />
+                    <button onClick={handleSend} disabled={!input.trim()}
+                      className="bg-primary text-white p-2.5 rounded shadow-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-40">
+                      <span className="material-symbols-outlined text-[20px]">send</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>

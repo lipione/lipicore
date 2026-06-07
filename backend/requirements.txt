@@ -30,3 +30,4 @@ limits
 reportlab
 redis
 rq
+faster-whisper

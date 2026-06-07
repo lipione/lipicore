@@ -40,6 +40,7 @@ from .api import (
     support_cases,
     tasks,
     users,
+    voice,
 )
 
 
@@ -124,3 +125,4 @@ app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifica
 app.include_router(staff_work_items.router, prefix=f"{settings.API_V1_STR}/staff-work-items", tags=["staff-work-items"])
 app.include_router(document_review.router, prefix=f"{settings.API_V1_STR}/document-review", tags=["document-review"])
 app.include_router(ocr.router, prefix=f"{settings.API_V1_STR}/ocr", tags=["ocr"])
+app.include_router(voice.router, prefix=f"{settings.API_V1_STR}/voice", tags=["voice"])

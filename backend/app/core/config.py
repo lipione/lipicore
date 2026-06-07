@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     OCR_VISION_REVIEW_MAX_PAGES: int = int(os.getenv("OCR_VISION_REVIEW_MAX_PAGES", "3"))
     OCR_HANDWRITING_FALLBACK_ENABLED: bool = os.getenv("OCR_HANDWRITING_FALLBACK_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     OCR_HANDWRITING_FALLBACK_CONFIDENCE: float = float(os.getenv("OCR_HANDWRITING_FALLBACK_CONFIDENCE", "0.6"))
+    STT_PROVIDER: str = os.getenv("STT_PROVIDER", "local_whisper")
+    STT_API_BASE: str = os.getenv("STT_API_BASE", "http://localhost:8010")
+    STT_API_KEY: str = os.getenv("STT_API_KEY", "no-key")
+    STT_MODEL: str = os.getenv("STT_MODEL", "small")
+    STT_DEVICE: str = os.getenv("STT_DEVICE", "cpu")
+    STT_COMPUTE_TYPE: str = os.getenv("STT_COMPUTE_TYPE", "int8")
+    STT_MODEL_CACHE_DIR: str | None = os.getenv("STT_MODEL_CACHE_DIR", "/data/models/hf_cache/faster-whisper")
+    STT_MAX_UPLOAD_BYTES: int = int(os.getenv("STT_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+    STT_TIMEOUT_SECONDS: float = float(os.getenv("STT_TIMEOUT_SECONDS", "120"))
+    STT_BROWSER_FALLBACK_ENABLED: bool = os.getenv("STT_BROWSER_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_uploads"))
     CHAT_UPLOAD_DIR: str = os.getenv("CHAT_UPLOAD_DIR", os.path.join(tempfile.gettempdir(), "lipicore_chat_uploads"))
