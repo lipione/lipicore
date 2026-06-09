@@ -237,6 +237,8 @@ def _build_source(doc: Document, score: float, result=None) -> dict:
         "document_title":  doc.title or doc.file_name,
         "title":           doc.title or doc.file_name,
         "file_name":       doc.file_name,
+        "file_type":       doc.file_type,
+        "source_file_url": f"/api/documents/{doc.id}/file",
         "document_type":   doc.document_type,
         "department":      doc.department,
         "page_number":     payload.get("page_number"),

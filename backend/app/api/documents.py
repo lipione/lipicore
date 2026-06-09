@@ -1,9 +1,11 @@
 from typing import Any, List, Optional
 from pathlib import Path
+import mimetypes
 import os
 import uuid
 import shutil
 from datetime import datetime
+from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
@@ -18,7 +20,7 @@ from .deps import get_current_user, get_current_bank_admin
 from ..services.ingestion_queue import enqueue_document_ingestion
 from ..services.audit_service import log_audit_event
 from ..services.policy_citation_backfill_service import backfill_document_citation_metadata
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 import asyncio
 import json
 
@@ -468,6 +470,8 @@ def read_document_source(
             "id": doc.id,
             "title": doc.title,
             "file_name": doc.file_name,
+            "file_type": doc.file_type,
+            "source_file_url": f"/api/documents/{doc.id}/file",
             "document_type": doc.document_type,
             "department": doc.department,
             "access_level": doc.access_level,
@@ -506,6 +510,32 @@ def read_document_source(
             for chunk in chunks
         ],
     }
+
+
+@router.get("/{document_id}/file")
+def read_document_file(
+    *,
+    db: Session = Depends(get_session),
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    doc = _get_bank_document_or_404(db, document_id, current_user)
+    if not _document_source_visible_to_user(doc, current_user):
+        raise HTTPException(status_code=404, detail="Document not found")
+    if not doc.file_path or not os.path.isfile(doc.file_path):
+        raise HTTPException(status_code=404, detail="Document file not found")
+
+    media_type, _ = mimetypes.guess_type(doc.file_name or doc.file_path)
+    response = FileResponse(
+        path=doc.file_path,
+        media_type=media_type or "application/octet-stream",
+        filename=doc.file_name or Path(doc.file_path).name,
+    )
+    if (doc.file_type or "").lower() == "pdf":
+        filename = quote(doc.file_name or Path(doc.file_path).name)
+        response.headers["Content-Disposition"] = f"inline; filename*=UTF-8''{filename}"
+    return response
+
 
 @router.delete("/{document_id}")
 def delete_document(

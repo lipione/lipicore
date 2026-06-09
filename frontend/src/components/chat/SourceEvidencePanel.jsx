@@ -1,21 +1,14 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import api from '../../api/axios';
-import { confidenceLabel, hasCitationValue, sourcePdfPage } from '../../utils/sourceCitation';
+import {
+  confidenceLabel,
+  formatSourceCitation,
+  hasCitationValue,
+  sourceLocationLabel,
+  sourcePdfPage,
+  sourceTitle,
+} from '../../utils/sourceCitation';
 import SourceMetadataStrip from '../trust/SourceMetadataStrip';
-
-function sourceLocation(source) {
-  const parts = [];
-  const pdfPage = sourcePdfPage(source);
-  if (source.document_heading) parts.push(source.document_heading);
-  if (source.clause_number) parts.push(source.clause_number);
-  if (!source.document_heading && (source.section_label || source.section_number)) {
-    parts.push(source.section_label || source.section_number);
-  }
-  if (hasCitationValue(pdfPage)) parts.push(`PDF p.${pdfPage}`);
-  if (hasCitationValue(source.printed_page_number)) parts.push(`printed p.${source.printed_page_number}`);
-  if (!parts.length && Number.isInteger(source.chunk_index)) parts.push(`chunk ${source.chunk_index + 1}`);
-  return parts.join(' · ');
-}
 
 const VERIFICATION_STYLES = {
   supported: {
@@ -144,6 +137,38 @@ function sourcePath(source) {
   return `/documents/${source.document_id}/source${query ? `?${query}` : ''}`;
 }
 
+function sourceFileUrl(source) {
+  if (!source?.document_id) return null;
+  const baseUrl = source.source_file_url || `/api/documents/${source.document_id}/file`;
+  const pdfPage = sourcePdfPage(source);
+  const looksLikePdf = String(source.file_type || source.file_name || '').toLowerCase().includes('pdf');
+  if (looksLikePdf && hasCitationValue(pdfPage)) {
+    return `${baseUrl}#page=${pdfPage}`;
+  }
+  return baseUrl;
+}
+
+function sourceFileActionLabel(source) {
+  const type = String(source?.file_type || source?.file_name || '').toLowerCase();
+  if (type.includes('pdf')) return 'Open PDF';
+  return 'Open file';
+}
+
+function copyTextToClipboard(text) {
+  if (!text) return Promise.resolve();
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return Promise.resolve();
+}
+
 function SourceViewerModal({ viewer, onClose }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -199,6 +224,8 @@ function SourceViewerModal({ viewer, onClose }) {
   if (!viewer.source) return null;
   const chunks = viewer.data?.chunks || [];
   const document = viewer.data?.document || viewer.source;
+  const citationText = formatSourceCitation(viewer.source);
+  const fileUrl = sourceFileUrl(viewer.source);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 px-4">
@@ -213,23 +240,48 @@ function SourceViewerModal({ viewer, onClose }) {
       >
         <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-200 flex-shrink-0">
           <div className="min-w-0">
-            <p id={titleId} className="text-sm font-bold text-slate-900 truncate">{document.title || document.document_title || 'Source'}</p>
+            <p id={titleId} className="text-sm font-bold text-slate-900 truncate">{document.title || document.document_title || sourceTitle(viewer.source)}</p>
             <p id={descriptionId} className="text-xs text-slate-500 truncate">
-              {[document.file_name, sourceLocation(viewer.source)].filter(Boolean).join(' · ')}
+              {[document.file_name, sourceLocationLabel(viewer.source)].filter(Boolean).join(' · ')}
             </p>
           </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={closeModal}
-            className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-            aria-label="Close source viewer"
-            title="Close"
-          >
-            <span className="material-symbols-outlined text-[20px]">close</span>
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {fileUrl && (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-secondary hover:text-secondary"
+              >
+                <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                {sourceFileActionLabel(viewer.source)}
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => copyTextToClipboard(citationText)}
+              className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-secondary hover:text-secondary"
+            >
+              <span className="material-symbols-outlined text-[14px]">content_copy</span>
+              Copy citation
+            </button>
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={closeModal}
+              className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              aria-label="Close source viewer"
+              title="Close"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
         </div>
         <div className="p-5 overflow-y-auto space-y-3">
+          <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-label-caps text-[10px] uppercase tracking-wider text-slate-500">Citation line</p>
+            <p className="mt-1 text-xs leading-5 text-slate-700 break-words">{citationText}</p>
+          </div>
           {viewer.loading && (
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span className="w-4 h-4 border-2 border-slate-200 border-t-secondary rounded-full animate-spin" />
@@ -277,6 +329,7 @@ function SourceViewerModal({ viewer, onClose }) {
 }
 
 function SourceCard({ source, index, onOpenSource }) {
+  const [copied, setCopied] = useState(false);
   const passage = source.passage || source.snippet || '';
   const preview = source.snippet || passage.slice(0, 180);
   const canExpand = passage && passage.length > preview.length;
@@ -284,6 +337,15 @@ function SourceCard({ source, index, onOpenSource }) {
   const extractionConfidence = confidenceLabel(source.extraction_confidence);
   const ocrConfidence = confidenceLabel(source.ocr_confidence);
   const tableConfidence = confidenceLabel(source.table_confidence);
+  const citationText = formatSourceCitation(source);
+  const locationLabel = sourceLocationLabel(source);
+  const fileUrl = sourceFileUrl(source);
+
+  const copyCitation = async () => {
+    await copyTextToClipboard(citationText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
 
   return (
     <article key={`${source.document_id || source.title || 'source'}-${index}`} className="bg-white border border-slate-200 rounded p-3">
@@ -291,11 +353,11 @@ function SourceCard({ source, index, onOpenSource }) {
         <span className="material-symbols-outlined text-secondary text-[18px] mt-0.5">description</span>
         <div className="min-w-0 flex-1">
           <h3 className="text-xs font-semibold text-on-surface truncate">
-            {source.document_title || source.title || 'Source'}
+            {sourceTitle(source)}
           </h3>
-          {sourceLocation(source) && (
+          {locationLabel && (
             <p className="text-[10px] text-slate-500 font-label-caps uppercase tracking-wider mt-0.5">
-              {sourceLocation(source)}
+              {locationLabel}
             </p>
           )}
         </div>
@@ -306,15 +368,42 @@ function SourceCard({ source, index, onOpenSource }) {
       <div className="mt-2">
         <SourceMetadataStrip source={source} />
       </div>
+      <div className="mt-3 rounded border border-slate-200 bg-slate-50 px-2.5 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-label-caps text-[10px] uppercase tracking-wider text-slate-500">Citation</p>
+          <button
+            type="button"
+            onClick={copyCitation}
+            className="inline-flex items-center gap-1 rounded text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-secondary"
+          >
+            <span className="material-symbols-outlined text-[13px]">{copied ? 'check' : 'content_copy'}</span>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] leading-5 text-slate-700 break-words">{citationText}</p>
+      </div>
       {source.document_id && (
-        <button
-          type="button"
-          onClick={() => onOpenSource(source)}
-          className="mt-3 inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-secondary hover:text-secondary"
-        >
-          <span className="material-symbols-outlined text-[14px]">plagiarism</span>
-          Open source
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenSource(source)}
+            className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-secondary hover:text-secondary"
+          >
+            <span className="material-symbols-outlined text-[14px]">plagiarism</span>
+            Open passage
+          </button>
+          {fileUrl && (
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-secondary hover:text-secondary"
+            >
+              <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+              {sourceFileActionLabel(source)}
+            </a>
+          )}
+        </div>
       )}
       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-slate-500">
         <div className="rounded bg-slate-50 border border-slate-100 px-2 py-1">

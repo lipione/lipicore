@@ -216,7 +216,7 @@ def test_backfill_returns_zero_for_missing_or_cross_bank_document():
         SQLModel.metadata.drop_all(engine)
 
 
-def test_bank_admin_endpoint_backfills_citations_and_source_viewer_returns_metadata(monkeypatch):
+def test_bank_admin_endpoint_backfills_citations_and_source_viewer_returns_metadata(monkeypatch, tmp_path):
     updates = []
     point_updates = []
 
@@ -242,6 +242,9 @@ def test_bank_admin_endpoint_backfills_citations_and_source_viewer_returns_metad
 
     SQLModel.metadata.create_all(engine)
     try:
+        policy_pdf = tmp_path / "credit.pdf"
+        policy_pdf.write_bytes(b"%PDF-1.4\n% LipiCore test policy\n")
+
         with Session(engine) as session:
             bank = Bank(name="Backfill API Bank", code="BAPI01")
             session.add(bank)
@@ -294,7 +297,7 @@ def test_bank_admin_endpoint_backfills_citations_and_source_viewer_returns_metad
                 title="Credit Policy",
                 file_name="credit.pdf",
                 file_type="pdf",
-                file_path="credit.pdf",
+                file_path=str(policy_pdf),
                 document_type="policy",
                 status="approved",
                 version_state="approved",
@@ -367,5 +370,14 @@ def test_bank_admin_endpoint_backfills_citations_and_source_viewer_returns_metad
         assert chunk["document_heading"] == "Chapter 5: SME Lending"
         assert chunk["clause_number"] == "Clause 5.1(a)"
         assert chunk["citation_incomplete_reasons_json"] == "[]"
+
+        file_response = client.get(
+            f"/api/documents/{document_id}/file",
+            headers={"Authorization": f"Bearer {staff_token}"},
+        )
+        assert file_response.status_code == 200
+        assert file_response.content.startswith(b"%PDF-1.4")
+        assert file_response.headers["content-type"].startswith("application/pdf")
+        assert file_response.headers["content-disposition"].startswith("inline;")
     finally:
         SQLModel.metadata.drop_all(engine)
