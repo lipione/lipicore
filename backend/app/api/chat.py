@@ -313,10 +313,13 @@ def derive_answer_metadata(
         "trust_label",
         "no_sources" if source_count == 0 else "source_unverified",
     )
+    source_values = sources or []
+    has_complete_cited_source = any(source.get("citation_complete") is True for source in source_values)
+    has_incomplete_cited_source = any(source.get("citation_complete") is False for source in source_values)
     citation_incomplete = (
         answer == POLICY_CITATION_INCOMPLETE_RESPONSE
         or trust_label == "citation_incomplete"
-        or any(source.get("citation_complete") is False for source in (sources or []))
+        or (has_incomplete_cited_source and not has_complete_cited_source)
     )
 
     if citation_incomplete:

@@ -73,6 +73,28 @@ def test_answer_metadata_marks_ask_knowledge_with_sources_as_official():
     assert metadata["requires_sources"] is False
 
 
+def test_answer_metadata_allows_official_answer_with_complete_source_and_incomplete_secondary_source():
+    metadata = derive_answer_metadata(
+        mode="ask_knowledge",
+        sources=[
+            {"document_id": 1, "document_title": "Banking Offence Act", "citation_complete": True},
+            {
+                "document_id": 2,
+                "document_title": "OCR Text Copy",
+                "citation_complete": False,
+                "citation_incomplete_reasons": ["missing_clause_number"],
+            },
+        ],
+        active_document_ids=[],
+        answer="Banking offence means offences stipulated under Chapter-2.",
+        citation_verification={"status": "supported", "trust_label": "source_supported"},
+    )
+
+    assert metadata["answer_type"] == "official_source_backed"
+    assert metadata["trust_label"] == "source_supported"
+    assert metadata["source_count"] == 2
+
+
 def test_answer_metadata_marks_uploaded_file_answers():
     metadata = derive_answer_metadata(
         mode="analyze_file",
