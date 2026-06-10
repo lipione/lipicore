@@ -340,6 +340,13 @@ def resolve_model_profile(model_name: str | None = None) -> ModelProfile:
     return registry[key]
 
 
+def model_fallback_keys(model_name: str | None = None) -> list[str]:
+    profile = resolve_model_profile(model_name)
+    if profile.key == "deep":
+        return ["deep", "fast"]
+    return [profile.key]
+
+
 async def model_status() -> dict:
     if await _redis_client() is not None:
         try:

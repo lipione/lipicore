@@ -1,4 +1,9 @@
-from app.services.llm_gateway import model_registry_snapshot, resolve_model_profile, select_model_key_for_workflow
+from app.services.llm_gateway import (
+    model_fallback_keys,
+    model_registry_snapshot,
+    resolve_model_profile,
+    select_model_key_for_workflow,
+)
 
 
 def test_model_registry_snapshot_exposes_capabilities():
@@ -36,3 +41,10 @@ def test_resolve_model_profile_accepts_registry_key_and_alias():
     assert resolve_model_profile("LipiCore").key == "deep"
     assert resolve_model_profile("legacy-vendor-image-route").key == "fast"
     assert resolve_model_profile("approved_knowledge").context_window_tokens >= 8192
+
+
+def test_deep_model_routes_can_fallback_to_fast_when_endpoint_is_unavailable():
+    assert model_fallback_keys("approved_knowledge") == ["deep", "fast"]
+    assert model_fallback_keys("deep") == ["deep", "fast"]
+    assert model_fallback_keys("fast") == ["fast"]
+    assert model_fallback_keys("vision_ocr") == ["vision"]

@@ -11,7 +11,7 @@ import base64
 
 import httpx
 from ..core.config import settings
-from .llm_gateway import reserve_model, resolve_model_profile
+from .llm_gateway import model_fallback_keys, reserve_model, resolve_model_profile
 
 
 # ── Shared HTTP helper ────────────────────────────────────────────────────────
@@ -122,19 +122,22 @@ async def async_call_llm_a(
     role: str | None = None,
     model_name: str | None = None,
 ) -> str:
-    try:
-        async with reserve_model(user_id=user_id or 0, role=role, model_name=model_name or settings.LLM_A_MODEL) as lease:
-            profile = lease.profile
-            url = f"{profile.api_base}/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {profile.api_key}"}
-            payload = _vllm_payload(profile.model, prompt, system)
-            payload["max_tokens"] = profile.max_tokens
-            async with httpx.AsyncClient() as client:
-                r = await client.post(url, json=payload, headers=headers, timeout=profile.timeout_seconds)
-                r.raise_for_status()
-                return _parse_response(r.json())
-    except Exception as e:
-        return f"LLM-A unavailable. ({e})"
+    last_error: Exception | None = None
+    for candidate in model_fallback_keys(model_name or "fast"):
+        try:
+            async with reserve_model(user_id=user_id or 0, role=role, model_name=candidate) as lease:
+                profile = lease.profile
+                url = f"{profile.api_base}/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {profile.api_key}"}
+                payload = _vllm_payload(profile.model, prompt, system)
+                payload["max_tokens"] = profile.max_tokens
+                async with httpx.AsyncClient() as client:
+                    r = await client.post(url, json=payload, headers=headers, timeout=profile.timeout_seconds)
+                    r.raise_for_status()
+                    return _parse_response(r.json())
+        except Exception as e:
+            last_error = e
+    return f"LLM-A unavailable. ({last_error})"
 
 
 async def async_call_llm_b(
