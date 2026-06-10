@@ -1766,6 +1766,19 @@ def test_streaming_source_required_replaces_unsupported_model_answer_with_source
         assert "Collateral approval requires two reviewers before the branch may proceed." in saved.content
 
 
+def test_extractive_fallback_applies_to_global_sources_not_session_uploads():
+    verification = {"status": "unsupported", "trust_label": "not_source_supported"}
+
+    assert rag_service.should_use_extractive_source_fallback(
+        verification,
+        [{"document_type": "report", "document_scope": "global_knowledge"}],
+    )
+    assert not rag_service.should_use_extractive_source_fallback(
+        verification,
+        [{"document_type": "chat_upload", "document_scope": "session_upload"}],
+    )
+
+
 def test_chat_extract_text_intent_uses_uploaded_file_pages(monkeypatch):
     assert chat_api._is_extract_text_request("extract text from this upload") is True
     assert chat_api._is_extract_text_request("summarize this upload") is False

@@ -276,6 +276,8 @@ def _build_source(doc: Document, score: float, result=None) -> dict:
         "policy_exception": payload.get("policy_exception", False),
         "policy_bundle_terms": payload.get("policy_bundle_terms", []),
         "policy_scope_hints": payload.get("policy_scope_hints", []),
+        "document_scope": payload.get("document_scope") or doc.document_scope,
+        "session_id": payload.get("session_id") or doc.session_id,
     }
 
 
@@ -420,14 +422,23 @@ def _build_context(results, db: Session) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+def _sanitize_citation_label_value(value) -> str | None:
+    normalized = " ".join(str(value or "").strip().split())
+    if not normalized:
+        return None
+    return re.sub(r"\b([A-Za-z0-9०-९])\.\s+", r"\1 ", normalized)
+
+
 def _source_citation_label(source: dict) -> str:
     parts = [
-        source.get("document_title") or source.get("title") or source.get("file_name") or "Approved source"
+        _sanitize_citation_label_value(
+            source.get("document_title") or source.get("title") or source.get("file_name") or "Approved source"
+        )
     ]
     if source.get("document_heading"):
-        parts.append(f"Heading: {source['document_heading']}")
+        parts.append(f"Heading: {_sanitize_citation_label_value(source['document_heading'])}")
     if source.get("clause_number"):
-        parts.append(f"Clause: {source['clause_number']}")
+        parts.append(f"Clause: {_sanitize_citation_label_value(source['clause_number'])}")
     page_number = source.get("pdf_page_number") if _citation_page_present(source.get("pdf_page_number")) else source.get("page_number")
     if _citation_page_present(page_number):
         parts.append(f"PDF page: {page_number}")
@@ -445,13 +456,32 @@ def _source_excerpt(source: dict, max_chars: int = 520) -> str:
     return text_value[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
 
 
-def build_extractive_source_answer(*, sources: list[dict] | None, language: str = "en", max_sources: int = 3) -> str:
+def _rank_extractive_sources(question: str | None, sources: list[dict]) -> list[dict]:
+    if not question:
+        return sources
+    return sorted(
+        sources,
+        key=lambda source: (
+            _keyword_score(question, source.get("passage") or source.get("snippet") or ""),
+            1 if source.get("citation_complete") is True else 0,
+        ),
+        reverse=True,
+    )
+
+
+def build_extractive_source_answer(
+    *,
+    sources: list[dict] | None,
+    language: str = "en",
+    question: str | None = None,
+    max_sources: int = 2,
+) -> str:
     usable_sources = [source for source in (sources or []) if _source_excerpt(source)]
     if not usable_sources:
         return NOT_FOUND_RESPONSE
     heading = "स्रोत अंशहरू:" if (language or "").lower().startswith("ne") else "Source excerpts:"
     lines = [heading]
-    for source in usable_sources[:max_sources]:
+    for source in _rank_extractive_sources(question, usable_sources)[:max_sources]:
         lines.append(f"- {_source_citation_label(source)} {_source_excerpt(source)}")
     return "\n".join(lines)
 
@@ -459,7 +489,11 @@ def build_extractive_source_answer(*, sources: list[dict] | None, language: str 
 def should_use_extractive_source_fallback(verification: dict | None, sources: list[dict] | None) -> bool:
     if not sources:
         return False
-    if not any(is_policy_document_type(source.get("document_type")) for source in sources):
+    if any(
+        source.get("document_scope") == "session_upload"
+        or (source.get("document_type") or "").strip().lower() == "chat_upload"
+        for source in sources
+    ):
         return False
     status = (verification or {}).get("status")
     trust_label = (verification or {}).get("trust_label")
@@ -920,7 +954,7 @@ def generate_rag_response(
         semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
     )
     if should_use_extractive_source_fallback(verification, sources):
-        answer = build_extractive_source_answer(sources=sources, language=language)
+        answer = build_extractive_source_answer(sources=sources, language=language, question=question)
         verification = verify_answer_against_sources(
             answer=answer,
             sources=sources,
@@ -975,7 +1009,7 @@ async def async_generate_rag_response(
         semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
     )
     if should_use_extractive_source_fallback(verification, sources):
-        answer = build_extractive_source_answer(sources=sources, language=language)
+        answer = build_extractive_source_answer(sources=sources, language=language, question=question)
         verification = verify_answer_against_sources(
             answer=answer,
             sources=sources,

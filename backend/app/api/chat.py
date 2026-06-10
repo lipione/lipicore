@@ -1324,6 +1324,7 @@ async def stream_chat_message(
             full_response = build_extractive_source_answer(
                 sources=sources_list,
                 language=chat_request.language,
+                question=retrieval_query,
             )
             citation_verification = _citation_verification_with_feature_flags(
                 answer=full_response,
