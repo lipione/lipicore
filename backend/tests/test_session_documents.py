@@ -1781,6 +1781,7 @@ def test_extractive_fallback_applies_to_global_sources_not_session_uploads():
 
 def test_chat_extract_text_intent_uses_uploaded_file_pages(monkeypatch):
     assert chat_api._is_extract_text_request("extract text from this upload") is True
+    assert chat_api._is_extract_text_request("extract the full text from the uploaded file") is True
     assert chat_api._is_extract_text_request("summarize this upload") is False
 
     def fail_reextract(*_args, **_kwargs):
@@ -1856,6 +1857,42 @@ def test_chat_extract_text_intent_uses_uploaded_file_pages(monkeypatch):
     assert "bad text" not in response_text
     assert sources[0]["document_id"] == doc.id
     assert sources[0]["document_title"] == "customs-rules.pdf"
+
+
+def test_non_streaming_chat_does_not_save_blank_assistant_message(monkeypatch):
+    async def fake_async_generate_rag_response(*_args, **_kwargs):
+        return rag_service.NOT_FOUND_RESPONSE, []
+
+    async def fake_async_call_llm(*_args, **_kwargs):
+        return ""
+
+    monkeypatch.setattr(chat_api, "async_generate_rag_response", fake_async_generate_rag_response)
+    monkeypatch.setattr(chat_api, "async_call_llm", fake_async_call_llm)
+
+    with Session(engine) as session:
+        staff = session.query(User).filter(User.email == "staff@test.local").first()
+        bank = session.query(Bank).filter(Bank.code == "TEST01").first()
+        chat = ChatSession(bank_id=bank.id, user_id=staff.id, title="Non Streaming Blank")
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+        chat_id = chat.id
+
+    token = get_token("staff@test.local")
+    response = client.post(
+        f"/api/chat/sessions/{chat_id}/messages",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "message": "Draft a customer reply about a received card dispute.",
+            "mode": "draft",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["content"] == chat_api.EMPTY_MODEL_RESPONSE_MESSAGE
+    with Session(engine) as session:
+        saved = session.query(ChatMessage).filter(ChatMessage.session_id == chat_id, ChatMessage.role == "assistant").first()
+        assert saved.content == chat_api.EMPTY_MODEL_RESPONSE_MESSAGE
 
 
 def test_global_rag_returns_not_found_when_relevance_is_too_low(monkeypatch):

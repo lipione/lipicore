@@ -8,6 +8,7 @@ All are called via the same OpenAI-compatible interface so swapping models
 requires only .env changes.
 """
 import base64
+import json
 
 import httpx
 from ..core.config import settings
@@ -29,6 +30,37 @@ def _parse_response(data: dict) -> str:
         return data["choices"][0]["message"]["content"]
     except (KeyError, IndexError):
         return ""
+
+
+async def _stream_chat_completion(
+    client: httpx.AsyncClient,
+    *,
+    url: str,
+    payload: dict,
+    headers: dict,
+    timeout_seconds: float,
+) -> str:
+    stream_payload = {**payload, "stream": True}
+    chunks: list[str] = []
+    async with client.stream("POST", url, json=stream_payload, headers=headers, timeout=timeout_seconds) as response:
+        if getattr(response, "status_code", 200) != 200:
+            return ""
+        async for line in response.aiter_lines():
+            if not line or not line.startswith("data: "):
+                continue
+            raw = line[6:]
+            if raw == "[DONE]":
+                break
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            for choice in data.get("choices") or []:
+                delta = choice.get("delta") or {}
+                content = delta.get("content") or ""
+                if content:
+                    chunks.append(content)
+    return "".join(chunks)
 
 
 # ── Sync (background tasks / ingestion pipeline) ─────────────────────────────
@@ -134,7 +166,17 @@ async def async_call_llm_a(
                 async with httpx.AsyncClient() as client:
                     r = await client.post(url, json=payload, headers=headers, timeout=profile.timeout_seconds)
                     r.raise_for_status()
-                    return _parse_response(r.json())
+                    answer = _parse_response(r.json())
+                    if answer.strip():
+                        return answer
+                    streamed_answer = await _stream_chat_completion(
+                        client,
+                        url=url,
+                        payload=payload,
+                        headers=headers,
+                        timeout_seconds=profile.timeout_seconds,
+                    )
+                    return streamed_answer or answer
         except Exception as e:
             last_error = e
     return f"LLM-A unavailable. ({last_error})"

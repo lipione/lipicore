@@ -77,6 +77,19 @@ def test_chat_task_router_detects_source_backed_legal_definition():
     assert route["model_workflow"] == "approved_knowledge"
 
 
+def test_chat_task_router_translation_ignores_sticky_uploaded_documents():
+    route = classify_chat_task(
+        message="Translate this to English: बैंकले ग्राहकलाई स्पष्ट जानकारी दिनुपर्छ।",
+        mode="translate",
+        active_document_ids=[10],
+        has_image=False,
+    )
+
+    assert route["task_type"] == "translation"
+    assert route["retrieval_intent"] == "none"
+    assert route["answer_style"] == "faithful_translation"
+
+
 def test_answer_metadata_includes_task_route_when_supplied():
     metadata = derive_answer_metadata(
         mode="ask_knowledge",

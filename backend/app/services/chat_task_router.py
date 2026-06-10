@@ -33,7 +33,11 @@ PROCEDURE_RE = re.compile(
     flags=re.IGNORECASE,
 )
 EXTRACT_TEXT_RE = re.compile(
-    r"\b(ocr|extract\s+text|transcribe|read\s+this|scan(?:ned)?\s+text)\b|पाठ|लेखिएको",
+    r"\b("
+    r"ocr|"
+    r"extract\s+(?:the\s+)?(?:full\s+|all\s+|raw\s+)?text|"
+    r"transcribe|read\s+this|scan(?:ned)?\s+text"
+    r")\b|पाठ|लेखिएको",
     flags=re.IGNORECASE,
 )
 
@@ -68,7 +72,7 @@ def classify_chat_task(
     if mode == "translate":
         return {
             "task_type": "translation",
-            "retrieval_intent": "session_file" if active_docs else "none",
+            "retrieval_intent": "none",
             "answer_style": "faithful_translation",
             "model_workflow": "ask_knowledge",
         }

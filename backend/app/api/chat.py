@@ -136,6 +136,7 @@ MODEL_CONTEXT_LIMIT_TOKENS = settings.LLM_CONTEXT_WINDOW_TOKENS
 MODEL_TOKEN_HEADROOM = 96
 MIN_GENERATION_TOKENS = 128
 APPROX_CHARS_PER_TOKEN = 3
+EMPTY_MODEL_RESPONSE_MESSAGE = "AI engine returned an empty response. Please retry shortly."
 
 MODE_INSTRUCTIONS = {
     "ask_knowledge": (
@@ -217,6 +218,55 @@ def _should_attempt_document_retrieval(
     if message is not None and _should_skip_document_retrieval(message):
         return False
     return bool(active_document_ids) or mode in KNOWLEDGE_SEARCH_MODES
+
+
+def _active_document_ids_for_request(
+    *,
+    session: ChatSession,
+    requested_ids: list[int] | None,
+    mode: str,
+    message: str | None,
+    has_image: bool,
+) -> list[int]:
+    if has_image:
+        return []
+    if mode == "translate":
+        return []
+    return _session_active_document_ids(session, requested_ids)
+
+
+def _blank_response_replacement(
+    *,
+    answer: str | None,
+    sources: list[dict] | None,
+    mode: str,
+    task_route: dict | None,
+    language: str,
+    retrieval_query: str | None,
+) -> tuple[str, dict | None]:
+    if (answer or "").strip():
+        return answer or "", None
+    if sources and (mode in SOURCE_REQUIRED_MODES or (task_route or {}).get("retrieval_intent") == "source_required"):
+        return (
+            build_extractive_source_answer(
+                sources=sources,
+                language=language,
+                question=retrieval_query,
+            ),
+            extractive_source_verification(sources),
+        )
+    return EMPTY_MODEL_RESPONSE_MESSAGE, {
+        "status": "empty_model_response",
+        "trust_label": "no_sources",
+        "verification_stage": "model_response",
+        "supported_sentence_count": 0,
+        "unsupported_sentence_count": 0,
+        "unsupported_sentences": [],
+        "nli_checked_sentence_count": 0,
+        "semantic_checked_sentence_count": 0,
+        "semantic_supported_sentence_count": 0,
+        "semantic_top_score": 0.0,
+    }
 
 
 def _requires_source_backed_answer(
@@ -451,6 +501,7 @@ def _update_session_summary(session: ChatSession, user_message: str, assistant_m
 
 EXTRACT_TEXT_INTENT_RE = re.compile(
     r"\b(?:extract|show|display|give|copy|read)\s+(?:me\s+)?(?:the\s+)?(?:raw\s+|full\s+|all\s+)?text\b|"
+    r"\bextract\s+(?:the\s+)?(?:raw\s+|full\s+|all\s+)?text\s+from\b|"
     r"\b(?:ocr|text extraction|extracted text|raw text|full text)\b|"
     r"(?:टेक्स्ट|पाठ|अक्षर)\s*(?:निकाल|देखा|देऊ)",
     re.IGNORECASE,
@@ -699,7 +750,7 @@ def read_chat_messages(
     ).all()
     return messages
 
-@router.post("/sessions/{session_id}/messages")
+@router.post("/sessions/{session_id}/messages", response_model=ChatMessageResponse)
 @limiter.limit("30/minute")
 async def create_chat_message(
     request: Request,
@@ -740,7 +791,13 @@ async def create_chat_message(
 
     # 3. Build prompt and call LLM async
     mode = chat_request.mode
-    active_doc_ids = _session_active_document_ids(session, chat_request.active_document_ids)
+    active_doc_ids = _active_document_ids_for_request(
+        session=session,
+        requested_ids=chat_request.active_document_ids,
+        mode=mode,
+        message=safe_message,
+        has_image=bool(chat_request.image),
+    )
     task_route = classify_chat_task(
         message=safe_message,
         mode=mode,
@@ -806,7 +863,20 @@ async def create_chat_message(
             )
             sources = []
 
-    if direct_text_extract:
+    blank_verification = None
+    if answer != POLICY_CITATION_INCOMPLETE_RESPONSE:
+        answer, blank_verification = _blank_response_replacement(
+            answer=answer,
+            sources=sources,
+            mode=mode,
+            task_route=task_route,
+            language=chat_request.language,
+            retrieval_query=retrieval_query,
+        )
+
+    if blank_verification is not None:
+        citation_verification = blank_verification
+    elif direct_text_extract:
         citation_verification = _direct_extract_verification(sources)
     elif answer == POLICY_CITATION_INCOMPLETE_RESPONSE:
         citation_verification = _citation_incomplete_verification(sources)
@@ -912,9 +982,15 @@ async def stream_chat_message(
     ).all()
     retrieval_query = rewrite_query_for_retrieval(safe_message, history[:-1])
 
-    active_doc_ids = _session_active_document_ids(session, chat_request.active_document_ids)
     mode = chat_request.mode
     has_image = bool(chat_request.image)
+    active_doc_ids = _active_document_ids_for_request(
+        session=session,
+        requested_ids=chat_request.active_document_ids,
+        mode=mode,
+        message=safe_message,
+        has_image=has_image,
+    )
     task_route = classify_chat_task(
         message=safe_message,
         mode=mode,
@@ -1315,12 +1391,25 @@ async def stream_chat_message(
         # Skip suggestions during streaming (would block the async generator)
         # Could generate async in background if needed
         suggestions = []
-        citation_verification = _citation_verification_with_feature_flags(
+        blank_verification = None
+        original_full_response = full_response
+        full_response, blank_verification = _blank_response_replacement(
             answer=full_response,
             sources=sources_list,
-            db=db,
-            bank_id=current_user.bank_id,
+            mode=mode,
+            task_route=task_route,
+            language=chat_request.language,
+            retrieval_query=retrieval_query,
         )
+        if blank_verification is not None:
+            citation_verification = blank_verification
+        else:
+            citation_verification = _citation_verification_with_feature_flags(
+                answer=full_response,
+                sources=sources_list,
+                db=db,
+                bank_id=current_user.bank_id,
+            )
         if source_required_response and should_use_extractive_source_fallback(citation_verification, sources_list):
             full_response = build_extractive_source_answer(
                 sources=sources_list,
@@ -1328,7 +1417,7 @@ async def stream_chat_message(
                 question=retrieval_query,
             )
             citation_verification = extractive_source_verification(sources_list)
-        if source_required_response:
+        if source_required_response or not (original_full_response or "").strip():
             yield f"data: {json.dumps({'token': full_response})}\n\n"
         sources_list = attach_source_verification(sources_list, citation_verification)
         answer_metadata = derive_answer_metadata(
