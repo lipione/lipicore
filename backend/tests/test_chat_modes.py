@@ -97,6 +97,23 @@ def test_answer_metadata_includes_task_route_when_supplied():
     assert metadata["model_workflow"] == "ask_knowledge"
 
 
+def test_answer_metadata_marks_source_required_task_route_as_requiring_sources():
+    metadata = derive_answer_metadata(
+        mode="ask_knowledge",
+        sources=[],
+        active_document_ids=[],
+        answer="I could not find this in approved documents.",
+        task_route={
+            "task_type": "legal_definition",
+            "retrieval_intent": "source_required",
+            "answer_style": "cited_definition",
+            "model_workflow": "approved_knowledge",
+        },
+    )
+
+    assert metadata["requires_sources"] is True
+
+
 def test_chat_context_window_defaults_to_8k():
     assert MODEL_CONTEXT_LIMIT_TOKENS == 8192
 

@@ -317,7 +317,9 @@ def derive_answer_metadata(
     task_route: dict | None = None,
 ) -> dict:
     source_count = len(sources or [])
-    requires_sources = mode in SOURCE_REQUIRED_MODES
+    requires_sources = mode in SOURCE_REQUIRED_MODES or (
+        task_route or {}
+    ).get("retrieval_intent") == "source_required"
     trust_label = (citation_verification or {}).get(
         "trust_label",
         "no_sources" if source_count == 0 else "source_unverified",
