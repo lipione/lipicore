@@ -2,6 +2,7 @@ from app.services.llm_gateway import (
     model_fallback_keys,
     model_registry_snapshot,
     resolve_model_profile,
+    select_model_key_for_chat_task,
     select_model_key_for_workflow,
 )
 
@@ -30,6 +31,13 @@ def test_route_policy_sends_high_risk_workflows_to_deep_model():
     assert select_model_key_for_workflow("loan_support") == "deep"
     assert select_model_key_for_workflow("vision_ocr") == "vision"
     assert select_model_key_for_workflow("scanned_pdf") == "vision"
+
+
+def test_chat_task_routing_promotes_legal_definitions_to_deep_workflow():
+    assert select_model_key_for_chat_task("ask_knowledge", task_type="staff_general") == "fast"
+    assert select_model_key_for_chat_task("ask_knowledge", task_type="legal_definition") == "deep"
+    assert select_model_key_for_chat_task("ask_knowledge", task_type="policy_lookup") == "deep"
+    assert select_model_key_for_chat_task("approved_knowledge", task_type="staff_general") == "deep"
 
 
 def test_resolve_model_profile_accepts_registry_key_and_alias():

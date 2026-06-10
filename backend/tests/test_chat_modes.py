@@ -11,6 +11,7 @@ from app.api.chat import (
     prepare_vllm_payload_messages,
     should_show_document_search_status,
 )
+from app.services.chat_task_router import classify_chat_task
 from app.services.rag_service import POLICY_CITATION_INCOMPLETE_RESPONSE, RAG_PROMPT_TEMPLATE, get_system_identity
 from app.schemas.chat import ChatRequest
 
@@ -46,6 +47,54 @@ def test_source_backed_intent_keeps_broad_ask_knowledge_questions_general():
         mode="approved_knowledge",
         message="Tell me about banking fraud",
     ) is True
+
+
+def test_chat_task_router_treats_broad_fraud_question_as_general_staff_chat():
+    route = classify_chat_task(
+        message="Tell me about banking fraud",
+        mode="ask_knowledge",
+        active_document_ids=[],
+        has_image=False,
+    )
+
+    assert route["task_type"] == "staff_general"
+    assert route["retrieval_intent"] == "optional"
+    assert route["answer_style"] == "general_staff_guidance"
+    assert route["model_workflow"] == "ask_knowledge"
+
+
+def test_chat_task_router_detects_source_backed_legal_definition():
+    route = classify_chat_task(
+        message="What is banking offence under Nepali law?",
+        mode="ask_knowledge",
+        active_document_ids=[],
+        has_image=False,
+    )
+
+    assert route["task_type"] == "legal_definition"
+    assert route["retrieval_intent"] == "source_required"
+    assert route["answer_style"] == "cited_definition"
+    assert route["model_workflow"] == "approved_knowledge"
+
+
+def test_answer_metadata_includes_task_route_when_supplied():
+    metadata = derive_answer_metadata(
+        mode="ask_knowledge",
+        sources=[],
+        active_document_ids=[],
+        answer="General fraud guidance.",
+        task_route={
+            "task_type": "staff_general",
+            "retrieval_intent": "optional",
+            "answer_style": "general_staff_guidance",
+            "model_workflow": "ask_knowledge",
+        },
+    )
+
+    assert metadata["task_type"] == "staff_general"
+    assert metadata["retrieval_intent"] == "optional"
+    assert metadata["answer_style"] == "general_staff_guidance"
+    assert metadata["model_workflow"] == "ask_knowledge"
 
 
 def test_chat_context_window_defaults_to_8k():

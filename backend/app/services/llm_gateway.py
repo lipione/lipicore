@@ -295,6 +295,23 @@ def select_model_key_for_workflow(workflow: str | None) -> str:
     return "fast"
 
 
+def select_model_key_for_chat_task(workflow: str | None, *, task_type: str | None = None) -> str:
+    base_key = select_model_key_for_workflow(workflow)
+    if base_key == "vision":
+        return "vision"
+    if base_key == "deep":
+        return "deep"
+    if (task_type or "").strip().lower() in {
+        "legal_definition",
+        "policy_lookup",
+        "procedure_checklist",
+        "comparison",
+        "compliance_escalation",
+    }:
+        return "deep"
+    return base_key
+
+
 def resolve_model_profile(model_name: str | None = None) -> ModelProfile:
     requested = (model_name or "").strip().lower()
     registry = build_runtime_model_registry()

@@ -49,11 +49,13 @@ from ..services.guardrail_service import detect_prompt_injection, detect_and_mas
 from ..services.query_rewrite_service import rewrite_query_for_retrieval
 from ..services.llm_service import async_call_llm
 from ..services.embedding_service import generate_embeddings
+from ..services.chat_task_router import classify_chat_task
 from ..services.llm_gateway import (
     model_fallback_keys,
     model_status,
     reserve_model,
     resolve_model_profile,
+    select_model_key_for_chat_task,
     select_model_key_for_workflow,
 )
 from ..services.ingestion_queue import enqueue_document_ingestion
@@ -312,6 +314,7 @@ def derive_answer_metadata(
     active_document_ids: list[int] | None,
     answer: str | None,
     citation_verification: dict | None = None,
+    task_route: dict | None = None,
 ) -> dict:
     source_count = len(sources or [])
     requires_sources = mode in SOURCE_REQUIRED_MODES
@@ -348,7 +351,7 @@ def derive_answer_metadata(
         if any(term in answer.lower() for term in ("escalate", "supervisor", "compliance team")):
             answer_type = "escalate"
 
-    return {
+    metadata = {
         "mode": mode,
         "answer_type": answer_type,
         "source_count": source_count,
@@ -356,6 +359,16 @@ def derive_answer_metadata(
         "trust_label": trust_label,
         "citation_verification": citation_verification or {},
     }
+    if task_route:
+        metadata.update(
+            {
+                "task_type": task_route.get("task_type"),
+                "retrieval_intent": task_route.get("retrieval_intent"),
+                "answer_style": task_route.get("answer_style"),
+                "model_workflow": task_route.get("model_workflow"),
+            }
+        )
+    return metadata
 
 
 def _citation_verification_with_feature_flags(
@@ -723,6 +736,12 @@ async def create_chat_message(
     # 3. Build prompt and call LLM async
     mode = chat_request.mode
     active_doc_ids = _session_active_document_ids(session, chat_request.active_document_ids)
+    task_route = classify_chat_task(
+        message=safe_message,
+        mode=mode,
+        active_document_ids=active_doc_ids,
+        has_image=bool(chat_request.image),
+    )
     direct_text_extract = False
     sys_identity = f"{get_system_identity(chat_request.language)}\n\n{mode_instruction(mode)}"
     if chat_request.image:
@@ -751,7 +770,11 @@ async def create_chat_message(
             session_id=session_id,
             user_id=current_user.id,
             user_department=current_user.department,
-            model_name=chat_request.model_override or select_model_key_for_workflow(mode),
+            model_name=chat_request.model_override
+            or select_model_key_for_chat_task(
+                task_route.get("model_workflow") or mode,
+                task_type=task_route.get("task_type"),
+            ),
         )
         if answer == POLICY_CITATION_INCOMPLETE_RESPONSE and not _requires_source_backed_answer(
             mode=mode,
@@ -765,7 +788,11 @@ async def create_chat_message(
                 role=current_user.role,
             )
             sources = []
-        elif answer == NOT_FOUND_RESPONSE and mode not in SOURCE_REQUIRED_MODES:
+        elif (
+            answer == NOT_FOUND_RESPONSE
+            and mode not in SOURCE_REQUIRED_MODES
+            and task_route.get("retrieval_intent") != "source_required"
+        ):
             answer = await async_call_llm(
                 safe_message,
                 system=general_fallback_system_identity(chat_request.language, mode),
@@ -806,6 +833,7 @@ async def create_chat_message(
         active_document_ids=active_doc_ids if not chat_request.image else [],
         answer=answer,
         citation_verification=citation_verification,
+        task_route=task_route,
     )
     
     log_audit_event(
@@ -824,6 +852,10 @@ async def create_chat_message(
             "answer_type": answer_metadata["answer_type"],
             "trust_label": answer_metadata.get("trust_label"),
             "mode": mode,
+            "task_type": answer_metadata.get("task_type"),
+            "retrieval_intent": answer_metadata.get("retrieval_intent"),
+            "answer_style": answer_metadata.get("answer_style"),
+            "model_workflow": answer_metadata.get("model_workflow"),
             "citation_verification": citation_verification,
             "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
             "direct_text_extract": direct_text_extract or None,
@@ -878,6 +910,12 @@ async def stream_chat_message(
     active_doc_ids = _session_active_document_ids(session, chat_request.active_document_ids)
     mode = chat_request.mode
     has_image = bool(chat_request.image)
+    task_route = classify_chat_task(
+        message=safe_message,
+        mode=mode,
+        active_document_ids=active_doc_ids,
+        has_image=has_image,
+    )
 
     async def event_stream():
         logger.info("[STREAM] Starting event_stream")
@@ -931,6 +969,7 @@ async def stream_chat_message(
                 active_document_ids=active_doc_ids,
                 answer=full_response,
                 citation_verification=citation_verification,
+                task_route=task_route,
             )
             try:
                 ai_msg = ChatMessage(
@@ -961,6 +1000,10 @@ async def stream_chat_message(
                         "answer_type": answer_metadata["answer_type"],
                         "trust_label": answer_metadata.get("trust_label"),
                         "mode": mode,
+                        "task_type": answer_metadata.get("task_type"),
+                        "retrieval_intent": answer_metadata.get("retrieval_intent"),
+                        "answer_style": answer_metadata.get("answer_style"),
+                        "model_workflow": answer_metadata.get("model_workflow"),
                         "citation_verification": citation_verification,
                         "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
                         "streamed": True,
@@ -1020,6 +1063,7 @@ async def stream_chat_message(
                     active_document_ids=active_doc_ids,
                     answer=full_response,
                     citation_verification=citation_verification,
+                    task_route=task_route,
                 )
                 try:
                     ai_msg = ChatMessage(
@@ -1050,6 +1094,10 @@ async def stream_chat_message(
                             "answer_type": answer_metadata["answer_type"],
                             "trust_label": answer_metadata.get("trust_label"),
                             "mode": mode,
+                            "task_type": answer_metadata.get("task_type"),
+                            "retrieval_intent": answer_metadata.get("retrieval_intent"),
+                            "answer_style": answer_metadata.get("answer_style"),
+                            "model_workflow": answer_metadata.get("model_workflow"),
                             "citation_verification": citation_verification,
                             "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
                             "streamed": True,
@@ -1061,7 +1109,11 @@ async def stream_chat_message(
                 yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
                 return
 
-        if not has_image and mode in SOURCE_REQUIRED_MODES and not sources_list:
+        if (
+            not has_image
+            and (mode in SOURCE_REQUIRED_MODES or task_route.get("retrieval_intent") == "source_required")
+            and not sources_list
+        ):
             full_response = NOT_FOUND_RESPONSE
             yield f"data: {json.dumps({'token': full_response})}\n\n"
             suggestions = []
@@ -1077,6 +1129,7 @@ async def stream_chat_message(
                 active_document_ids=active_doc_ids,
                 answer=full_response,
                 citation_verification=citation_verification,
+                task_route=task_route,
             )
             try:
                 ai_msg = ChatMessage(
@@ -1107,6 +1160,10 @@ async def stream_chat_message(
                         "answer_type": answer_metadata["answer_type"],
                         "trust_label": answer_metadata.get("trust_label"),
                         "mode": mode,
+                        "task_type": answer_metadata.get("task_type"),
+                        "retrieval_intent": answer_metadata.get("retrieval_intent"),
+                        "answer_style": answer_metadata.get("answer_style"),
+                        "model_workflow": answer_metadata.get("model_workflow"),
                         "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
                         "streamed": True,
                         "not_found_reason": "no_source_above_threshold",
@@ -1117,10 +1174,18 @@ async def stream_chat_message(
             yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
             return
 
-        if not has_image and not sources_list and mode not in SOURCE_REQUIRED_MODES:
+        if (
+            not has_image
+            and not sources_list
+            and mode not in SOURCE_REQUIRED_MODES
+            and task_route.get("retrieval_intent") != "source_required"
+        ):
             sys_identity = general_fallback_system_identity(chat_request.language, mode)
 
-        selected_model = chat_request.model_override or select_model_key_for_workflow(mode)
+        selected_model = chat_request.model_override or select_model_key_for_chat_task(
+            task_route.get("model_workflow") or mode,
+            task_type=task_route.get("task_type"),
+        )
         candidate_models = model_fallback_keys(selected_model)
         status = await model_status()
         full_response = ""
@@ -1252,6 +1317,7 @@ async def stream_chat_message(
             active_document_ids=active_doc_ids,
             answer=full_response,
             citation_verification=citation_verification,
+            task_route=task_route,
         )
 
         try:
@@ -1283,6 +1349,10 @@ async def stream_chat_message(
                     "answer_type": answer_metadata["answer_type"],
                     "trust_label": answer_metadata.get("trust_label"),
                     "mode": mode,
+                    "task_type": answer_metadata.get("task_type"),
+                    "retrieval_intent": answer_metadata.get("retrieval_intent"),
+                    "answer_style": answer_metadata.get("answer_style"),
+                    "model_workflow": answer_metadata.get("model_workflow"),
                     "citation_verification": citation_verification,
                     "rewritten_query": retrieval_query if retrieval_query != safe_message else None,
                     "streamed": True,
@@ -1297,6 +1367,7 @@ async def stream_chat_message(
             active_document_ids=active_doc_ids,
             answer=full_response,
             citation_verification=citation_verification,
+            task_route=task_route,
         )
         yield f"data: {json.dumps({'done': True, 'sources': sources_list, 'suggestions': suggestions, 'answer_metadata': answer_metadata})}\n\n"
 
