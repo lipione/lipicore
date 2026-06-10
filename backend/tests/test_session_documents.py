@@ -514,7 +514,7 @@ async def test_async_policy_rag_blocks_answer_when_required_citation_fields_are_
     assert llm_called is False
 
 
-def test_policy_rag_blocks_mixed_complete_and_incomplete_policy_sources(monkeypatch):
+def test_policy_rag_allows_mixed_sources_when_one_policy_source_is_complete(monkeypatch):
     llm_called = False
 
     def fake_embeddings(_texts):
@@ -550,7 +550,7 @@ def test_policy_rag_blocks_mixed_complete_and_incomplete_policy_sources(monkeypa
     def fake_call_llm(_prompt):
         nonlocal llm_called
         llm_called = True
-        return "Should not be called."
+        return "The DSR value is 60% under the cited SME lending clause."
 
     monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
     monkeypatch.setattr(rag_service, "search_points", fake_search_points)
@@ -587,10 +587,13 @@ def test_policy_rag_blocks_mixed_complete_and_incomplete_policy_sources(monkeypa
             session,
         )
 
-    assert answer == rag_service.POLICY_CITATION_INCOMPLETE_RESPONSE
-    assert [source["document_title"] for source in sources] == ["Incomplete Credit Policy"]
-    assert sources[0]["citation_incomplete_reasons"] == ["missing_clause_number"]
-    assert llm_called is False
+    assert answer == "The DSR value is 60% under the cited SME lending clause."
+    sources_by_title = {source["document_title"]: source for source in sources}
+    assert set(sources_by_title) == {"Complete Credit Policy", "Incomplete Credit Policy"}
+    assert sources_by_title["Complete Credit Policy"]["citation_complete"] is True
+    assert sources_by_title["Incomplete Credit Policy"]["citation_complete"] is False
+    assert sources_by_title["Incomplete Credit Policy"]["citation_incomplete_reasons"] == ["missing_clause_number"]
+    assert llm_called is True
 
 
 def test_global_rag_sources_include_freshness_warnings_and_confidence(monkeypatch):
@@ -1156,6 +1159,44 @@ def test_build_source_rejects_blank_pdf_page_without_losing_zero_fallback():
     assert blank_page_source["citation_complete"] is False
     assert zero_fallback_source["pdf_page_number"] == 0
     assert zero_fallback_source["citation_complete"] is True
+
+
+def test_policy_citation_gate_allows_answer_when_at_least_one_policy_source_is_complete():
+    complete_source = {
+        "document_type": "policy",
+        "pdf_page_number": 1,
+        "document_heading": "Banking Offence and Punishment Act",
+        "clause_number": "(1)",
+        "citation_complete": True,
+        "citation_incomplete_reasons": [],
+    }
+    incomplete_secondary_source = {
+        "document_type": "policy",
+        "pdf_page_number": 7,
+        "document_heading": "Banking Offence and Punishment Act",
+        "citation_complete": False,
+        "citation_incomplete_reasons": ["missing_clause_number"],
+    }
+
+    assert not rag_service._policy_citation_gate_blocks(
+        "What is banking offence under Nepali law?",
+        [complete_source, incomplete_secondary_source],
+    )
+
+
+def test_policy_citation_gate_still_blocks_when_no_policy_source_is_complete():
+    incomplete_source = {
+        "document_type": "policy",
+        "pdf_page_number": 7,
+        "document_heading": "Banking Offence and Punishment Act",
+        "citation_complete": False,
+        "citation_incomplete_reasons": ["missing_clause_number"],
+    }
+
+    assert rag_service._policy_citation_gate_blocks(
+        "What is banking offence under Nepali law?",
+        [incomplete_source],
+    )
 
 
 def test_streaming_chat_blocks_keyword_only_incomplete_policy_citations_before_model_call(monkeypatch):

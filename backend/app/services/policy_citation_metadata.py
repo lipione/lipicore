@@ -52,6 +52,9 @@ CLAUSE_RE = re.compile(
     r"\b((?:दफा|बुँदा)\s*[०-९0-9]+(?:[.\-][०-९0-9]+)*(?:\([^)]+\))?)",
     re.IGNORECASE,
 )
+BARE_LEGAL_NUMBER = r"[\u0966-\u096f0-9]{1,3}(?:\.[\u0966-\u096f0-9]{1,3})*"
+BARE_PARENTHESIZED_CLAUSE_RE = re.compile(rf"^\s*(\({BARE_LEGAL_NUMBER}\))\s*(?=\S)")
+BARE_NUMBERED_CLAUSE_RE = re.compile(rf"^\s*({BARE_LEGAL_NUMBER})\s*[\.)]\s+(?=\S)")
 PRINTED_PAGE_RE = re.compile(
     r"(?:^|\b)(?:page|pg\.?|p\.|printed\s+page)\s*[:#\-]?\s*([०-९0-9ivxlcdmIVXLCDM]+)\b|"
     r"(?:पृष्ठ|पेज)\s*[:#\-]?\s*([०-९0-9]+)",
@@ -151,6 +154,16 @@ def extract_clause_number(text: str | None) -> str | None:
         if _is_heading_line(_containing_line(value, match)):
             continue
         return _first_group(match)
+    for line in value.splitlines() or [value]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        clause = _first_group(BARE_PARENTHESIZED_CLAUSE_RE.match(stripped))
+        if clause:
+            return clause
+        clause = _first_group(BARE_NUMBERED_CLAUSE_RE.match(stripped))
+        if clause:
+            return clause
     hierarchy = parse_legal_hierarchy(text)
     if hierarchy.clause:
         return hierarchy.clause

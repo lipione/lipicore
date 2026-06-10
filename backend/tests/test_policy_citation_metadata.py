@@ -258,6 +258,24 @@ def test_section_sentence_is_not_extracted_as_heading():
     assert extract_document_heading("Section 12 requires annual board review.") is None
 
 
+def test_bare_parenthesized_legal_number_is_extracted_as_clause():
+    assert (
+        extract_clause_number(
+            '(1) The title of this Act shall be "Banking Offence and Punishment Act, 2064."'
+        )
+        == "(1)"
+    )
+
+
+def test_bare_numbered_legal_heading_is_extracted_as_clause():
+    assert (
+        extract_clause_number(
+            "95. Acts to be Deemed to be Offence Under this Act: Whoever accepts deposits or makes payments..."
+        )
+        == "95"
+    )
+
+
 def test_section_sentence_policy_citation_keeps_clause_but_requires_heading():
     metadata = build_citation_metadata(
         page={"page_number": 12, "text": "Section 12 requires annual board review."},

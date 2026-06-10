@@ -219,9 +219,9 @@ def _policy_citation_blocking_sources(sources: list[dict]) -> list[dict]:
 
 
 def _policy_citation_gate_blocks(question: str | None, sources: list[dict]) -> bool:
-    return _policy_sources_need_complete_citations(question, sources) and bool(
-        _policy_citation_blocking_sources(sources)
-    )
+    if not _policy_sources_need_complete_citations(question, sources):
+        return False
+    return not any(_source_has_complete_policy_citation(source) for source in sources)
 
 
 def _build_source(doc: Document, score: float, result=None) -> dict:
