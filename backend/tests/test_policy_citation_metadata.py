@@ -276,6 +276,45 @@ def test_bare_numbered_legal_heading_is_extracted_as_clause():
     )
 
 
+def test_nrb_numbered_heading_and_clause_are_extracted():
+    text = """
+    Additional operational requirements for guarantees
+    63. In addition to the legal certainty requirements in paragraphs 46 and 47 above,
+    in order for a guarantee to be recognized, the following conditions must be satisfied:
+    """
+
+    metadata = build_citation_metadata(
+        page={"page_number": 33, "text": text},
+        chunk_text=text,
+        document_type="directive",
+    )
+
+    assert metadata["document_heading"] == "Additional operational requirements for guarantees"
+    assert metadata["clause_number"] == "63"
+    assert metadata["citation_incomplete_reasons"] == []
+    assert citation_is_complete_for_policy(metadata)
+
+
+def test_nepali_numbered_heading_and_letter_clause_are_extracted():
+    text = """
+    ५. अग्रिम भुक्तानी शुल्क सम्बन्धमा
+
+    (क) कर्जा कारोवारमा लिने अग्रीम भुक्तानी शुल्कका सम्बन्धमा कर्जा प्रवाह गर्दा गरिने सम्झौतामा स्पष्ट
+    रुपमा उल्लेख गर्नुपर्नेछ ।
+    """
+
+    metadata = build_citation_metadata(
+        page={"page_number": 257, "text": text},
+        chunk_text=text,
+        document_type="directive",
+    )
+
+    assert metadata["document_heading"] == "५. अग्रिम भुक्तानी शुल्क सम्बन्धमा"
+    assert metadata["clause_number"] == "(क)"
+    assert metadata["citation_incomplete_reasons"] == []
+    assert citation_is_complete_for_policy(metadata)
+
+
 def test_section_sentence_policy_citation_keeps_clause_but_requires_heading():
     metadata = build_citation_metadata(
         page={"page_number": 12, "text": "Section 12 requires annual board review."},

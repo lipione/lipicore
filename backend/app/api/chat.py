@@ -37,9 +37,11 @@ from ..services.rag_service import (
     _policy_citation_blocking_sources,
     _policy_citation_gate_blocks,
     _search,
+    build_extractive_source_answer,
     generate_rag_response,
     async_generate_rag_response,
     get_system_identity,
+    should_use_extractive_source_fallback,
     MAX_CONTEXT_RESULTS,
     RAG_PROMPT_TEMPLATE,
     UNTRUSTED_EVIDENCE_WARNING,
@@ -1191,6 +1193,11 @@ async def stream_chat_message(
         candidate_models = model_fallback_keys(selected_model)
         status = await model_status()
         full_response = ""
+        source_required_response = (
+            not has_image
+            and bool(sources_list)
+            and (mode in SOURCE_REQUIRED_MODES or task_route.get("retrieval_intent") == "source_required")
+        )
         stream_error: Exception | None = None
         stream_error_was_timeout = False
         stream_completed = False
@@ -1276,7 +1283,8 @@ async def stream_chat_message(
                                             token_count += 1
                                             full_response += token
                                             logger.debug(f"[STREAM] Token {token_count}: {token[:20]}")
-                                            yield f"data: {json.dumps({'token': token})}\n\n"
+                                            if not source_required_response:
+                                                yield f"data: {json.dumps({'token': token})}\n\n"
                                 except json.JSONDecodeError:
                                     continue
                 stream_completed = True
@@ -1312,6 +1320,19 @@ async def stream_chat_message(
             db=db,
             bank_id=current_user.bank_id,
         )
+        if source_required_response and should_use_extractive_source_fallback(citation_verification, sources_list):
+            full_response = build_extractive_source_answer(
+                sources=sources_list,
+                language=chat_request.language,
+            )
+            citation_verification = _citation_verification_with_feature_flags(
+                answer=full_response,
+                sources=sources_list,
+                db=db,
+                bank_id=current_user.bank_id,
+            )
+        if source_required_response:
+            yield f"data: {json.dumps({'token': full_response})}\n\n"
         sources_list = attach_source_verification(sources_list, citation_verification)
         answer_metadata = derive_answer_metadata(
             mode=mode,

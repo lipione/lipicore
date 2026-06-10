@@ -1635,6 +1635,137 @@ def test_streaming_chat_persists_verified_sources_after_model_response(monkeypat
         assert saved_sources[0]["citation_verification"] == "supported"
 
 
+def test_streaming_source_required_replaces_unsupported_model_answer_with_source_excerpt(monkeypatch):
+    class FakeLease:
+        queued_ahead = 0
+        profile = SimpleNamespace(
+            api_base="http://fake-llm.local",
+            api_key="test",
+            model="fake-model",
+            timeout_seconds=1,
+        )
+
+    class FakeReservation:
+        async def __aenter__(self):
+            return FakeLease()
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class FakeStreamResponse:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def aiter_lines(self):
+            yield 'data: {"choices":[{"delta":{"content":"The policy allows branch staff to skip collateral review."}}]}'
+            yield "data: [DONE]"
+
+    class FakeAsyncClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        def stream(self, *_args, **_kwargs):
+            return FakeStreamResponse()
+
+    async def fake_model_status():
+        return {}
+
+    def fake_verification(*, answer, sources, **_kwargs):
+        if "skip collateral review" in answer:
+            return {
+                "status": "unsupported",
+                "trust_label": "not_source_supported",
+                "unsupported_sentence_count": 1,
+                "unsupported_sentences": [answer],
+            }
+        return {
+            "status": "supported",
+            "trust_label": "source_supported",
+            "unsupported_sentence_count": 0,
+            "unsupported_sentences": [],
+        }
+
+    monkeypatch.setattr(chat_api, "generate_embeddings", lambda _texts: [[0.1, 0.2, 0.3]])
+    monkeypatch.setattr(chat_api, "model_status", fake_model_status)
+    monkeypatch.setattr(chat_api, "reserve_model", lambda **_kwargs: FakeReservation())
+    monkeypatch.setattr(chat_api.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(chat_api, "verify_answer_against_sources", fake_verification)
+    monkeypatch.setattr(
+        chat_api,
+        "_search",
+        lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                payload={
+                    "document_id": 19,
+                    "text": "Collateral approval requires two reviewers before the branch may proceed.",
+                    "page_number": 6,
+                    "pdf_page_number": 6,
+                    "printed_page_number": "4",
+                    "document_heading": "Chapter 6: Collateral Approval",
+                    "clause_number": "Clause 6.1",
+                    "citation_incomplete_reasons": [],
+                },
+                score=0.95,
+            )
+        ],
+    )
+    monkeypatch.setattr(chat_api, "_filter_results", lambda results, *_args, **_kwargs: results)
+    monkeypatch.setattr(chat_api, "_high_confidence_results", lambda results: results)
+
+    with Session(engine) as session:
+        staff = session.query(User).filter(User.email == "staff@test.local").first()
+        bank = session.query(Bank).filter(Bank.code == "TEST01").first()
+        chat = ChatSession(bank_id=bank.id, user_id=staff.id, title="Streaming Extractive Fallback")
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+        session.add(Document(
+            id=19,
+            bank_id=bank.id,
+            uploaded_by=staff.id,
+            title="Collateral Policy",
+            file_name="collateral-policy.pdf",
+            file_type="pdf",
+            file_path="collateral-policy.pdf",
+            document_type="policy",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        ))
+        session.commit()
+        chat_id = chat.id
+
+    token = get_token("staff@test.local")
+    response = client.post(
+        f"/api/chat/sessions/{chat_id}/stream",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "message": "According to approved policy, what does collateral approval require?",
+            "mode": "approved_knowledge",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "skip collateral review" not in response.text
+    assert "Collateral approval requires two reviewers before the branch may proceed." in response.text
+    assert "source_supported" in response.text
+    with Session(engine) as session:
+        saved = session.query(ChatMessage).filter(ChatMessage.session_id == chat_id, ChatMessage.role == "assistant").first()
+        assert "skip collateral review" not in saved.content
+        assert "Collateral approval requires two reviewers before the branch may proceed." in saved.content
+
+
 def test_chat_extract_text_intent_uses_uploaded_file_pages(monkeypatch):
     assert chat_api._is_extract_text_request("extract text from this upload") is True
     assert chat_api._is_extract_text_request("summarize this upload") is False

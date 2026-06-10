@@ -24,6 +24,13 @@ COMMON_SENTENCE_VERBS = {
     "approve",
     "approved",
     "approves",
+    "can",
+    "could",
+    "has",
+    "have",
+    "is",
+    "may",
+    "should",
     "prohibits",
     "require",
     "requires",
@@ -34,6 +41,24 @@ COMMON_SENTENCE_VERBS = {
     "shall",
     "states",
     "must",
+}
+HEADING_START_STOPWORDS = {
+    "a",
+    "an",
+    "as",
+    "bank",
+    "banks",
+    "but",
+    "if",
+    "in",
+    "of",
+    "on",
+    "the",
+    "this",
+    "those",
+    "to",
+    "where",
+    "when",
 }
 
 HEADING_RE = re.compile(
@@ -53,8 +78,12 @@ CLAUSE_RE = re.compile(
     re.IGNORECASE,
 )
 BARE_LEGAL_NUMBER = r"[\u0966-\u096f0-9]{1,3}(?:\.[\u0966-\u096f0-9]{1,3})*"
-BARE_PARENTHESIZED_CLAUSE_RE = re.compile(rf"^\s*(\({BARE_LEGAL_NUMBER}\))\s*(?=\S)")
+BARE_LEGAL_MARKER = rf"(?:{BARE_LEGAL_NUMBER}|[A-Za-z\u0900-\u095F]{{1,4}})"
+BARE_PARENTHESIZED_CLAUSE_RE = re.compile(rf"^\s*(\({BARE_LEGAL_MARKER}\))\s+(?=\S)")
 BARE_NUMBERED_CLAUSE_RE = re.compile(rf"^\s*({BARE_LEGAL_NUMBER})\s*[\.)]\s+(?=\S)")
+NUMBERED_HEADING_RE = re.compile(
+    rf"^\s*(?:{BARE_LEGAL_NUMBER}|[A-Za-z])\s*[\.)]\s+(?P<label>[^\n]{{3,140}}?)\s*$"
+)
 PRINTED_PAGE_RE = re.compile(
     r"(?:^|\b)(?:page|pg\.?|p\.|printed\s+page)\s*[:#\-]?\s*([०-९0-9ivxlcdmIVXLCDM]+)\b|"
     r"(?:पृष्ठ|पेज)\s*[:#\-]?\s*([०-९0-9]+)",
@@ -129,8 +158,9 @@ def _containing_line(text: str, match: re.Match[str]) -> str:
 def _contains_sentence_verb(line: str) -> bool:
     match = ENGLISH_HEADING_LABEL_RE.fullmatch(line)
     if not match:
-        return False
-    words = re.findall(r"[A-Za-z]+", match.group("label"))
+        words = re.findall(r"[A-Za-z]+", line)
+    else:
+        words = re.findall(r"[A-Za-z]+", match.group("label"))
     return any(word.lower() in COMMON_SENTENCE_VERBS for word in words)
 
 
@@ -138,9 +168,49 @@ def _is_heading_line(line: str) -> bool:
     return bool(HEADING_RE.fullmatch(line) and not _contains_sentence_verb(line))
 
 
+def _is_sentence_like_heading_candidate(line: str) -> bool:
+    normalized = " ".join((line or "").strip().split())
+    if not normalized:
+        return True
+    if normalized.endswith((".", "।", ",", ";")):
+        return True
+    words = re.findall(r"[A-Za-z]+", normalized)
+    if words and words[0].lower() in HEADING_START_STOPWORDS:
+        return True
+    return _contains_sentence_verb(normalized)
+
+
+def _is_numbered_heading_line(line: str) -> bool:
+    normalized = " ".join((line or "").strip().split())
+    match = NUMBERED_HEADING_RE.fullmatch(normalized)
+    if not match:
+        return False
+    label = match.group("label").strip()
+    if len(label) > 120:
+        return False
+    return not _is_sentence_like_heading_candidate(label)
+
+
+def _is_standalone_heading_line(line: str) -> bool:
+    normalized = " ".join((line or "").strip().split())
+    if not normalized or len(normalized) > 140:
+        return False
+    if _is_numbered_heading_line(normalized):
+        return True
+    if normalized.startswith("(") or normalized[0].islower():
+        return False
+    words = re.findall(r"[A-Za-z\u0900-\u097F]+", normalized)
+    if len(words) < 2 or len(words) > 9:
+        return False
+    return not _is_sentence_like_heading_candidate(normalized)
+
+
 def extract_document_heading(text: str | None) -> str | None:
     for line in (text or "").splitlines():
         if _is_heading_line(line):
+            return _normalize_string(line)
+    for line in (text or "").splitlines():
+        if _is_standalone_heading_line(line):
             return _normalize_string(line)
     hierarchy = parse_legal_hierarchy(text)
     if hierarchy.document_title:
@@ -161,6 +231,10 @@ def extract_clause_number(text: str | None) -> str | None:
         clause = _first_group(BARE_PARENTHESIZED_CLAUSE_RE.match(stripped))
         if clause:
             return clause
+    for line in value.splitlines() or [value]:
+        stripped = line.strip()
+        if not stripped:
+            continue
         clause = _first_group(BARE_NUMBERED_CLAUSE_RE.match(stripped))
         if clause:
             return clause

@@ -33,6 +33,7 @@ POLICY_CITATION_INCOMPLETE_RESPONSE = (
 MIN_SOURCE_RELEVANCE_SCORE = 0.4
 MAX_CONTEXT_RESULTS = 5
 MAX_CANDIDATE_RESULTS = 24
+EXTRACTIVE_FALLBACK_VERIFICATION_STATUSES = {"partially_supported", "unsupported"}
 KEYWORD_SCORE_WEIGHT = 0.85
 VECTOR_SCORE_WEIGHT = 0.65
 RERANK_VECTOR_WEIGHT = 0.52
@@ -417,6 +418,55 @@ def _build_context(results, db: Session) -> str:
         doc = db.get(Document, result.payload.get("document_id")) if result.payload else None
         blocks.append(f"{_source_prefix(doc, result.payload or {})}\n{(result.payload or {}).get('text', '')}")
     return "\n\n---\n\n".join(blocks)
+
+
+def _source_citation_label(source: dict) -> str:
+    parts = [
+        source.get("document_title") or source.get("title") or source.get("file_name") or "Approved source"
+    ]
+    if source.get("document_heading"):
+        parts.append(f"Heading: {source['document_heading']}")
+    if source.get("clause_number"):
+        parts.append(f"Clause: {source['clause_number']}")
+    page_number = source.get("pdf_page_number") if _citation_page_present(source.get("pdf_page_number")) else source.get("page_number")
+    if _citation_page_present(page_number):
+        parts.append(f"PDF page: {page_number}")
+    if source.get("printed_page_number"):
+        parts.append(f"Printed page: {source['printed_page_number']}")
+    if source.get("source_status"):
+        parts.append(f"Status: {source['source_status']}")
+    return "[" + "; ".join(str(part) for part in parts if part) + "]"
+
+
+def _source_excerpt(source: dict, max_chars: int = 520) -> str:
+    text_value = " ".join((source.get("passage") or source.get("snippet") or "").split())
+    if len(text_value) <= max_chars:
+        return text_value
+    return text_value[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
+
+
+def build_extractive_source_answer(*, sources: list[dict] | None, language: str = "en", max_sources: int = 3) -> str:
+    usable_sources = [source for source in (sources or []) if _source_excerpt(source)]
+    if not usable_sources:
+        return NOT_FOUND_RESPONSE
+    heading = "स्रोत अंशहरू:" if (language or "").lower().startswith("ne") else "Source excerpts:"
+    lines = [heading]
+    for source in usable_sources[:max_sources]:
+        lines.append(f"- {_source_citation_label(source)} {_source_excerpt(source)}")
+    return "\n".join(lines)
+
+
+def should_use_extractive_source_fallback(verification: dict | None, sources: list[dict] | None) -> bool:
+    if not sources:
+        return False
+    if not any(is_policy_document_type(source.get("document_type")) for source in sources):
+        return False
+    status = (verification or {}).get("status")
+    trust_label = (verification or {}).get("trust_label")
+    return (
+        status in EXTRACTIVE_FALLBACK_VERIFICATION_STATUSES
+        or trust_label in {"partially_source_supported", "not_source_supported"}
+    )
 
 
 def _should_mix_global_knowledge(message: str) -> bool:
@@ -869,6 +919,14 @@ def generate_rag_response(
         nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
         semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
     )
+    if should_use_extractive_source_fallback(verification, sources):
+        answer = build_extractive_source_answer(sources=sources, language=language)
+        verification = verify_answer_against_sources(
+            answer=answer,
+            sources=sources,
+            nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
+            semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
+        )
     return answer, attach_source_verification(sources, verification)
 
 
@@ -916,4 +974,12 @@ async def async_generate_rag_response(
         nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
         semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
     )
+    if should_use_extractive_source_fallback(verification, sources):
+        answer = build_extractive_source_answer(sources=sources, language=language)
+        verification = verify_answer_against_sources(
+            answer=answer,
+            sources=sources,
+            nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
+            semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
+        )
     return answer, attach_source_verification(sources, verification)
