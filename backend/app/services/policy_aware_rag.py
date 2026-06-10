@@ -17,6 +17,11 @@ _THRESHOLD_SOURCE_RE = re.compile(
     r"\b(?:above|below|over|under|exceed(?:s|ing)?|up to|less than|greater than|threshold|limit|amount|npr|rs\.?)\b",
     re.IGNORECASE,
 )
+_SCOPE_DECISION_QUERY_RE = re.compile(
+    r"\b(?:approve|approves|approval|allowed|allow|permitted|permit|eligible|eligibility|"
+    r"required|require|requires|waive|waiver|fee|charge|transaction|limit|threshold|amount|npr|rs\.?)\b",
+    re.IGNORECASE,
+)
 _DENY_RE = re.compile(
     r"\b(?:not allowed|not permitted|shall not|must not|cannot|can't|prohibited|may not|is not eligible)\b",
     re.IGNORECASE,
@@ -290,6 +295,8 @@ def missing_policy_scope_labels(question: str | None, sources: list[dict]) -> li
     if not sources:
         return []
     question_text = question or ""
+    if not _SCOPE_DECISION_QUERY_RE.search(question_text):
+        return []
     labels: list[str] = []
     combined_source_text = "\n".join(_source_text(source) for source in sources)
     if _THRESHOLD_SOURCE_RE.search(combined_source_text) and not _AMOUNT_RE.search(question_text):

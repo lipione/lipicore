@@ -965,6 +965,73 @@ def test_policy_rag_requests_scope_when_answer_depends_on_threshold(monkeypatch)
     assert llm_called is False
 
 
+def test_policy_rag_does_not_request_threshold_for_broad_offence_definition(monkeypatch):
+    llm_called = False
+
+    def fake_embeddings(_texts):
+        return [[0.1, 0.2, 0.3]]
+
+    def fake_search_points(_query_vector, bank_id, limit=5, document_ids=None, session_id=None, document_scope=None, **_kwargs):
+        return [
+            SimpleNamespace(
+                payload={
+                    "document_id": 45,
+                    "text": "Clause 4.1 Banking offences include unauthorized account opening, unauthorized cheque issuance, and misuse of a customer's account amount.",
+                    "page_number": 3,
+                    "document_heading": "Banking Offence and Punishment Act",
+                    "clause_number": "Clause 4.1",
+                    "citation_incomplete_reasons": [],
+                    "chunk_index": 1,
+                },
+                score=0.96,
+            )
+        ]
+
+    def fake_call_llm(_prompt):
+        nonlocal llm_called
+        llm_called = True
+        return "Banking offences include unauthorized account opening, cheque misuse, and related dishonest banking activity."
+
+    monkeypatch.setattr(rag_service, "generate_embeddings", fake_embeddings)
+    monkeypatch.setattr(rag_service, "search_points", fake_search_points)
+    monkeypatch.setattr(rag_service, "call_llm", fake_call_llm)
+
+    with Session(engine) as session:
+        bank = Bank(name="Offence Bank", code="OFF01")
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        user = User(email="offence@test.local", password_hash="x", name="Offence User", role="staff_user", bank_id=bank.id)
+        session.add(user)
+        session.commit()
+        session.add(Document(
+            id=45,
+            bank_id=bank.id,
+            uploaded_by=user.id,
+            title="Banking Offence Act",
+            file_name="banking-offence.pdf",
+            file_type="pdf",
+            file_path="banking-offence.pdf",
+            document_type="act",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        ))
+        session.commit()
+
+        answer, sources = rag_service.generate_rag_response(
+            "What is banking offence under Nepali law?",
+            bank.id,
+            "staff_user",
+            session,
+        )
+
+    assert not answer.startswith("I need one policy scope detail before answering")
+    assert "Banking offences include" in answer
+    assert sources[0]["document_title"] == "Banking Offence Act"
+    assert llm_called is True
+
+
 def test_chat_request_accepts_approved_knowledge_mode():
     request = ChatRequest(message="What does approved policy say?", mode="approved_knowledge")
 
