@@ -16,9 +16,10 @@ Security in LipiCore is built around bank isolation, document lifecycle controls
 ## Authentication
 
 - Users authenticate through `/api/auth/login`.
-- Passwords are hashed with bcrypt.
+- New passwords are hashed with Argon2id. Legacy PBKDF2-SHA256 hashes are verified for compatibility and upgraded after a successful login.
 - The API uses stateless JWT authentication.
 - Production requires a strong `JWT_SECRET`, secure cookies, TLS, and restricted allowed origins.
+- Login throttling should use Redis-backed rate-limit storage in production (`RATE_LIMIT_STORAGE_URI`), and repeated failed attempts lock the affected account for the configured lockout window.
 
 ## Authorization Roles
 

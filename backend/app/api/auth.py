@@ -12,6 +12,7 @@ from ..models.user import User
 from ..models.token import RevokedToken
 from ..schemas.auth import Token
 from .deps import get_current_user, get_raw_token, revoked_tokens
+from ..services.auth_lockout_service import is_account_login_locked
 from ..services.audit_service import log_audit_event, log_security_event
 from ..core.limiter import limiter
 
@@ -27,12 +28,29 @@ def login_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> Any:
     user = db.exec(select(User).where(User.email == form_data.username)).first()
+    if user and is_account_login_locked(db, user):
+        log_security_event(
+            db=db,
+            event_type="failed_login_locked",
+            severity="high",
+            description=f"Locked account login attempt for email: {form_data.username}",
+            bank_id=user.bank_id,
+            user_id=user.id,
+            metadata={"email": form_data.username},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Try again later.",
+        )
+
     if not user or not security.verify_password(form_data.password, user.password_hash):
         log_security_event(
             db=db,
             event_type="failed_login",
             severity="medium",
             description=f"Failed login attempt for email: {form_data.username}",
+            bank_id=user.bank_id if user else None,
+            user_id=user.id if user else None,
             metadata={"email": form_data.username}
         )
         raise HTTPException(
@@ -53,6 +71,11 @@ def login_access_token(
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(user.id, expires_delta=access_token_expires)
+    if security.password_hash_needs_rehash(user.password_hash):
+        user.password_hash = security.get_password_hash(form_data.password)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
     response.set_cookie(
         key="access_token",

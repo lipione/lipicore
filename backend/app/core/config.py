@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     JWT_SECRET: str = _jwt_secret
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
+    AUTH_ACCOUNT_LOCKOUT_MAX_FAILURES: int = int(os.getenv("AUTH_ACCOUNT_LOCKOUT_MAX_FAILURES", "5"))
+    AUTH_ACCOUNT_LOCKOUT_WINDOW_MINUTES: int = int(os.getenv("AUTH_ACCOUNT_LOCKOUT_WINDOW_MINUTES", "15"))
+    RATE_LIMIT_STORAGE_URI: str = os.getenv("RATE_LIMIT_STORAGE_URI", "memory://")
 
     ALLOWED_ORIGINS_RAW: str = os.getenv(
         "ALLOWED_ORIGINS",

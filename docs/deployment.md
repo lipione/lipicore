@@ -23,6 +23,7 @@ Single-host Compose is suitable for pilots and controlled trials. Whole-bank pro
 | --- | --- |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL` | PostgreSQL metadata database. |
 | `JWT_SECRET`, `ACCESS_TOKEN_EXPIRE_MINUTES` | Authentication token configuration. |
+| `AUTH_ACCOUNT_LOCKOUT_MAX_FAILURES`, `AUTH_ACCOUNT_LOCKOUT_WINDOW_MINUTES`, `RATE_LIMIT_STORAGE_URI` | Login lockout and shared rate-limit storage. Use Redis-backed storage in production. |
 | `QDRANT_HOST`, `QDRANT_PORT`, `QDRANT_COLLECTION_NAME` | Vector database connection and collection. |
 | `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` | Object storage for uploaded files. |
 | `REDIS_URL` | Redis for RQ and model admission control. |

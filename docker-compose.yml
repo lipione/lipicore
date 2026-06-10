@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: postgres:15.14-alpine3.22
     container_name: lipicore-db
     restart: always
     environment:
@@ -16,14 +16,14 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.15.4
     container_name: lipicore-qdrant
     restart: always
     volumes:
       - qdrant_data:/qdrant/storage
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: lipicore-minio
     restart: always
     environment:
@@ -34,7 +34,7 @@ services:
     command: server /data --console-address ":9001"
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.6-alpine
     container_name: lipicore-redis
     restart: always
     command: redis-server --appendonly yes
@@ -66,6 +66,9 @@ services:
       - QDRANT_HOST=qdrant
       - MINIO_ENDPOINT=minio:9000
       - REDIS_URL=redis://redis:6379/0
+      - RATE_LIMIT_STORAGE_URI=${RATE_LIMIT_STORAGE_URI:-redis://redis:6379/1}
+      - AUTH_ACCOUNT_LOCKOUT_MAX_FAILURES=${AUTH_ACCOUNT_LOCKOUT_MAX_FAILURES:-5}
+      - AUTH_ACCOUNT_LOCKOUT_WINDOW_MINUTES=${AUTH_ACCOUNT_LOCKOUT_WINDOW_MINUTES:-15}
       - UPLOAD_DIR=/app/uploads
       - CHAT_UPLOAD_DIR=/app/chat_uploads
       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
@@ -226,7 +229,7 @@ services:
       start_period: 10s
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.29-alpine
     container_name: lipicore-nginx
     restart: always
     depends_on:
@@ -253,7 +256,7 @@ services:
       retries: 3
 
   vllm-b:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.10.2
     container_name: lipicore-vllm-b
     restart: always
     environment:
@@ -275,7 +278,7 @@ services:
               capabilities: [gpu]
 
   vllm-c:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.10.2
     container_name: lipicore-vllm-c
     restart: always
     environment:
@@ -297,7 +300,7 @@ services:
               capabilities: [gpu]
 
   vllm-vision:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.10.2
     container_name: lipicore-vllm-vision
     restart: unless-stopped
     profiles:
@@ -308,7 +311,7 @@ services:
     entrypoint: /bin/bash
     command:
       - -c
-      - "vllm serve ${QWEN_VISION_MODEL:-Qwen/Qwen3-VL-8B-Instruct} --host 0.0.0.0 --port 8000 --gpu-memory-utilization ${LLM_VISION_GPU_MEMORY_UTILIZATION:-0.70} --max-model-len ${LLM_VISION_CONTEXT_WINDOW_TOKENS:-8192} --max-num-batched-tokens ${LLM_VISION_MAX_BATCHED_TOKENS:-4096} --max-num-seqs ${LLM_VISION_MAX_NUM_SEQS:-2} --served-model-name ${QWEN_VISION_SERVED_MODEL_NAME:-qwen3-vl-8b} --download-dir /data/models/hf_cache --trust-remote-code"
+      - "vllm serve ${LLM_VISION_MODEL_PATH:-/data/models/llm/lipicore-vision} --host 0.0.0.0 --port 8000 --gpu-memory-utilization ${LLM_VISION_GPU_MEMORY_UTILIZATION:-0.70} --max-model-len ${LLM_VISION_CONTEXT_WINDOW_TOKENS:-8192} --max-num-batched-tokens ${LLM_VISION_MAX_BATCHED_TOKENS:-4096} --max-num-seqs ${LLM_VISION_MAX_NUM_SEQS:-2} --served-model-name ${LLM_VISION_SERVED_MODEL_NAME:-LipiCore} --download-dir /data/models/hf_cache --trust-remote-code"
     volumes:
       - /data:/data
     ports:

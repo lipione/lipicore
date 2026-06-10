@@ -1,9 +1,9 @@
-FROM python:3.12-slim
+FROM python:3.12.12-slim-bookworm
 
 WORKDIR /app
 
 # Install system dependencies for psycopg2, PDF rendering, and open-source OCR
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     libpq-dev \
@@ -15,9 +15,10 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-hin \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.txt constraints.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 COPY . .
 
