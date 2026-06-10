@@ -214,6 +214,79 @@ def test_session_rag_prioritizes_active_upload_before_global(monkeypatch):
     assert calls[0]["document_ids"] == [1]
 
 
+def test_filter_results_prefers_complete_pdf_policy_citation_over_close_text_copy():
+    with Session(engine) as session:
+        staff = session.query(User).filter(User.email == "staff@test.local").first()
+        bank = session.query(Bank).filter(Bank.code == "TEST01").first()
+        text_doc = Document(
+            bank_id=bank.id,
+            uploaded_by=staff.id,
+            title="Foreign Investment Bylaws",
+            file_name="foreign-investment-bylaws.txt",
+            file_type="txt",
+            file_path="foreign-investment-bylaws.txt",
+            document_type="circular",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        )
+        pdf_doc = Document(
+            bank_id=bank.id,
+            uploaded_by=staff.id,
+            title="Foreign Investment Bylaws",
+            file_name="foreign-investment-bylaws.pdf",
+            file_type="pdf",
+            file_path="foreign-investment-bylaws.pdf",
+            document_type="directive",
+            status="approved",
+            version_state="approved",
+            document_scope="global_knowledge",
+        )
+        session.add(text_doc)
+        session.add(pdf_doc)
+        session.commit()
+        session.refresh(text_doc)
+        session.refresh(pdf_doc)
+
+        results = [
+            SimpleNamespace(
+                score=0.431,
+                payload={
+                    "document_id": text_doc.id,
+                    "text": "Text copy without source page.",
+                    "citation_incomplete_reasons": ["missing_pdf_page_number", "missing_clause_number"],
+                    "document_heading": "Email :-fxmd_policy@nrb.org.np",
+                    "clause_number": None,
+                    "pdf_page_number": None,
+                    "page_number": None,
+                },
+            ),
+            SimpleNamespace(
+                score=0.422,
+                payload={
+                    "document_id": pdf_doc.id,
+                    "text": "PDF source with page and clause.",
+                    "citation_incomplete_reasons": [],
+                    "document_heading": "Foreign Investment Bylaws",
+                    "clause_number": "५",
+                    "pdf_page_number": 21,
+                    "page_number": 21,
+                },
+            ),
+        ]
+
+        filtered = rag_service._filter_results(
+            results,
+            session,
+            session_id=None,
+            user_role="staff_user",
+            user_department="General",
+        )
+        ordered_ids = [result.payload["document_id"] for result in filtered]
+
+    assert ordered_ids == [pdf_doc.id, text_doc.id]
+
+
 def test_global_rag_returns_cited_sources(monkeypatch):
     def fake_embeddings(_texts):
         return [[0.1, 0.2, 0.3]]

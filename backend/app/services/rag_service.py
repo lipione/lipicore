@@ -309,14 +309,41 @@ def _document_visible_to_user(doc: Document, session_id, user_role, user_departm
     return True
 
 
+def _citation_quality_adjustment(result, doc: Document | None) -> float:
+    if not doc or not is_policy_document_type(doc.document_type):
+        return 0.0
+    payload = policy_payload_metadata(result.payload or {})
+    reasons = _citation_reasons(payload, doc.document_type)
+    complete = _citation_complete_for_source(payload, doc.document_type, reasons)
+    file_type = (doc.file_type or "").strip().lower()
+    adjustment = 0.0
+    if complete:
+        adjustment += 0.04
+    elif reasons:
+        adjustment -= 0.01
+    if file_type == "pdf":
+        adjustment += 0.015
+    elif file_type in {"txt", "md", "markdown"} and reasons:
+        adjustment -= 0.03
+    return adjustment
+
+
 def _filter_results(results, db, session_id, user_role, user_department: str | None = None):
     doc_ids = list(set(r.payload.get("document_id") for r in results if r.payload))
-    allowed_docs = set()
+    allowed_docs = {}
     for doc_id in doc_ids:
         doc = db.get(Document, doc_id)
         if doc and _document_visible_to_user(doc, session_id, user_role, user_department):
-            allowed_docs.add(doc_id)
-    return [r for r in results if r.payload and r.payload.get("document_id") in allowed_docs]
+            allowed_docs[doc_id] = doc
+    visible = [r for r in results if r.payload and r.payload.get("document_id") in allowed_docs]
+    return sorted(
+        visible,
+        key=lambda result: (
+            float(result.score or 0)
+            + _citation_quality_adjustment(result, allowed_docs.get(result.payload.get("document_id")))
+        ),
+        reverse=True,
+    )
 
 
 def _build_sources(filtered_results, db, min_relevance_score=MIN_SOURCE_RELEVANCE_SCORE, max_sources=5):
