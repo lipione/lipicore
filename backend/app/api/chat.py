@@ -38,6 +38,7 @@ from ..services.rag_service import (
     _policy_citation_gate_blocks,
     _search,
     build_extractive_source_answer,
+    extractive_source_verification,
     generate_rag_response,
     async_generate_rag_response,
     get_system_identity,
@@ -1326,12 +1327,7 @@ async def stream_chat_message(
                 language=chat_request.language,
                 question=retrieval_query,
             )
-            citation_verification = _citation_verification_with_feature_flags(
-                answer=full_response,
-                sources=sources_list,
-                db=db,
-                bank_id=current_user.bank_id,
-            )
+            citation_verification = extractive_source_verification(sources_list)
         if source_required_response:
             yield f"data: {json.dumps({'token': full_response})}\n\n"
         sources_list = attach_source_verification(sources_list, citation_verification)

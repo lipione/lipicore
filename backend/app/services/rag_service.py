@@ -503,6 +503,23 @@ def should_use_extractive_source_fallback(verification: dict | None, sources: li
     )
 
 
+def extractive_source_verification(sources: list[dict] | None) -> dict:
+    source_count = len(sources or [])
+    return {
+        "status": "supported" if source_count else "no_sources",
+        "trust_label": "source_supported" if source_count else "no_sources",
+        "verification_stage": "extractive_source_excerpt",
+        "supported_sentence_count": source_count,
+        "unsupported_sentence_count": 0,
+        "unsupported_sentences": [],
+        "nli_checked_sentence_count": 0,
+        "semantic_checked_sentence_count": 0,
+        "semantic_supported_sentence_count": 0,
+        "semantic_top_score": 0.0,
+        "extractive_fallback": True,
+    }
+
+
 def _should_mix_global_knowledge(message: str) -> bool:
     text = (message or "").lower()
     return any(term in text for term in (
@@ -955,12 +972,7 @@ def generate_rag_response(
     )
     if should_use_extractive_source_fallback(verification, sources):
         answer = build_extractive_source_answer(sources=sources, language=language, question=question)
-        verification = verify_answer_against_sources(
-            answer=answer,
-            sources=sources,
-            nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
-            semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
-        )
+        verification = extractive_source_verification(sources)
     return answer, attach_source_verification(sources, verification)
 
 
@@ -1010,10 +1022,5 @@ async def async_generate_rag_response(
     )
     if should_use_extractive_source_fallback(verification, sources):
         answer = build_extractive_source_answer(sources=sources, language=language, question=question)
-        verification = verify_answer_against_sources(
-            answer=answer,
-            sources=sources,
-            nli_enabled=is_feature_enabled(db, bank_id, "citation_nli_verification"),
-            semantic_enabled=is_feature_enabled(db, bank_id, "citation_semantic_verification"),
-        )
+        verification = extractive_source_verification(sources)
     return answer, attach_source_verification(sources, verification)

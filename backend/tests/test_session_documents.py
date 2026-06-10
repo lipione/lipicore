@@ -1690,10 +1690,10 @@ def test_streaming_source_required_replaces_unsupported_model_answer_with_source
                 "unsupported_sentences": [answer],
             }
         return {
-            "status": "supported",
-            "trust_label": "source_supported",
-            "unsupported_sentence_count": 0,
-            "unsupported_sentences": [],
+            "status": "unsupported",
+            "trust_label": "not_source_supported",
+            "unsupported_sentence_count": 1,
+            "unsupported_sentences": [answer],
         }
 
     monkeypatch.setattr(chat_api, "generate_embeddings", lambda _texts: [[0.1, 0.2, 0.3]])
@@ -1759,7 +1759,7 @@ def test_streaming_source_required_replaces_unsupported_model_answer_with_source
     assert response.status_code == 200
     assert "skip collateral review" not in response.text
     assert "Collateral approval requires two reviewers before the branch may proceed." in response.text
-    assert "source_supported" in response.text
+    assert '"trust_label": "source_supported"' in response.text
     with Session(engine) as session:
         saved = session.query(ChatMessage).filter(ChatMessage.session_id == chat_id, ChatMessage.role == "assistant").first()
         assert "skip collateral review" not in saved.content
