@@ -20,6 +20,51 @@ def _citation_payload(citation: dict) -> dict:
     }
 
 
+def _metadata_value(value) -> str | None:
+    if value is None:
+        return None
+    normalized = " ".join(str(value).strip().split())
+    return normalized or None
+
+
+def _remove_reason(citation: dict, reason: str) -> None:
+    reasons = citation.get("citation_incomplete_reasons")
+    if isinstance(reasons, list):
+        citation["citation_incomplete_reasons"] = [item for item in reasons if item != reason]
+
+
+def _recalculate_confidence(citation: dict) -> None:
+    present = sum(
+        (
+            citation.get("pdf_page_number") is not None and str(citation.get("pdf_page_number")).strip() != "",
+            bool(_metadata_value(citation.get("document_heading"))),
+            bool(_metadata_value(citation.get("clause_number"))),
+            bool(_metadata_value(citation.get("printed_page_number"))),
+        )
+    )
+    reasons = citation.get("citation_incomplete_reasons") if isinstance(citation.get("citation_incomplete_reasons"), list) else []
+    citation["citation_confidence"] = round(min(1.0, 0.25 + (present * 0.2) + (0.15 if not reasons else 0.0)), 2)
+
+
+def _merge_existing_metadata(citation: dict, chunk: DocumentChunk, document: Document) -> dict:
+    if not _metadata_value(citation.get("document_heading")):
+        heading = _metadata_value(chunk.document_heading) or _metadata_value(document.title) or _metadata_value(document.file_name)
+        if heading:
+            citation["document_heading"] = heading
+            _remove_reason(citation, "missing_document_heading")
+    if not _metadata_value(citation.get("clause_number")):
+        clause = _metadata_value(chunk.clause_number)
+        if clause:
+            citation["clause_number"] = clause
+            _remove_reason(citation, "missing_clause_number")
+    if not _metadata_value(citation.get("printed_page_number")):
+        printed_page = _metadata_value(chunk.printed_page_number)
+        if printed_page:
+            citation["printed_page_number"] = printed_page
+    _recalculate_confidence(citation)
+    return citation
+
+
 def backfill_document_citation_metadata(db: Session, *, document_id: int, bank_id: int) -> dict:
     document = db.get(Document, document_id)
     if not document or document.bank_id != bank_id:
@@ -49,6 +94,7 @@ def backfill_document_citation_metadata(db: Session, *, document_id: int, bank_i
             chunk_text=chunk.chunk_text,
             document_type=document.document_type,
         )
+        citation = _merge_existing_metadata(citation, chunk, document)
         chunk.printed_page_number = citation["printed_page_number"]
         chunk.document_heading = citation["document_heading"]
         chunk.clause_number = citation["clause_number"]

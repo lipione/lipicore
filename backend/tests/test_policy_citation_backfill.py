@@ -99,6 +99,76 @@ def test_backfill_updates_existing_policy_chunks_and_qdrant_payload(monkeypatch)
         SQLModel.metadata.drop_all(engine)
 
 
+def test_backfill_preserves_existing_heading_when_filling_new_legal_clause(monkeypatch):
+    point_updates = []
+
+    monkeypatch.setattr(
+        "app.services.policy_citation_backfill_service.update_points_by_document_payload",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.services.policy_citation_backfill_service.update_point_payload",
+        lambda point_id, payload, *, bank_id, document_id: point_updates.append(payload),
+    )
+
+    SQLModel.metadata.create_all(engine)
+    try:
+        from app.services.policy_citation_backfill_service import backfill_document_citation_metadata
+
+        with Session(engine) as session:
+            bank = Bank(name="Backfill Preserve Bank", code="BPRV01")
+            session.add(bank)
+            session.commit()
+            session.refresh(bank)
+            user = User(
+                email="preserve-heading@test.local",
+                password_hash="x",
+                name="Preserve Heading User",
+                role="bank_admin",
+                bank_id=bank.id,
+            )
+            session.add(user)
+            session.commit()
+            document = Document(
+                bank_id=bank.id,
+                uploaded_by=user.id,
+                title="Banking Offence Act",
+                file_name="banking-offence.pdf",
+                file_type="pdf",
+                file_path="banking-offence.pdf",
+                document_type="act",
+                status="approved",
+                version_state="approved",
+            )
+            session.add(document)
+            session.commit()
+            session.refresh(document)
+            session.add(DocumentChunk(
+                bank_id=bank.id,
+                document_id=document.id,
+                chunk_index=1,
+                chunk_text='(1) The title of this Act shall be "Banking Offence and Punishment Act, 2064."',
+                page_number=1,
+                document_heading="An Act Formulated to Provide Legal Provisions in relation to Banking Offences",
+                citation_incomplete_reasons_json='["missing_clause_number"]',
+                qdrant_point_id="banking-offence-point",
+            ))
+            session.commit()
+
+            result = backfill_document_citation_metadata(session, document_id=document.id, bank_id=bank.id)
+            refreshed = session.exec(select(DocumentChunk).where(DocumentChunk.document_id == document.id)).first()
+
+        assert result["updated_chunks"] == 1
+        assert refreshed.document_heading == "An Act Formulated to Provide Legal Provisions in relation to Banking Offences"
+        assert refreshed.clause_number == "(1)"
+        assert json.loads(refreshed.citation_incomplete_reasons_json) == []
+        assert point_updates[0]["document_heading"] == refreshed.document_heading
+        assert point_updates[0]["clause_number"] == "(1)"
+        assert point_updates[0]["citation_incomplete_reasons"] == []
+    finally:
+        SQLModel.metadata.drop_all(engine)
+
+
 def test_backfill_commits_database_metadata_when_qdrant_point_update_fails(monkeypatch):
     def fake_update_points(*_args, **_kwargs):
         return None
